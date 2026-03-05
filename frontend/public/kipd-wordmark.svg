@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200" width="640" height="200" fill="none">
+  <defs>
+    <radialGradient id="bg2" cx="38%" cy="30%" r="65%">
+      <stop offset="0%"   stop-color="#FFE08A"/>
+      <stop offset="55%"  stop-color="#F5C96A"/>
+      <stop offset="100%" stop-color="#E8A020"/>
+    </radialGradient>
+    <radialGradient id="belly2" cx="50%" cy="40%" r="60%">
+      <stop offset="0%"   stop-color="#FFFAF0"/>
+      <stop offset="100%" stop-color="#FDF3DC"/>
+    </radialGradient>
+    <radialGradient id="eye2" cx="30%" cy="28%" r="55%">
+      <stop offset="0%"   stop-color="#4A3828"/>
+      <stop offset="100%" stop-color="#1A1410"/>
+    </radialGradient>
+    <linearGradient id="cap2" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%"   stop-color="#D96645"/>
+      <stop offset="100%" stop-color="#B84830"/>
+    </linearGradient>
+    <linearGradient id="key2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#E07A60"/>
+      <stop offset="100%" stop-color="#C8573A"/>
+    </linearGradient>
+    <radialGradient id="shadow2" cx="50%" cy="90%" r="55%">
+      <stop offset="0%"   stop-color="#C47A10" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#C47A10" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="drop2" x="-20%" y="-15%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#C47A10" flood-opacity="0.2"/>
+    </filter>
+    <filter id="blush2"><feGaussianBlur stdDeviation="2.5"/></filter>
+  </defs>
+
+  <!-- ── MASCOT (scaled to ~170px tall, centered at x=95) ── -->
+  <g transform="translate(10, 12) scale(0.43)" filter="url(#drop2)">
+
+    <!-- Ears -->
+    <ellipse cx="122" cy="162" rx="46" ry="60" fill="url(#bg2)" transform="rotate(-15 122 162)"/>
+    <ellipse cx="122" cy="162" rx="26" ry="36" fill="#FFE08A" opacity="0.8" transform="rotate(-15 122 162)"/>
+    <ellipse cx="278" cy="162" rx="46" ry="60" fill="url(#bg2)" transform="rotate(15 278 162)"/>
+    <ellipse cx="278" cy="162" rx="26" ry="36" fill="#FFE08A" opacity="0.8" transform="rotate(15 278 162)"/>
+
+    <!-- Body -->
+    <ellipse cx="200" cy="252" rx="138" ry="144" fill="url(#bg2)"/>
+    <ellipse cx="200" cy="252" rx="138" ry="144" fill="url(#shadow2)"/>
+
+    <!-- Belly -->
+    <ellipse cx="200" cy="272" rx="82" ry="78" fill="url(#belly2)"/>
+
+    <!-- Blush -->
+    <ellipse cx="130" cy="272" rx="30" ry="20" fill="#E07A60" opacity="0.18" filter="url(#blush2)"/>
+    <ellipse cx="270" cy="272" rx="30" ry="20" fill="#E07A60" opacity="0.18" filter="url(#blush2)"/>
+
+    <!-- Eyes -->
+    <circle cx="162" cy="240" r="26" fill="url(#eye2)"/>
+    <circle cx="153" cy="230" r="9"  fill="white" opacity="0.92"/>
+    <circle cx="170" cy="246" r="4"  fill="white" opacity="0.5"/>
+    <circle cx="238" cy="240" r="26" fill="url(#eye2)"/>
+    <circle cx="229" cy="230" r="9"  fill="white" opacity="0.92"/>
+    <circle cx="246" cy="246" r="4"  fill="white" opacity="0.5"/>
+
+    <!-- Nose -->
+    <ellipse cx="200" cy="278" rx="16" ry="12" fill="#C8573A"/>
+    <ellipse cx="195" cy="274" rx="5"  ry="3.5" fill="white" opacity="0.3"/>
+
+    <!-- Smile -->
+    <path d="M 172 296 Q 200 320 228 296" stroke="#C8573A" stroke-width="6" stroke-linecap="round" fill="none"/>
+
+    <!-- Key badge -->
+    <circle cx="172" cy="330" r="18" fill="none" stroke="url(#key2)" stroke-width="5" opacity="0.7"/>
+    <rect x="185" y="326" width="52" height="8" rx="4" fill="url(#key2)" opacity="0.7"/>
+    <rect x="218" y="334" width="6" height="10" rx="2" fill="url(#key2)" opacity="0.7"/>
+    <rect x="230" y="334" width="6" height="8"  rx="2" fill="url(#key2)" opacity="0.7"/>
+
+    <!-- Nightcap -->
+    <path d="M 148 196 Q 164 98 200 52 Q 236 98 252 196 Q 226 178 200 184 Q 174 178 148 196 Z" fill="url(#cap2)"/>
+    <ellipse cx="200" cy="196" rx="54" ry="14" fill="#B84830" opacity="0.55"/>
+    <ellipse cx="200" cy="193" rx="54" ry="10" fill="#E07A60" opacity="0.2"/>
+    <circle  cx="200" cy="50"  r="18" fill="#FDF3DC"/>
+    <circle  cx="194" cy="44"  r="6"  fill="white" opacity="0.45"/>
+  </g>
+
+  <!-- ── WORDMARK ────────────────────────────────────── -->
+  <!-- "Kipd" in Playfair-style serif shapes -->
+  <text
+    x="195" y="132"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="108"
+    font-weight="700"
+    letter-spacing="-3"
+    fill="#1A1410">Kipd</text>
+
+  <!-- Amber dot accent above the i -->
+  <circle cx="248" cy="42" r="8" fill="#E8A020"/>
+
+  <!-- Tagline -->
+  <text
+    x="197" y="163"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="18"
+    font-weight="400"
+    font-style="italic"
+    letter-spacing="1.5"
+    fill="#7C6E5C">Hotel &amp; Restaurant OS</text>
+
+  <!-- Thin amber underline on tagline -->
+  <line x1="197" y1="170" x2="530" y2="170" stroke="#E8A020" stroke-width="1.5" opacity="0.5"/>
+
+</svg>

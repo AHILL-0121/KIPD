@@ -1,0 +1,293 @@
+/* app/(auth)/auth.css  — import in your auth layout.tsx */
+/* Custom Kipd authentication UI styles */
+
+/* ── ROOT LAYOUT ─────────────────────────────────────── */
+.kipd-auth-root {
+  display: flex;
+  min-height: 100vh;
+  background: #FAF8F4;
+  overflow: hidden;
+}
+
+/* ── LEFT DARK PANEL ─────────────────────────────────── */
+.kipd-left {
+  flex: 1;
+  position: relative;
+  background: #1A1410;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 48px 52px;
+  overflow: hidden;
+  animation: kipd-panel-in 0.9s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes kipd-panel-in {
+  from { transform: translateX(-40px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+
+.kipd-left-glow {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 55% at 20% 20%, rgba(232,160,32,.14) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 85% 75%, rgba(200,87,58,.10) 0%, transparent 60%);
+}
+
+.kipd-left-grain {
+  position: absolute; inset: 0; pointer-events: none; opacity: .04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px;
+}
+
+/* Logo */
+.kipd-logo {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; gap: 10px;
+  animation: kipd-up 0.7s 0.1s cubic-bezier(0.23,1,0.32,1) both;
+}
+.kipd-logo-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #E8A020;
+  animation: kipd-dot 2.2s ease-in-out infinite;
+}
+@keyframes kipd-dot {
+  0%,100% { transform: scale(1); background: #E8A020; }
+  50%      { transform: scale(1.5); background: #C8573A; }
+}
+.kipd-logo-text {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.5rem; font-weight: 700;
+  color: white;
+}
+
+/* Mascot */
+.kipd-mascot-wrap {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column; align-items: center;
+  animation: kipd-up 0.8s 0.25s cubic-bezier(0.23,1,0.32,1) both;
+}
+.kipd-kip {
+  animation: kipd-float 3.2s ease-in-out infinite;
+  filter: drop-shadow(0 12px 32px rgba(232,160,32,.3));
+}
+@keyframes kipd-float {
+  0%,100% { transform: translateY(0) rotate(-1.5deg); }
+  50%      { transform: translateY(-18px) rotate(1.5deg); }
+}
+.kipd-mascot-shadow {
+  width: 90px; height: 16px;
+  background: radial-gradient(ellipse, rgba(232,160,32,.35) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: kipd-shadow 3.2s ease-in-out infinite;
+  margin-top: 4px;
+}
+@keyframes kipd-shadow {
+  0%,100% { transform: scaleX(1); opacity: .5; }
+  50%      { transform: scaleX(.72); opacity: .22; }
+}
+
+/* Quote */
+.kipd-quote {
+  position: relative; z-index: 2;
+  animation: kipd-up 0.9s 0.4s cubic-bezier(0.23,1,0.32,1) both;
+}
+.kipd-quote blockquote {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.1rem, 1.8vw, 1.5rem);
+  font-style: italic;
+  color: rgba(255,255,255,.82);
+  line-height: 1.5;
+  max-width: 400px;
+}
+.kipd-quote blockquote em {
+  font-style: normal;
+  color: #F5C96A;
+}
+.kipd-quote cite {
+  display: block;
+  font-family: 'DM Mono', monospace;
+  font-size: .68rem; letter-spacing: .15em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.3);
+  margin-top: 14px;
+  font-style: normal;
+}
+
+/* Feature pills */
+.kipd-pills {
+  position: relative; z-index: 2;
+  display: flex; flex-wrap: wrap; gap: 8px;
+  animation: kipd-up 1s 0.55s cubic-bezier(0.23,1,0.32,1) both;
+}
+.kipd-pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 99px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.1);
+  font-size: .72rem; color: rgba(255,255,255,.5);
+}
+.kipd-pill-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #E8A020; opacity: .8; flex-shrink: 0;
+}
+
+/* ── RIGHT PANEL ─────────────────────────────────────── */
+.kipd-right {
+  width: 480px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 48px;
+  position: relative;
+  background: #FAF8F4;
+  overflow-y: auto;
+  animation: kipd-form-in 0.85s 0.35s cubic-bezier(0.23,1,0.32,1) both;
+  min-height: 100vh;
+}
+.kipd-right::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 50% at 80% 10%, rgba(232,160,32,.07) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 60% at 10% 90%, rgba(200,87,58,.05) 0%, transparent 60%);
+}
+@keyframes kipd-form-in {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Form header (above Clerk card) */
+.kipd-form-header {
+  width: 100%; max-width: 380px;
+  position: relative; z-index: 2;
+  margin-bottom: 32px;
+  text-align: left;
+}
+.kipd-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: .68rem; letter-spacing: .2em; text-transform: uppercase;
+  color: #C47A10;
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px;
+}
+.kipd-eyebrow::before {
+  content: ''; width: 16px; height: 1px; background: currentColor;
+}
+.kipd-title {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.8rem, 3vw, 2.3rem);
+  font-weight: 700; line-height: 1.1;
+  color: #1A1410;
+  margin-bottom: 8px;
+}
+.kipd-title em {
+  font-style: italic; color: #C8573A;
+}
+.kipd-subtitle {
+  font-size: .875rem; color: #6B5D52;
+  margin-top: 8px; line-height: 1.6;
+}
+
+/* Clerk card container override */
+.kipd-right .cl-rootBox,
+.kipd-right .cl-card {
+  width: 100% !important;
+  max-width: 380px !important;
+  box-shadow: none !important;
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* Clerk form layout fixes */
+.kipd-right .cl-main {
+  padding: 0 !important;
+  gap: 0 !important;
+}
+
+.kipd-right .cl-formContainer {
+  gap: 16px !important;
+}
+
+.kipd-right .cl-formFieldRow {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  margin-bottom: 16px !important;
+}
+
+.kipd-right .cl-formFieldLabel {
+  display: block !important;
+  width: 100% !important;
+  text-align: left !important;
+}
+
+.kipd-right .cl-formFieldInput {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.kipd-right .cl-formFieldLabelRow {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+  margin-bottom: 6px !important;
+}
+
+.kipd-right .cl-socialButtonsBlockButton {
+  width: 100% !important;
+  justify-content: center !important;
+}
+
+.kipd-right .cl-footerPages {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Hide any loading states that might cause layout issues */
+.kipd-right .cl-loading {
+  display: none !important;
+}
+
+/* Ensure proper stacking */
+.kipd-right .cl-formButtonPrimary {
+  width: 100% !important;
+  margin-top: 8px !important;
+}
+
+/* Admin note */
+.kipd-admin-note {
+  display: flex; align-items: flex-start; gap: 10px;
+  width: 100%; max-width: 360px;
+  margin-top: 20px;
+  padding: 12px 14px;
+  background: #F5F0E8;
+  border: 1px solid #E8E0D0;
+  border-radius: 10px;
+  position: relative; z-index: 2;
+}
+.kipd-admin-note span { font-size: .9rem; flex-shrink: 0; margin-top: 1px; }
+.kipd-admin-note p {
+  font-size: .72rem; color: #6B5D52; line-height: 1.55;
+}
+.kipd-admin-note strong {
+  color: #3D322A; font-weight: 500;
+}
+
+/* ── SHARED ANIMATION ────────────────────────────────── */
+@keyframes kipd-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── RESPONSIVE ──────────────────────────────────────── */
+@media (max-width: 860px) {
+  .kipd-auth-root { flex-direction: column; overflow: auto; }
+  .kipd-left { flex: none; padding: 32px 24px 36px; min-height: auto; }
+  .kipd-mascot-wrap { display: none; }
+  .kipd-right { width: 100%; padding: 40px 24px 52px; }
+}
