@@ -60,9 +60,9 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
   };
 
   return (
-    <div className="min-h-screen bg-ink p-6">
+    <div className="min-h-screen bg-ink p-4 md:p-6 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8 pb-6 border-b border-stone-700">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 md:mb-8 pb-4 md:pb-6 border-b border-stone-700">
         <div>
           <h1 className="font-serif text-3xl font-bold text-white mb-2">
             Kitchen Display System

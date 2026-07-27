@@ -79,7 +79,7 @@ export default function DashboardPage() {
 
   if (error === 'NO_TENANT') {
     return (
-      <div className="p-8">
+      <div className="p-4 md:p-8 overflow-x-hidden">
         <Card className="p-12 text-center">
           <Hotel className="w-16 h-16 mx-auto mb-4 text-ink-muted" />
           <h2 className="text-2xl font-display font-bold text-ink mb-2">No Tenant Assigned</h2>
@@ -100,7 +100,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="section-title">Dashboard</h1>

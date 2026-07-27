@@ -68,7 +68,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="mb-8">
         <h1 className="section-title">Settings</h1>
         <p className="section-sub">Configure your property and integrations</p>

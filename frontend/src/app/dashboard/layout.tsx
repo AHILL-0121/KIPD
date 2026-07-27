@@ -132,7 +132,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* Bottom Navigation - Mobile */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex items-center justify-around pb-safe z-50 h-16">
-        {filteredNav.slice(0, 5).map((item) => {
+        {filteredNav.filter(n => !['Staff', 'Analytics', 'Settings'].includes(n.name)).slice(0, 4).map((item) => {
           const Icon = item.icon;
           const isActive = item.href === '/dashboard'
             ? pathname === '/dashboard'
@@ -153,6 +153,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </Link>
           );
         })}
+        {/* 'More' / Settings Tab Pattern */}
+        <Link
+          href="/dashboard/settings"
+          className={`
+            flex flex-col items-center justify-center w-full h-full space-y-1
+            transition-all duration-200
+            ${pathname?.startsWith('/dashboard/settings') ? 'text-amber' : 'text-ink-muted'}
+          `}
+        >
+          <Settings className="w-5 h-5" />
+          <span className="text-[10px] font-medium">More</span>
+        </Link>
       </nav>
     </div>
   );

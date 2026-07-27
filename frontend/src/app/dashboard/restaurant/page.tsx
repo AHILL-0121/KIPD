@@ -274,14 +274,14 @@ export default function RestaurantPage() {
   if (loading) return <LoadingState />;
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 md:p-8 overflow-x-hidden">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="section-title">Restaurant & Menu</h1>
           <p className="section-sub">Manage menu items, categories, and tables</p>
         </div>
-        
-        <div className="flex gap-3">
+
+        <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3">
           {activeTab === 'menu' && (
             <>
               <Button variant="ghost" onClick={() => setShowAddCategory(true)}>
@@ -334,96 +334,96 @@ export default function RestaurantPage() {
 
       {/* ===== MENU TAB ===== */}
       {activeTab === 'menu' && (<>
-      {/* Filters */}
-      <div className="flex gap-4 mb-6">
-        <div className="flex-1">
-          <Input
-            placeholder="Search menu items..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="max-w-md"
-          />
-        </div>
-        
-        <div className="flex gap-2">
-          <Button size="sm" variant={categoryFilter === 'all' ? 'primary' : 'ghost'} onClick={() => setCategoryFilter('all')}>
-            All
-          </Button>
-          {categories.map(cat => (
-            <Button key={cat.id} size="sm" variant={categoryFilter === cat.id ? 'primary' : 'ghost'} onClick={() => setCategoryFilter(cat.id)}>
-              {cat.name}
-            </Button>
-          ))}
-        </div>
-      </div>
+        {/* Filters */}
+        <div className="flex gap-4 mb-6">
+          <div className="flex-1">
+            <Input
+              placeholder="Search menu items..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="max-w-md"
+            />
+          </div>
 
-      {/* Menu Items Grid */}
-      {filteredItems.length === 0 ? (
-        <EmptyState
-          title={search || categoryFilter !== 'all' ? "No Results Found" : "No Menu Items Yet"}
-          description={
-            search || categoryFilter !== 'all'
-              ? "Try adjusting your filters."
-              : "Add your first menu item to get started."
-          }
-          actionLabel={!search && categoryFilter === 'all' ? "Add First Item" : undefined}
-          onAction={!search && categoryFilter === 'all' ? () => {
-            if (categories.length === 0) setShowAddCategory(true);
-            else { setItemForm({ name: '', description: '', price: '', categoryId: categories[0]?.id || '', tags: '' }); setShowAddItem(true); }
-          } : undefined}
-        />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredItems.map((item) => (
-            <Card key={item.id} hover className="overflow-hidden">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg text-ink mb-1">{item.name}</h3>
-                  <p className="text-sm text-ink-muted line-clamp-2">{item.description}</p>
-                </div>
-                <div className="ml-3">
-                  <div className="font-bold text-xl text-amber">{formatCurrency(Number(item.price))}</div>
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                <Badge variant="stone" className="text-xs">
-                  {item.category?.name || 'Uncategorized'}
-                </Badge>
-                {(item.tags || []).map(tag => (
-                  <Badge key={tag} variant="amber" className="text-xs">{tag}</Badge>
-                ))}
-                <Badge variant={item.isAvailable ? 'sage' : 'stone'} className="text-xs">
-                  {item.isAvailable ? 'Available' : 'Unavailable'}
-                </Badge>
-              </div>
-              
-              <div className="flex gap-2 pt-3 border-t border-stone-200">
-                <Button size="sm" variant="ghost" className="flex-1" onClick={() => toggleAvailability(item.id, item.isAvailable)}>
-                  {item.isAvailable ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  {item.isAvailable ? 'Hide' : 'Show'}
-                </Button>
-                <Button size="sm" variant="ghost" className="flex-1" onClick={() => {
-                  setShowEditItem(item);
-                  setItemForm({
-                    name: item.name,
-                    description: item.description || '',
-                    price: item.price,
-                    categoryId: item.categoryId,
-                    tags: (item.tags || []).join(', '),
-                  });
-                }}>
-                  <Edit className="w-4 h-4" />
-                  Edit
-                </Button>
-                <Button size="sm" variant="ghost" className="text-red-500" onClick={() => handleDeleteItem(item.id)}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </Card>
-          ))}
+          <div className="flex gap-2">
+            <Button size="sm" variant={categoryFilter === 'all' ? 'primary' : 'ghost'} onClick={() => setCategoryFilter('all')}>
+              All
+            </Button>
+            {categories.map(cat => (
+              <Button key={cat.id} size="sm" variant={categoryFilter === cat.id ? 'primary' : 'ghost'} onClick={() => setCategoryFilter(cat.id)}>
+                {cat.name}
+              </Button>
+            ))}
+          </div>
         </div>
-      )}
+
+        {/* Menu Items Grid */}
+        {filteredItems.length === 0 ? (
+          <EmptyState
+            title={search || categoryFilter !== 'all' ? "No Results Found" : "No Menu Items Yet"}
+            description={
+              search || categoryFilter !== 'all'
+                ? "Try adjusting your filters."
+                : "Add your first menu item to get started."
+            }
+            actionLabel={!search && categoryFilter === 'all' ? "Add First Item" : undefined}
+            onAction={!search && categoryFilter === 'all' ? () => {
+              if (categories.length === 0) setShowAddCategory(true);
+              else { setItemForm({ name: '', description: '', price: '', categoryId: categories[0]?.id || '', tags: '' }); setShowAddItem(true); }
+            } : undefined}
+          />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredItems.map((item) => (
+              <Card key={item.id} hover className="overflow-hidden">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-lg text-ink mb-1">{item.name}</h3>
+                    <p className="text-sm text-ink-muted line-clamp-2">{item.description}</p>
+                  </div>
+                  <div className="ml-3">
+                    <div className="font-bold text-xl text-amber">{formatCurrency(Number(item.price))}</div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 mb-4">
+                  <Badge variant="stone" className="text-xs">
+                    {item.category?.name || 'Uncategorized'}
+                  </Badge>
+                  {(item.tags || []).map(tag => (
+                    <Badge key={tag} variant="amber" className="text-xs">{tag}</Badge>
+                  ))}
+                  <Badge variant={item.isAvailable ? 'sage' : 'stone'} className="text-xs">
+                    {item.isAvailable ? 'Available' : 'Unavailable'}
+                  </Badge>
+                </div>
+
+                <div className="flex gap-2 pt-3 border-t border-stone-200">
+                  <Button size="sm" variant="ghost" className="flex-1" onClick={() => toggleAvailability(item.id, item.isAvailable)}>
+                    {item.isAvailable ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {item.isAvailable ? 'Hide' : 'Show'}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="flex-1" onClick={() => {
+                    setShowEditItem(item);
+                    setItemForm({
+                      name: item.name,
+                      description: item.description || '',
+                      price: item.price,
+                      categoryId: item.categoryId,
+                      tags: (item.tags || []).join(', '),
+                    });
+                  }}>
+                    <Edit className="w-4 h-4" />
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-red-500" onClick={() => handleDeleteItem(item.id)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
 
       </>)}
 

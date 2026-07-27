@@ -39,7 +39,7 @@ export default function BillingPage() {
   const recentPaid = bills.filter(b => b.status === 'paid').slice(0, 5);
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="mb-8">
         <h1 className="section-title">Billing & Invoices</h1>
         <p className="section-sub">Unified guest billing and payment tracking</p>

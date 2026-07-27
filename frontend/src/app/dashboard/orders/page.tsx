@@ -102,12 +102,12 @@ export default function OrdersPage() {
     fetch('/api/tables')
       .then(res => res.json())
       .then(data => setTableOptions(Array.isArray(data) ? data : []))
-      .catch(() => {});
+      .catch(() => { });
     // Fetch user role
     fetch('/api/tenant/info')
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data?.role) setUserRole(data.role); })
-      .catch(() => {});
+      .catch(() => { });
     // Poll for updates every 30s
     const interval = setInterval(fetchOrders, 30000);
     return () => clearInterval(interval);
@@ -211,8 +211,8 @@ export default function OrdersPage() {
   if (loading) return <LoadingState />;
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 md:p-8 overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pr-2">
         <div>
           <h1 className="section-title">Orders</h1>
           <p className="section-sub">Monitor and manage all incoming orders</p>

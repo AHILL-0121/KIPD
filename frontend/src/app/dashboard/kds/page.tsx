@@ -48,7 +48,7 @@ export default function KDSLandingPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8 overflow-x-hidden">
       <h1 className="font-serif text-3xl font-bold text-ink mb-2">Kitchen Display</h1>
       <p className="text-ink-muted mb-8">Select an outlet to view its orders</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
