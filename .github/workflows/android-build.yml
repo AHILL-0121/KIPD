@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies and build Next.js
         working-directory: ./frontend
         env:
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_dummykey="
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_ZHVtbXlrZXk="
           CLERK_SECRET_KEY: "sk_test_dummykey"
           DATABASE_URL: "postgresql://dummy:dummy@localhost/dummy"
           RESEND_API_KEY: "re_dummy_resend_api_key_for_build"
