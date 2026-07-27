@@ -1,10 +1,5 @@
-import { Resend } from 'resend';
-
-if (!process.env.RESEND_API_KEY) {
-  throw new Error('RESEND_API_KEY is not set');
-}
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Mock email service for Kipd
+// No external API required
 
 export interface EmailOptions {
   to: string | string[];
@@ -14,14 +9,12 @@ export interface EmailOptions {
 
 export async function sendEmail({ to, subject, html }: EmailOptions) {
   try {
-    const result = await resend.emails.send({
-      from: 'Kipd <noreply@kipd.app>',
-      to,
-      subject,
-      html,
-    });
-    
-    return { success: true, id: result.data?.id };
+    console.log(`[EMAIL SEND MOCK] Sending email to: ${to} | Subject: ${subject}`);
+
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    return { success: true, id: `mock-${Date.now()}` };
   } catch (error) {
     console.error('Failed to send email:', error);
     return { success: false, error };
@@ -79,7 +72,7 @@ export const emailTemplates = {
       </div>
     </div>
   `,
-  
+
   staffInvite: (data: {
     name: string;
     hotelName: string;
