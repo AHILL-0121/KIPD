@@ -4,9 +4,9 @@ import { ReactNode, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { UserButton } from '@clerk/nextjs';
-import { 
+import {
   LayoutDashboard,
-  Hotel, 
+  Hotel,
   Calendar,
   UtensilsCrossed,
   Receipt,
@@ -69,7 +69,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           setUserName(data.userName || '');
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const filteredNav = navigation.filter(
@@ -77,23 +77,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-cream">
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-stone-200 flex flex-col">
+    <div className="min-h-screen bg-cream pb-20 md:pb-0">
+      {/* Sidebar - Desktop */}
+      <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-stone-200 flex-col z-20">
         <div className="p-6 border-b border-stone-200">
           <Link href="/dashboard" className="font-serif text-2xl font-bold text-ink block">
             Kipd
           </Link>
           <p className="text-xs text-stone-400 mt-1">{tenantName || 'Your Property'}</p>
         </div>
-        
+
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {filteredNav.map((item) => {
             const Icon = item.icon;
             const isActive = item.href === '/dashboard'
               ? pathname === '/dashboard'
               : pathname?.startsWith(item.href);
-            
+
             return (
               <Link
                 key={item.name}
@@ -101,8 +101,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 className={`
                   flex items-center gap-3 px-4 py-3 rounded-xl
                   transition-all duration-200
-                  ${isActive 
-                    ? 'bg-amber text-ink font-medium shadow-sm' 
+                  ${isActive
+                    ? 'bg-amber text-ink font-medium shadow-sm'
                     : 'text-ink-muted hover:bg-stone-100 hover:text-ink'
                   }
                 `}
@@ -113,7 +113,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        
+
         <div className="p-4 border-t border-stone-200">
           <div className="flex items-center gap-3 px-2">
             <UserButton afterSignOutUrl="/" />
@@ -126,9 +126,34 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="ml-64 min-h-screen">
+      <main className="ml-0 md:ml-64 min-h-screen">
         {children}
       </main>
+
+      {/* Bottom Navigation - Mobile */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex items-center justify-around pb-safe z-50 h-16">
+        {filteredNav.slice(0, 5).map((item) => {
+          const Icon = item.icon;
+          const isActive = item.href === '/dashboard'
+            ? pathname === '/dashboard'
+            : pathname?.startsWith(item.href);
+
+          return (
+            <Link
+              key={item.name}
+              href={item.href}
+              className={`
+                flex flex-col items-center justify-center w-full h-full space-y-1
+                transition-all duration-200
+                ${isActive ? 'text-amber' : 'text-ink-muted'}
+              `}
+            >
+              <Icon className="w-5 h-5" />
+              <span className="text-[10px] font-medium">{item.name}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }
