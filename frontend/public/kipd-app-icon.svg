@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none">
+  <defs>
+    <radialGradient id="bgIcon" cx="38%" cy="30%" r="65%">
+      <stop offset="0%"   stop-color="#FFE08A"/>
+      <stop offset="55%"  stop-color="#F5C96A"/>
+      <stop offset="100%" stop-color="#E8A020"/>
+    </radialGradient>
+    <radialGradient id="bellyIcon" cx="50%" cy="40%" r="60%">
+      <stop offset="0%"   stop-color="#FFFAF0"/>
+      <stop offset="100%" stop-color="#FDF3DC"/>
+    </radialGradient>
+    <radialGradient id="bgSquare" cx="30%" cy="20%" r="85%">
+      <stop offset="0%"   stop-color="#FFF8EE"/>
+      <stop offset="100%" stop-color="#FDF0D8"/>
+    </radialGradient>
+    <linearGradient id="capIcon" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%"   stop-color="#D96645"/>
+      <stop offset="100%" stop-color="#B84830"/>
+    </linearGradient>
+    <linearGradient id="keyIcon" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#E07A60"/>
+      <stop offset="100%" stop-color="#C8573A"/>
+    </linearGradient>
+    <radialGradient id="eyeIcon" cx="30%" cy="28%" r="55%">
+      <stop offset="0%"   stop-color="#4A3828"/>
+      <stop offset="100%" stop-color="#1A1410"/>
+    </radialGradient>
+    <filter id="dropIcon" x="-10%" y="-8%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#C47A10" flood-opacity="0.22"/>
+    </filter>
+    <filter id="blushIcon"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+
+  <!-- ── ROUNDED SQUARE BACKGROUND ─────────────────── -->
+  <rect width="512" height="512" rx="112" fill="url(#bgSquare)"/>
+
+  <!-- Subtle warm noise ring decoration -->
+  <circle cx="256" cy="256" r="220" stroke="#E8A020" stroke-width="1" opacity="0.12"/>
+  <circle cx="256" cy="256" r="235" stroke="#C8573A" stroke-width="0.8" opacity="0.07"/>
+
+  <!-- ── KIP MASCOT (centered, scaled up) ──────────── -->
+  <g transform="translate(256,268) scale(0.62)" filter="url(#dropIcon)">
+
+    <!-- Ears -->
+    <ellipse cx="-134" cy="-90" rx="46" ry="60" fill="url(#bgIcon)" transform="rotate(-15 -134 -90)"/>
+    <ellipse cx="-134" cy="-90" rx="26" ry="36" fill="#FFE08A" opacity="0.85" transform="rotate(-15 -134 -90)"/>
+    <ellipse cx="134"  cy="-90" rx="46" ry="60" fill="url(#bgIcon)" transform="rotate(15 134 -90)"/>
+    <ellipse cx="134"  cy="-90" rx="26" ry="36" fill="#FFE08A" opacity="0.85" transform="rotate(15 134 -90)"/>
+
+    <!-- Body -->
+    <ellipse cx="0" cy="0" rx="138" ry="144" fill="url(#bgIcon)"/>
+
+    <!-- Belly -->
+    <ellipse cx="0" cy="20" rx="82"  ry="78"  fill="url(#bellyIcon)"/>
+
+    <!-- Blush -->
+    <ellipse cx="-70" cy="20" rx="30" ry="20" fill="#E07A60" opacity="0.2" filter="url(#blushIcon)"/>
+    <ellipse cx="70"  cy="20" rx="30" ry="20" fill="#E07A60" opacity="0.2" filter="url(#blushIcon)"/>
+
+    <!-- Eyes -->
+    <circle cx="-38" cy="-12" r="26" fill="url(#eyeIcon)"/>
+    <circle cx="-47" cy="-22" r="9"  fill="white" opacity="0.92"/>
+    <circle cx="-30" cy="-6"  r="4"  fill="white" opacity="0.5"/>
+    <circle cx="38"  cy="-12" r="26" fill="url(#eyeIcon)"/>
+    <circle cx="29"  cy="-22" r="9"  fill="white" opacity="0.92"/>
+    <circle cx="46"  cy="-6"  r="4"  fill="white" opacity="0.5"/>
+
+    <!-- Nose -->
+    <ellipse cx="0" cy="26" rx="16" ry="12" fill="#C8573A"/>
+    <ellipse cx="-5" cy="22" rx="5" ry="3.5" fill="white" opacity="0.3"/>
+
+    <!-- Smile -->
+    <path d="M -28 44 Q 0 68 28 44" stroke="#C8573A" stroke-width="6" stroke-linecap="round" fill="none"/>
+
+    <!-- Hotel key badge -->
+    <circle cx="-28" cy="78"  r="18" fill="none" stroke="url(#keyIcon)" stroke-width="5" opacity="0.72"/>
+    <rect   x="-15" y="74"   width="52" height="8" rx="4" fill="url(#keyIcon)" opacity="0.72"/>
+    <rect   x="18"  cy="82"  y="82" width="6" height="10" rx="2" fill="url(#keyIcon)" opacity="0.72"/>
+    <rect   x="30"  y="82"   width="6" height="8"  rx="2" fill="url(#keyIcon)" opacity="0.72"/>
+
+    <!-- Nightcap -->
+    <path d="M -52 -56 Q -36 -154 0 -200 Q 36 -154 52 -56 Q 26 -74 0 -68 Q -26 -74 -52 -56 Z"
+          fill="url(#capIcon)"/>
+    <ellipse cx="0" cy="-56" rx="54" ry="14" fill="#B84830" opacity="0.55"/>
+    <ellipse cx="0" cy="-59" rx="54" ry="10" fill="#E07A60" opacity="0.2"/>
+    <!-- Pom-pom -->
+    <circle cx="0" cy="-202" r="20" fill="#FDF3DC"/>
+    <circle cx="-6" cy="-208" r="7" fill="white" opacity="0.45"/>
+
+  </g>
+
+  <!-- ── "K" LETTER MARK (bottom right corner subtle) ── -->
+  <text x="430" y="490"
+        font-family="Georgia, serif"
+        font-size="28" font-weight="700"
+        fill="#E8A020" opacity="0.5">k</text>
+
+</svg>

@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" fill="none">
+  <defs>
+
+    <!-- Body gradient: light top-left shimmer -->
+    <radialGradient id="bodyGrad" cx="38%" cy="30%" r="65%">
+      <stop offset="0%"   stop-color="#FFE08A"/>
+      <stop offset="55%"  stop-color="#F5C96A"/>
+      <stop offset="100%" stop-color="#E8A020"/>
+    </radialGradient>
+
+    <!-- Ear inner gradient -->
+    <radialGradient id="earInnerGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%"   stop-color="#FFE08A"/>
+      <stop offset="100%" stop-color="#F5C96A"/>
+    </radialGradient>
+
+    <!-- Belly gradient -->
+    <radialGradient id="bellyGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%"   stop-color="#FFFAF0"/>
+      <stop offset="100%" stop-color="#FDF3DC"/>
+    </radialGradient>
+
+    <!-- Body shadow/depth -->
+    <radialGradient id="bodyShadow" cx="50%" cy="90%" r="55%">
+      <stop offset="0%"   stop-color="#C47A10" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#C47A10" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Cap gradient -->
+    <linearGradient id="capGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%"   stop-color="#D96645"/>
+      <stop offset="100%" stop-color="#B84830"/>
+    </linearGradient>
+
+    <!-- Eye shine -->
+    <radialGradient id="eyeShine" cx="30%" cy="28%" r="55%">
+      <stop offset="0%"   stop-color="#4A3828"/>
+      <stop offset="100%" stop-color="#1A1410"/>
+    </radialGradient>
+
+    <!-- Key gradient -->
+    <linearGradient id="keyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#E07A60"/>
+      <stop offset="100%" stop-color="#C8573A"/>
+    </linearGradient>
+
+    <!-- Drop shadow filter -->
+    <filter id="softShadow" x="-15%" y="-10%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#C47A10" flood-opacity="0.18"/>
+    </filter>
+
+    <!-- Subtle glow on cap ball -->
+    <filter id="capGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Cheek blur -->
+    <filter id="blush">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+
+  </defs>
+
+  <!-- ── EARS (behind body) ─────────────────────────── -->
+  <!-- Left ear outer -->
+  <ellipse cx="122" cy="162" rx="46" ry="60"
+           fill="url(#bodyGrad)"
+           transform="rotate(-15 122 162)"/>
+  <!-- Left ear inner -->
+  <ellipse cx="122" cy="162" rx="26" ry="36"
+           fill="url(#earInnerGrad)"
+           transform="rotate(-15 122 162)" opacity="0.85"/>
+
+  <!-- Right ear outer -->
+  <ellipse cx="278" cy="162" rx="46" ry="60"
+           fill="url(#bodyGrad)"
+           transform="rotate(15 278 162)"/>
+  <!-- Right ear inner -->
+  <ellipse cx="278" cy="162" rx="26" ry="36"
+           fill="url(#earInnerGrad)"
+           transform="rotate(15 278 162)" opacity="0.85"/>
+
+  <!-- ── BODY ───────────────────────────────────────── -->
+  <ellipse cx="200" cy="252" rx="138" ry="144"
+           fill="url(#bodyGrad)"
+           filter="url(#softShadow)"/>
+  <!-- Depth shadow overlay -->
+  <ellipse cx="200" cy="252" rx="138" ry="144"
+           fill="url(#bodyShadow)"/>
+
+  <!-- ── BELLY ──────────────────────────────────────── -->
+  <ellipse cx="200" cy="272" rx="82" ry="78"
+           fill="url(#bellyGrad)"/>
+
+  <!-- ── BLUSH CHEEKS ───────────────────────────────── -->
+  <ellipse cx="130" cy="272" rx="30" ry="20"
+           fill="#E07A60" opacity="0.20" filter="url(#blush)"/>
+  <ellipse cx="270" cy="272" rx="30" ry="20"
+           fill="#E07A60" opacity="0.20" filter="url(#blush)"/>
+
+  <!-- ── EYES ───────────────────────────────────────── -->
+  <!-- Left eye -->
+  <circle cx="162" cy="240" r="26" fill="url(#eyeShine)"/>
+  <!-- Left eye shine large -->
+  <circle cx="153" cy="230" r="9"  fill="white" opacity="0.92"/>
+  <!-- Left eye shine small -->
+  <circle cx="170" cy="246" r="4"  fill="white" opacity="0.55"/>
+
+  <!-- Right eye -->
+  <circle cx="238" cy="240" r="26" fill="url(#eyeShine)"/>
+  <!-- Right eye shine large -->
+  <circle cx="229" cy="230" r="9"  fill="white" opacity="0.92"/>
+  <!-- Right eye shine small -->
+  <circle cx="246" cy="246" r="4"  fill="white" opacity="0.55"/>
+
+  <!-- ── NOSE ───────────────────────────────────────── -->
+  <ellipse cx="200" cy="278" rx="16" ry="12" fill="#C8573A"/>
+  <!-- Nose highlight -->
+  <ellipse cx="195" cy="274" rx="5"  ry="3.5" fill="white" opacity="0.35"/>
+
+  <!-- ── SMILE ──────────────────────────────────────── -->
+  <path d="M 172 296 Q 200 320 228 296"
+        stroke="#C8573A" stroke-width="6"
+        stroke-linecap="round" fill="none"/>
+
+  <!-- ── HOTEL KEY BADGE ────────────────────────────── -->
+  <!-- Key ring -->
+  <circle cx="172" cy="330" r="18"
+          fill="none" stroke="url(#keyGrad)" stroke-width="5" opacity="0.75"/>
+  <!-- Key shaft -->
+  <rect   x="185" y="326" width="52" height="8" rx="4"
+          fill="url(#keyGrad)" opacity="0.75"/>
+  <!-- Key teeth -->
+  <rect x="218" y="334" width="6" height="10" rx="2" fill="url(#keyGrad)" opacity="0.75"/>
+  <rect x="230" y="334" width="6" height="8"  rx="2" fill="url(#keyGrad)" opacity="0.75"/>
+
+  <!-- ── NIGHTCAP ────────────────────────────────────── -->
+  <!-- Cap body -->
+  <path d="M 148 196 Q 164 98 200 52 Q 236 98 252 196 Q 226 178 200 184 Q 174 178 148 196 Z"
+        fill="url(#capGrad)"/>
+  <!-- Cap brim / band -->
+  <ellipse cx="200" cy="196" rx="54" ry="14"
+           fill="#B84830" opacity="0.6"/>
+  <!-- Cap brim highlight -->
+  <ellipse cx="200" cy="193" rx="54" ry="10"
+           fill="#E07A60" opacity="0.25"/>
+  <!-- Cap stripe detail -->
+  <path d="M 166 170 Q 183 132 200 104 Q 205 132 202 170"
+        fill="none" stroke="#B84830" stroke-width="3" opacity="0.35" stroke-linecap="round"/>
+  <!-- Cap pom-pom -->
+  <circle cx="200" cy="50" r="18"
+          fill="#FDF3DC" filter="url(#capGlow)"/>
+  <!-- Pom-pom shine -->
+  <circle cx="194" cy="44" r="6" fill="white" opacity="0.5"/>
+
+</svg>
