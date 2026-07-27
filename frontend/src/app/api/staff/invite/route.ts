@@ -1,23 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendEmail, emailTemplates } from '@/lib/email';
+import { requireTenantContext } from '@/lib/auth';
+import { db } from '@/db';
+import { staff } from '@/db/schema';
 
 export async function POST(request: NextRequest) {
   try {
-    const tenantId = request.headers.get('x-tenant-id');
-    
-    if (!tenantId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    // Authenticate natively using Clerk instead of manual insecure headers
+    const context = await requireTenantContext();
+    const { tenantId } = context;
 
     const body = await request.json();
     const { name, email, role } = body;
 
-    // In production, generate secure invite token
+    // Ensure URL is absolutely parsed for deep-linking
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://sa-kipd.vercel.app';
     const inviteToken = Math.random().toString(36).substring(2);
-    const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL}/accept-invite/${inviteToken}`;
+    const inviteLink = `${baseUrl}/accept-invite/${inviteToken}`;
+
+    // Natively inject the pending staff member to the dashboard grid
+    const [staffMember] = await db.insert(staff).values({
+      tenantId,
+      clerkId: `pending_${inviteToken}`, // temporary dummy clerkId
+      name,
+      email,
+      role,
+      isActive: false, // Remains false until they click accept!
+    }).returning();
 
     await sendEmail({
       to: email,

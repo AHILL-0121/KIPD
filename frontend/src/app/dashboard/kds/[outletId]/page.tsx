@@ -25,8 +25,15 @@ interface KDSOrder {
 
 export default function KDSPage({ params }: { params: { outletId: string } }) {
   const [orders, setOrders] = useState<KDSOrder[]>([]);
+  const [userRole, setUserRole] = useState<string>('');
 
   useEffect(() => {
+    // Fetch User Role to determine if KDS is Read-Only
+    fetch('/api/tenant/info')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data?.role) setUserRole(data.role); })
+      .catch(() => { });
+
     // Fetch initial orders
     fetch(`/api/kds/${params.outletId}`)
       .then(res => res.json())
@@ -141,38 +148,42 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="flex gap-3">
-                {order.status === 'new' && (
-                  <Button
-                    className="flex-1 text-lg py-4"
-                    variant="terra"
-                    onClick={() => updateStatus(order.id, 'preparing')}
-                  >
-                    Start Preparing
-                  </Button>
-                )}
-
-                {order.status === 'preparing' && (
-                  <Button
-                    className="flex-1 text-lg py-4"
-                    variant="sage"
-                    onClick={() => updateStatus(order.id, 'ready')}
-                  >
-                    Mark Ready
-                  </Button>
-                )}
-
-                {order.status === 'acknowledged' && (
-                  <Button
-                    className="flex-1 text-lg py-4"
-                    variant="terra"
-                    onClick={() => updateStatus(order.id, 'preparing')}
-                  >
-                    Start Cooking
-                  </Button>
-                )}
-              </div>
+              {/* Actions (Restricted to Kitchen Staff & Managers) */}
+              {['kitchen', 'manager'].includes(userRole) ? (
+                <div className="flex gap-3">
+                  {order.status === 'new' && (
+                    <Button
+                      className="flex-1 text-lg py-4"
+                      variant="terra"
+                      onClick={() => updateStatus(order.id, 'preparing')}
+                    >
+                      Start Preparing
+                    </Button>
+                  )}
+                  {order.status === 'preparing' && (
+                    <Button
+                      className="flex-1 text-lg py-4"
+                      variant="sage"
+                      onClick={() => updateStatus(order.id, 'ready')}
+                    >
+                      Mark Ready
+                    </Button>
+                  )}
+                  {order.status === 'acknowledged' && (
+                    <Button
+                      className="flex-1 text-lg py-4"
+                      variant="terra"
+                      onClick={() => updateStatus(order.id, 'preparing')}
+                    >
+                      Start Cooking
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center p-3 rounded-lg bg-stone-800 text-stone-400 text-sm">
+                  Viewing in Read-Only Mode (Kitchen Staff Only)
+                </div>
+              )}
             </div>
           );
         })}

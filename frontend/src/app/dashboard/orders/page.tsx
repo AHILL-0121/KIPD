@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { LoadingState } from '@/components/ui/loading-state';
-import { Clock, MapPin, Plus, Minus, X, ShoppingCart } from 'lucide-react';
+import { Clock, MapPin, Plus, Minus, X, ShoppingCart, Receipt } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { formatCurrency } from '@/lib/currency';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -60,20 +60,19 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [tableOptions, setTableOptions] = useState<TableOption[]>([]);
-  const [userRole, setUserRole] = useState<string>('owner');
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // Create order modal
+  // Modal State
   const [showCreate, setShowCreate] = useState(false);
-  const [orderType, setOrderType] = useState<'dine_in' | 'room_service'>('dine_in');
   const [selectedTableId, setSelectedTableId] = useState('');
-  const [roomNumber, setRoomNumber] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [menuSearch, setMenuSearch] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Billing Modal State
+  const [checkoutTable, setCheckoutTable] = useState<{ table: TableOption; total: number; tickets: Order[] } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -98,35 +97,13 @@ export default function OrdersPage() {
   useEffect(() => {
     fetchOrders();
     fetchMenuItems();
-    // Fetch tables for order creation
     fetch('/api/tables')
       .then(res => res.json())
       .then(data => setTableOptions(Array.isArray(data) ? data : []))
       .catch(() => { });
-    // Fetch user role
-    fetch('/api/tenant/info')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data?.role) setUserRole(data.role); })
-      .catch(() => { });
-    // Poll for updates every 30s
     const interval = setInterval(fetchOrders, 30000);
     return () => clearInterval(interval);
   }, []);
-
-  const statusConfig: Record<string, { badge: string; label: string; action: string | null; nextStatus: string | null }> = {
-    new: { badge: 'amber', label: 'New', action: 'Acknowledge', nextStatus: 'acknowledged' },
-    acknowledged: { badge: 'terra', label: 'Acknowledged', action: 'Start Preparing', nextStatus: 'preparing' },
-    preparing: { badge: 'terra', label: 'Preparing', action: 'Mark Ready', nextStatus: 'ready' },
-    ready: { badge: 'sage', label: 'Ready', action: 'Mark Served', nextStatus: 'served' },
-    served: { badge: 'stone', label: 'Served', action: null, nextStatus: null },
-    cancelled: { badge: 'stone', label: 'Cancelled', action: null, nextStatus: null },
-  };
-
-  const filteredOrders = orders.filter(o => {
-    if (filter === 'active') return ['new', 'acknowledged', 'preparing', 'ready'].includes(o.status);
-    if (filter === 'completed') return ['served', 'cancelled'].includes(o.status);
-    return true;
-  });
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
@@ -137,15 +114,46 @@ export default function OrdersPage() {
       });
       if (!res.ok) throw new Error('Failed');
       setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus as Order['status'] } : o));
-      showToast(`Order updated to ${newStatus}`, 'success');
+      showToast(`Ticket updated to ${newStatus}`, 'success');
     } catch {
-      showToast('Failed to update order', 'error');
+      showToast('Failed to update ticket', 'error');
     }
   };
 
-  const cancelOrder = async (orderId: string) => {
-    if (!confirm('Cancel this order?')) return;
-    await updateOrderStatus(orderId, 'cancelled');
+  // Group active orders heavily by table
+  const getActiveTabs = () => {
+    const tabs: Record<string, { table: TableOption; total: number; tickets: Order[] }> = {};
+
+    orders.forEach(o => {
+      if (['served', 'cancelled'].includes(o.status)) return; // Ignore deeply closed tickets
+      if (!o.tableId) return;
+
+      const table = tableOptions.find(t => t.id === o.tableId);
+      if (!table) return;
+
+      if (!tabs[o.tableId]) {
+        tabs[o.tableId] = { table, total: 0, tickets: [] };
+      }
+      tabs[o.tableId].tickets.push(o);
+      tabs[o.tableId].total += Number(o.totalAmount);
+    });
+    return Object.values(tabs);
+  };
+
+  const activeTabs = getActiveTabs();
+
+  // Free tables to start a new tab
+  const getFreeTables = () => {
+    const activeTableIds = activeTabs.map(t => t.table.id);
+    return tableOptions.filter(t => !activeTableIds.includes(t.id));
+  };
+
+  const openNewOrder = (tableId: string = '') => {
+    setSelectedTableId(tableId);
+    setCart([]);
+    setSpecialInstructions('');
+    setMenuSearch('');
+    setShowCreate(true);
   };
 
   const addToCart = (item: MenuItem) => {
@@ -168,13 +176,13 @@ export default function OrdersPage() {
 
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  const handleCreateOrder = async () => {
+  const handleFireTicket = async () => {
     if (cart.length === 0) {
       showToast('Add at least one item', 'error');
       return;
     }
-    if (orderType === 'dine_in' && !selectedTableId) {
-      showToast('Select a table for dine-in orders', 'error');
+    if (!selectedTableId) {
+      showToast('Select a table', 'error');
       return;
     }
     setSaving(true);
@@ -183,8 +191,8 @@ export default function OrdersPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: orderType,
-          tableId: orderType === 'dine_in' ? selectedTableId : undefined,
+          type: 'dine_in',
+          tableId: selectedTableId,
           items: cart.map(c => ({ menuItemId: c.menuItemId, quantity: c.quantity, notes: c.notes || undefined })),
           specialInstructions: specialInstructions || undefined,
         }),
@@ -192,21 +200,46 @@ export default function OrdersPage() {
       if (!res.ok) throw new Error('Failed');
       setShowCreate(false);
       setCart([]);
-      setSpecialInstructions('');
       setSelectedTableId('');
-      setRoomNumber('');
       fetchOrders();
-      showToast('Order created', 'success');
+      showToast('KDS Ticket Fired!', 'success');
     } catch {
-      showToast('Failed to create order', 'error');
+      showToast('Failed to fire ticket', 'error');
     } finally {
       setSaving(false);
     }
   };
 
-  const filteredMenu = menuItems.filter(item =>
-    item.name.toLowerCase().includes(menuSearch.toLowerCase())
-  );
+  const handleSettleTab = async (paymentMethod: 'cash' | 'upi') => {
+    if (!checkoutTable) return;
+
+    if (paymentMethod === 'upi') {
+      showToast('Waiting for Android UPI Plugin detection...', 'error');
+      // Here is where we'd bridge Capacitor background listener status
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch('/api/orders/settle-tab', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableId: checkoutTable.table.id,
+          paymentMethod
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to settle');
+
+      setCheckoutTable(null);
+      fetchOrders();
+      showToast(`Table ${checkoutTable.table.tableNumber} Tab Settled via Cash!`, 'success');
+    } catch {
+      showToast('Failed to settle tab.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) return <LoadingState />;
 
@@ -214,222 +247,207 @@ export default function OrdersPage() {
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pr-2">
         <div>
-          <h1 className="section-title">Orders</h1>
-          <p className="section-sub">Monitor and manage all incoming orders</p>
+          <h1 className="section-title">Active Tabs</h1>
+          <p className="section-sub">Manage running table sessions and fire tickets to kitchen.</p>
         </div>
 
-        <Button onClick={() => {
-          setCart([]);
-          setSpecialInstructions('');
-          setMenuSearch('');
-          setOrderType('dine_in');
-          setSelectedTableId('');
-          setShowCreate(true);
-        }}>
+        <Button onClick={() => openNewOrder()}>
           <Plus className="w-4 h-4" />
-          New Order
+          Seat New Table
         </Button>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-3 mb-6">
-        <Button variant={filter === 'all' ? 'primary' : 'ghost'} onClick={() => setFilter('all')}>
-          All Orders ({orders.length})
-        </Button>
-        <Button variant={filter === 'active' ? 'primary' : 'ghost'} onClick={() => setFilter('active')}>
-          Active ({orders.filter(o => ['new', 'acknowledged', 'preparing', 'ready'].includes(o.status)).length})
-        </Button>
-        <Button variant={filter === 'completed' ? 'primary' : 'ghost'} onClick={() => setFilter('completed')}>
-          Completed ({orders.filter(o => ['served', 'cancelled'].includes(o.status)).length})
-        </Button>
-      </div>
-
-      {/* Orders Grid */}
-      {filteredOrders.length === 0 ? (
+      {activeTabs.length === 0 ? (
         <EmptyState
-          title={filter !== 'all' ? 'No Orders Found' : 'No Orders Yet'}
-          description={filter !== 'all' ? 'Try a different filter.' : 'Create your first order to get started.'}
-          actionLabel={filter === 'all' ? 'Create Order' : undefined}
-          onAction={filter === 'all' ? () => setShowCreate(true) : undefined}
+          title="No Active Tables"
+          description="All tables are empty. Seat a new guest to open a tab."
+          actionLabel="Seat New Guest"
+          onAction={() => openNewOrder()}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredOrders.map((order) => {
-            const config = statusConfig[order.status];
-            const minutesAgo = formatDistanceToNow(new Date(order.createdAt), { addSuffix: true });
-
-            return (
-              <Card key={order.id} hover={false} className="border-2">
-                <div className="flex items-start justify-between mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {activeTabs.map((tab) => (
+            <Card key={tab.table.id} hover={false} className="border-2 border-stone-200">
+              <div className="flex items-center justify-between mb-4 border-b border-stone-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-amber-pale text-amber flex items-center justify-center font-bold text-xl">
+                    {tab.table.tableNumber}
+                  </div>
                   <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <MapPin className="w-4 h-4 text-ink-muted" />
-                      <span className="font-bold text-lg text-ink">
-                        {order.type === 'dine_in'
-                          ? `Table ${order.table?.tableNumber || '—'}`
-                          : 'Room Service'
-                        }
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-ink-muted">
-                      <Clock className="w-3 h-3" />
-                      <span>{minutesAgo}</span>
-                    </div>
+                    <h2 className="text-xl font-bold font-serif text-ink">Table Tab Opened</h2>
+                    <p className="text-sm text-ink-muted">{tab.tickets.length} Ticket(s) Fired to KDS</p>
                   </div>
-
-                  <Badge variant={config.badge as 'amber' | 'terra' | 'sage' | 'stone'} dot>
-                    {config.label}
-                  </Badge>
                 </div>
+                <div className="text-right">
+                  <div className="text-sm font-medium text-ink-muted uppercase tracking-wider">Tab Total</div>
+                  <div className="text-2xl font-bold text-terra">{formatCurrency(tab.total)}</div>
+                </div>
+              </div>
 
-                {/* Order Items */}
-                <div className="space-y-2 mb-4">
-                  {(order.orderItems || []).map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-sm">
-                      <span className="text-ink">
-                        <span className="font-medium">{item.quantity}x</span> {item.menuItem?.name || 'Item'}
+              {/* Tickets Section within Tab */}
+              <div className="space-y-4 mb-4">
+                {tab.tickets.map((ticket, i) => (
+                  <div key={ticket.id} className="bg-stone-50 rounded-xl p-4 border border-stone-200">
+                    <div className="flex items-center justify-between mb-3 border-b border-stone-200 pb-2">
+                      <span className="font-mono text-sm font-semibold text-stone-500">
+                        Ticket #{i + 1} ({formatDistanceToNow(new Date(ticket.createdAt))} ago)
                       </span>
-                      {item.notes && (
-                        <span className="text-xs text-amber italic">{item.notes}</span>
-                      )}
+                      <Badge variant={ticket.status === 'new' ? 'amber' : ticket.status === 'preparing' ? 'terra' : 'sage'} dot>
+                        {ticket.status.toUpperCase()}
+                      </Badge>
                     </div>
-                  ))}
-                </div>
-
-                {order.specialInstructions && (
-                  <div className="bg-amber-pale p-3 rounded-lg mb-4 text-sm text-ink">
-                    <span className="font-medium">Note:</span> {order.specialInstructions}
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between pt-4 border-t border-stone-200">
-                  <div className="font-bold text-lg text-ink">{formatCurrency(Number(order.totalAmount))}</div>
-
-                  <div className="flex gap-2">
-                    {config.action && config.nextStatus && (
-                      <Button
-                        size="sm"
-                        variant="sage"
-                        onClick={() => updateOrderStatus(order.id, config.nextStatus!)}
-                      >
-                        {config.action}
-                      </Button>
-                    )}
-                    {['new', 'acknowledged'].includes(order.status) && (
-                      <Button size="sm" variant="ghost" className="text-red-500" onClick={() => cancelOrder(order.id)}>
-                        Cancel
+                    <div className="space-y-2">
+                      {(ticket.orderItems || []).map((item, idx) => (
+                        <div key={idx} className="flex justify-between text-sm">
+                          <span className="text-ink">
+                            <span className="font-semibold text-amber mr-2">{item.quantity}x</span>
+                            {item.menuItem?.name || 'Item'}
+                          </span>
+                          <span className="text-stone-500">{formatCurrency(Number(item.price) * item.quantity)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {ticket.status === 'ready' && (
+                      <Button size="sm" variant="sage" className="w-full mt-3" onClick={() => updateOrderStatus(ticket.id, 'served')}>
+                        Mark Sent to Table
                       </Button>
                     )}
                   </div>
-                </div>
-              </Card>
-            );
-          })}
+                ))}
+              </div>
+
+              {/* Tab Action Footer */}
+              <div className="flex gap-3 pt-4 border-t border-stone-200">
+                <Button variant="ghost" className="flex-1 bg-stone-100 hover:bg-stone-200" onClick={() => openNewOrder(tab.table.id)}>
+                  <Plus className="w-4 h-4 mr-2" /> Fire More Items
+                </Button>
+                <Button variant="terra" className="flex-1" onClick={() => setCheckoutTable(tab)}>
+                  <Receipt className="w-4 h-4 mr-2" /> Settle Bill
+                </Button>
+              </div>
+            </Card>
+          ))}
         </div>
       )}
 
-      {/* Create Order Modal */}
+      {/* Fire Ticket (Create Order) Sheet/Modal */}
       <AnimatePresence>
         {showCreate && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCreate(false)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-serif text-2xl font-bold">New Order</h2>
-                <button onClick={() => setShowCreate(false)} className="text-ink-muted hover:text-ink"><X className="w-5 h-5" /></button>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 flex items-end md:items-center justify-center z-[100] md:p-4" onClick={() => setShowCreate(false)}>
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="bg-white rounded-t-3xl md:rounded-2xl p-6 md:p-8 w-full max-w-2xl h-[90vh] md:h-auto md:max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+
+              <div className="flex justify-between items-center mb-6 shrink-0">
+                <div>
+                  <h2 className="font-serif text-2xl font-bold">Fire Ticket to KDS</h2>
+                  <p className="text-sm text-ink-muted">Add items to a table's running tab.</p>
+                </div>
+                <button onClick={() => setShowCreate(false)} className="bg-stone-100 p-2 rounded-full hover:bg-stone-200"><X className="w-5 h-5" /></button>
               </div>
 
-              {/* Order Type */}
-              <div className="grid grid-cols-2 gap-3 mb-6">
-                <button className={`p-4 rounded-xl border-2 text-center ${orderType === 'dine_in' ? 'border-amber bg-amber-pale' : 'border-stone-200'}`} onClick={() => setOrderType('dine_in')}>
-                  <div className="font-semibold">🍽️ Dine In</div>
-                </button>
-                <button className={`p-4 rounded-xl border-2 text-center ${orderType === 'room_service' ? 'border-amber bg-amber-pale' : 'border-stone-200'}`} onClick={() => setOrderType('room_service')}>
-                  <div className="font-semibold">🛎️ Room Service</div>
-                </button>
-              </div>
-
-              {/* Table Selection for Dine In */}
-              {orderType === 'dine_in' && (
-                <div className="mb-6">
+              <div className="flex-1 overflow-y-auto min-h-0 space-y-6 pb-20 md:pb-0">
+                {/* Table Assignment Component */}
+                <div className="bg-stone-50 p-4 rounded-xl border border-stone-200">
+                  <label className="block text-sm font-semibold text-ink mb-2">Select Table for this Ticket</label>
                   <Select
-                    label="Select Table"
                     value={selectedTableId}
                     onChange={(e) => setSelectedTableId(e.target.value)}
                     options={[
-                      { value: '', label: 'Choose a table...' },
-                      ...tableOptions.map(t => ({ value: t.id, label: `Table ${t.tableNumber} (${t.capacity} seats)` }))
+                      { value: '', label: 'Select a Table...' },
+                      ...tableOptions.map(t => ({ value: t.id, label: `Table ${t.tableNumber}` }))
                     ]}
                   />
-                  {tableOptions.length === 0 && (
-                    <p className="text-xs text-red-500 mt-1">No tables configured. Ask your manager to add tables in Restaurant settings.</p>
+                  {selectedTableId && !activeTabs.find(t => t.table.id === selectedTableId) && (
+                    <p className="text-xs text-amber mt-2 font-medium">New Tab will be opened for Table {tableOptions.find(t => t.id === selectedTableId)?.tableNumber}.</p>
                   )}
                 </div>
-              )}
 
-              {/* Menu Items */}
-              <div className="mb-6">
-                <Input placeholder="Search menu items..." value={menuSearch} onChange={(e) => setMenuSearch(e.target.value)} className="mb-3" />
-                <div className="max-h-48 overflow-y-auto space-y-2 border border-stone-200 rounded-xl p-3">
-                  {filteredMenu.length === 0 ? (
-                    <p className="text-sm text-ink-muted text-center py-4">No menu items available</p>
-                  ) : (
-                    filteredMenu.map(item => {
+                {/* Point of Sale Item Picker */}
+                <div>
+                  <Input placeholder="Search menu..." value={menuSearch} onChange={(e) => setMenuSearch(e.target.value)} className="mb-3" />
+                  <div className="max-h-64 overflow-y-auto space-y-2 border border-stone-200 rounded-xl p-3 bg-stone-50/50">
+                    {menuItems.filter(i => i.name.toLowerCase().includes(menuSearch.toLowerCase())).map(item => {
                       const inCart = cart.find(c => c.menuItemId === item.id);
                       return (
-                        <div key={item.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-stone-50">
+                        <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-white border border-stone-200 shadow-sm">
                           <div>
-                            <span className="font-medium text-sm">{item.name}</span>
-                            {item.category && <span className="text-xs text-ink-muted ml-2">{item.category.name}</span>}
-                            <span className="text-sm text-amber ml-2">{formatCurrency(Number(item.price))}</span>
+                            <span className="font-bold text-ink block">{item.name}</span>
+                            <span className="text-sm font-mono text-ink-muted">{formatCurrency(Number(item.price))}</span>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-3">
                             {inCart ? (
-                              <>
-                                <button onClick={() => removeFromCart(item.id)} className="p-1 rounded bg-stone-100 hover:bg-stone-200"><Minus className="w-3 h-3" /></button>
-                                <span className="text-sm font-semibold w-6 text-center">{inCart.quantity}</span>
-                                <button onClick={() => addToCart(item)} className="p-1 rounded bg-amber text-white hover:bg-amber/90"><Plus className="w-3 h-3" /></button>
-                              </>
+                              <div className="flex items-center bg-stone-100 rounded-lg p-1">
+                                <button onClick={() => removeFromCart(item.id)} className="p-2 rounded bg-white shadow-sm text-terra"><Minus className="w-4 h-4" /></button>
+                                <span className="font-bold text-lg w-10 text-center">{inCart.quantity}</span>
+                                <button onClick={() => addToCart(item)} className="p-2 rounded bg-amber shadow-sm text-white"><Plus className="w-4 h-4" /></button>
+                              </div>
                             ) : (
-                              <Button size="sm" variant="ghost" onClick={() => addToCart(item)}>
-                                <Plus className="w-3 h-3" /> Add
+                              <Button size="sm" variant="ghost" onClick={() => addToCart(item)} className="font-bold">
+                                <Plus className="w-4 h-4 mr-1" /> Add
                               </Button>
                             )}
                           </div>
                         </div>
                       );
-                    })
-                  )}
-                </div>
-              </div>
-
-              {/* Cart */}
-              {cart.length > 0 && (
-                <div className="mb-6 p-4 bg-stone-50 rounded-xl">
-                  <div className="flex items-center gap-2 mb-3">
-                    <ShoppingCart className="w-4 h-4" />
-                    <span className="font-semibold">Order Items ({cart.reduce((s, c) => s + c.quantity, 0)})</span>
+                    })}
                   </div>
-                  <div className="space-y-2">
-                    {cart.map(item => (
-                      <div key={item.menuItemId} className="flex items-center justify-between text-sm">
-                        <span>{item.quantity}x {item.name}</span>
-                        <span className="font-medium">{formatCurrency(item.price * item.quantity)}</span>
+                </div>
+
+                {/* Cart Preview */}
+                {cart.length > 0 && (
+                  <div className="bg-amber-pale p-4 rounded-xl border border-amber">
+                    <div className="font-bold text-amber mb-3 flex items-center"><ShoppingCart className="w-4 h-4 mr-2" /> Ticket Queue</div>
+                    {cart.map(c => (
+                      <div key={c.menuItemId} className="flex justify-between text-sm mb-2 text-ink/80 font-medium">
+                        <span>{c.quantity}x {c.name}</span>
+                        <span>{formatCurrency(c.price * c.quantity)}</span>
                       </div>
                     ))}
-                    <div className="flex justify-between pt-2 border-t border-stone-200 font-bold">
+                    <div className="pt-2 mt-2 border-t border-amber/30 flex justify-between font-bold text-lg text-ink">
                       <span>Total</span>
                       <span>{formatCurrency(cartTotal)}</span>
                     </div>
                   </div>
+                )}
+
+                <Input label="Kitchen Notes (Optional)" placeholder="e.g. Extra spicy..." value={specialInstructions} onChange={(e) => setSpecialInstructions(e.target.value)} />
+              </div>
+
+              {/* Action Sheet Footer */}
+              <div className="pt-4 border-t border-stone-200 mt-auto shrink-0 bg-white md:bg-transparent pb-safe md:pb-0">
+                <Button className="w-full text-lg py-6" variant="terra" onClick={handleFireTicket} disabled={saving || cart.length === 0 || !selectedTableId}>
+                  {saving ? 'Firing Ticket...' : `FIRE TO KITCHEN (${formatCurrency(cartTotal)})`}
+                </Button>
+              </div>
+
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Checkout / Settle Modal */}
+      <AnimatePresence>
+        {checkoutTable && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 flex items-center justify-center z-[110] p-4" onClick={() => setCheckoutTable(null)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-2xl p-8 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+              <div className="text-center mb-6">
+                <div className="h-16 w-16 bg-amber-pale text-amber rounded-full flex items-center justify-center font-bold text-3xl mx-auto mb-3">
+                  {checkoutTable.table.tableNumber}
                 </div>
-              )}
+                <h2 className="font-serif text-2xl font-bold">Settle Table Tab</h2>
+                <p className="text-lg text-ink font-bold mt-2">Grand Total: <span className="text-terra">{formatCurrency(checkoutTable.total)}</span></p>
+                <p className="text-sm text-ink-muted">{checkoutTable.tickets.length} Ticket(s) Fired</p>
+              </div>
 
-              <Input label="Special Instructions" placeholder="Any special requests..." value={specialInstructions} onChange={(e) => setSpecialInstructions(e.target.value)} className="mb-4" />
-
-              <div className="flex gap-3">
-                <Button variant="ghost" className="flex-1" onClick={() => setShowCreate(false)} disabled={saving}>Cancel</Button>
-                <Button variant="terra" className="flex-1" onClick={handleCreateOrder} disabled={saving || cart.length === 0}>
-                  {saving ? 'Placing...' : `Place Order (${formatCurrency(cartTotal)})`}
+              <div className="space-y-3">
+                <Button className="w-full py-6 text-lg bg-green-600 hover:bg-green-700 text-white" disabled={saving} onClick={() => handleSettleTab('cash')}>
+                  💵 Accept Cash Payment
+                </Button>
+                <Button className="w-full py-6 text-lg bg-blue-600 hover:bg-blue-700 text-white" disabled={saving} onClick={() => handleSettleTab('upi')}>
+                  📱 Wait for background Android UPI
+                </Button>
+                <Button variant="ghost" className="w-full mt-2" onClick={() => setCheckoutTable(null)} disabled={saving}>
+                  Cancel
                 </Button>
               </div>
             </motion.div>
@@ -437,12 +455,12 @@ export default function OrdersPage() {
         )}
       </AnimatePresence>
 
-      {/* Toast */}
+      {/* Toast Overlay */}
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: -50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}
-            className={`fixed top-8 right-8 z-50 px-6 py-4 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-green-50 border border-green-200 text-green-900' : 'bg-red-50 border border-red-200 text-red-900'}`}>
-            <span className="font-medium">{toast.message}</span>
+            className={`fixed top-[env(safe-area-inset-top)] left-4 right-4 md:left-auto md:right-8 z-[200] p-4 rounded-xl shadow-2xl flex items-center gap-3 ${toast.type === 'success' ? 'bg-sage text-white' : 'bg-terra text-white'}`}>
+            <span className="font-medium text-sm">{toast.message}</span>
           </motion.div>
         )}
       </AnimatePresence>

@@ -1,5 +1,4 @@
-// Mock email service for Kipd
-// No external API required
+import nodemailer from 'nodemailer';
 
 export interface EmailOptions {
   to: string | string[];
@@ -9,14 +8,27 @@ export interface EmailOptions {
 
 export async function sendEmail({ to, subject, html }: EmailOptions) {
   try {
-    console.log(`[EMAIL SEND MOCK] Sending email to: ${to} | Subject: ${subject}`);
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    const info = await transporter.sendMail({
+      from: process.env.SMTP_FROM || '"Kipd Platform" <no-reply@kipd.com>',
+      to,
+      subject,
+      html,
+    });
 
-    return { success: true, id: `mock-${Date.now()}` };
+    console.log(`[EMAIL SENT] MessageId: ${info.messageId}`);
+    return { success: true, id: info.messageId };
   } catch (error) {
-    console.error('Failed to send email:', error);
+    console.error('[EMAIL ERROR] Failed to send email:', error);
     return { success: false, error };
   }
 }

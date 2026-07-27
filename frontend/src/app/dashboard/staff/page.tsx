@@ -22,6 +22,7 @@ export default function StaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteData, setInviteData] = useState({ name: '', email: '', role: 'front_desk' });
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/staff')
@@ -44,24 +45,37 @@ export default function StaffPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(inviteData),
     });
-    
+
     setShowInviteModal(false);
     setInviteData({ name: '', email: '', role: 'front_desk' });
-    
+
     // Refresh staff list
     const response = await fetch('/api/staff');
     const data = await response.json();
     setStaff(data);
   };
 
+  const deleteStaff = async (id: string, name: string) => {
+    if (!confirm(`Are you absolutely sure you want to completely remove ${name} from your staff?`)) return;
+
+    try {
+      await fetch(`/api/staff/${id}`, { method: 'DELETE' });
+      setStaff(staff.filter(s => s.id !== id));
+      setActiveMenu(null);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to delete staff member.');
+    }
+  };
+
   return (
-    <div className="p-4 md:p-8 overflow-x-hidden">
+    <div className="p-4 md:p-8 overflow-x-hidden min-h-screen" onClick={() => setActiveMenu(null)}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="section-title">Staff Management</h1>
           <p className="section-sub">Manage team members and access</p>
         </div>
-        
+
         <Button onClick={() => setShowInviteModal(true)}>
           <Plus className="w-4 h-4" />
           Invite Staff
@@ -72,7 +86,7 @@ export default function StaffPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {staff.map((member) => {
           const config = roleConfig[member.role];
-          
+
           return (
             <Card key={member.id} hover>
               <div className="flex items-start justify-between mb-4">
@@ -85,17 +99,46 @@ export default function StaffPage() {
                     <p className="text-sm text-ink-muted">{member.email}</p>
                   </div>
                 </div>
-                
-                <button className="text-ink-muted hover:text-ink">
-                  <MoreVertical className="w-5 h-5" />
-                </button>
+
+                <div className="relative">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveMenu(activeMenu === member.id ? null : member.id);
+                    }}
+                    className="text-ink-muted hover:text-ink p-2 rounded-full hover:bg-stone-100 transition-colors"
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+
+                  <AnimatePresence>
+                    {activeMenu === member.id && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-stone-200 py-1 z-10 overflow-hidden"
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteStaff(member.id, member.name);
+                          }}
+                          className="w-full text-left px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+                        >
+                          Cancel / Delete Staff
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
-              
+
               <div className="flex items-center justify-between pt-4 border-t border-stone-200">
                 <Badge variant={config.badge as any}>
                   {config.label}
                 </Badge>
-                
+
                 <Badge variant={member.isActive ? 'sage' : 'stone'} dot>
                   {member.isActive ? 'Active' : 'Inactive'}
                 </Badge>
@@ -131,7 +174,7 @@ export default function StaffPage() {
                   <p className="text-sm text-ink-muted">Send an invitation email</p>
                 </div>
               </div>
-              
+
               <div className="space-y-4">
                 <Input
                   label="Full Name"
@@ -139,7 +182,7 @@ export default function StaffPage() {
                   value={inviteData.name}
                   onChange={(e) => setInviteData({ ...inviteData, name: e.target.value })}
                 />
-                
+
                 <Input
                   label="Email"
                   type="email"
@@ -147,7 +190,7 @@ export default function StaffPage() {
                   value={inviteData.email}
                   onChange={(e) => setInviteData({ ...inviteData, email: e.target.value })}
                 />
-                
+
                 <Select
                   label="Role"
                   value={inviteData.role}
@@ -159,7 +202,7 @@ export default function StaffPage() {
                     { value: 'kitchen', label: 'Kitchen Staff' },
                   ]}
                 />
-                
+
                 <div className="flex gap-3 pt-4">
                   <Button variant="ghost" className="flex-1" onClick={() => setShowInviteModal(false)}>
                     Cancel
