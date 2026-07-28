@@ -1,0 +1,1 @@
+import { db } from './src/db'; import { sql } from 'drizzle-orm'; async function main() { await db.execute(sql\UPDATE orders SET status = 'closed';\); console.log('WIPED!'); process.exit(0); } main();  

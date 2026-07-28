@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { orders, orderItems, menuItems, outlets, properties } from '@/db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, and, ne } from 'drizzle-orm';
 import { requireTenantContext } from '@/lib/auth';
+import { broadcastOrderUpdate } from '@/app/api/sse/kds/[outletId]/route';
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,6 +67,43 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Immediately fetch the fully mapped ticket we just constructed
+    const fullOrder = await db.query.orders.findFirst({
+      where: eq(orders.id, order.id),
+      with: {
+        table: true,
+        room: true,
+        orderItems: {
+          with: { menuItem: true },
+        },
+      },
+    });
+
+    // Seamlessly map it to the KDS layout specification and broadcast it to the Server-Sent Event Pipe!
+    if (fullOrder) {
+      const kdsOrder = {
+        id: fullOrder.id,
+        type: fullOrder.type,
+        tableNumber: fullOrder.table?.tableNumber,
+        roomNumber: fullOrder.room?.roomNumber,
+        status: fullOrder.status,
+        specialInstructions: fullOrder.specialInstructions,
+        createdAt: fullOrder.createdAt,
+        items: fullOrder.orderItems.map((oi: any) => ({
+          name: oi.menuItem?.name || 'Unknown Item',
+          quantity: oi.quantity,
+          notes: oi.notes,
+        })),
+      };
+
+      try {
+        // Trigger realtime physical browser refresh for all connected iPads locally
+        broadcastOrderUpdate(outletId, kdsOrder);
+        // Also fire globally to the Tenant's unified dashboard channel (for Waiters/Billing)
+        broadcastOrderUpdate(tenantId, kdsOrder);
+      } catch (skip) { }
+    }
+
     return NextResponse.json({ success: true, orderId: order.id });
   } catch (error) {
     console.error('Order creation error:', error);
@@ -103,7 +142,11 @@ export async function GET(request: NextRequest) {
     const outletIds = tenantOutlets.map(o => o.id);
 
     const allOrders = await db.query.orders.findMany({
-      where: inArray(orders.outletId, outletIds),
+      where: and(
+        inArray(orders.outletId, outletIds),
+        ne(orders.status, 'closed'),
+        ne(orders.status, 'cancelled')
+      ),
       with: {
         orderItems: {
           with: {

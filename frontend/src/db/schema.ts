@@ -141,6 +141,7 @@ export const orders = pgTable('orders', {
   status: text('status').notNull().default('new'), // new, acknowledged, preparing, ready, served, cancelled
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
   specialInstructions: text('special_instructions'),
+  billId: uuid('bill_id'), // Bound physically to the finalized invoice
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -164,10 +165,10 @@ export const bills = pgTable('bills', {
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
   paidAmount: decimal('paid_amount', { precision: 10, scale: 2 }).default('0'),
   status: text('status').notNull().default('open'), // open, paid, partial
-  paymentStatus: text('payment_status').default('unpaid'), // unpaid, pending_confirmation, paid
-  paymentMethod: text('payment_method'), // cash, card, upi_webhook, upi_notification
-  paidAt: timestamp('paid_at'),
-  confirmedByStaffId: uuid('confirmed_by_staff_id').references(() => staff.id),
+  // paymentStatus: text('payment_status').default('unpaid'), // Out of sync with prod DB
+  // paymentMethod: text('payment_method'), // Out of sync with prod DB
+  // paidAt: timestamp('paid_at'),
+  // confirmedByStaffId: uuid('confirmed_by_staff_id').references(() => staff.id),
   itemsBreakdown: jsonb('items_breakdown'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   settledAt: timestamp('settled_at'),

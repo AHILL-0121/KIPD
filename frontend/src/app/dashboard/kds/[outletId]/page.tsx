@@ -35,7 +35,7 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
       .catch(() => { });
 
     // Fetch initial orders
-    fetch(`/api/kds/${params.outletId}`)
+    fetch(`/api/kds/${params.outletId}`, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
       .then(res => res.json())
       .then(data => setOrders(data))
       .catch(console.error);
@@ -46,24 +46,42 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
       const newOrder = JSON.parse(event.data);
       if (newOrder.type === 'connected') return;
 
-      setOrders(prev => [newOrder, ...prev]);
+      setOrders(prev => {
+        // 1. If it was marked as ready/served by another kitchen iPad, auto-delete it from our screen!
+        if (['ready', 'served', 'closed', 'cancelled'].includes(newOrder.status)) {
+          return prev.filter(o => o.id !== newOrder.id);
+        }
 
-      // Play sound alert
-      const audio = new Audio('/notification.mp3');
-      audio.play().catch(() => { });
+        // 2. Otherwise safely add or intelligently update it without creating duplicates
+        const existingIdx = prev.findIndex(o => o.id === newOrder.id);
+        if (existingIdx !== -1) {
+          const updated = [...prev];
+          updated[existingIdx] = newOrder;
+          return updated;
+        } else {
+          // Play sound alert for brand new tickets
+          const audio = new Audio('/notification.mp3');
+          audio.play().catch(() => { });
+          return [newOrder, ...prev];
+        }
+      });
     };
 
     return () => eventSource.close();
   }, [params.outletId]);
 
   const updateStatus = async (orderId: string, newStatus: string) => {
+    // Instantly commit optimistic update so the UI feels native
+    setOrders(prev => {
+      if (newStatus === 'ready') return prev.filter(o => o.id !== orderId);
+      return prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
+    });
+
     await fetch(`/api/orders/${orderId}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: newStatus }),
     });
-
-    setOrders(orders.filter(o => o.id !== orderId || (newStatus !== 'ready')));
   };
 
   return (

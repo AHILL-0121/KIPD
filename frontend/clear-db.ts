@@ -1,0 +1,1 @@
+import { db } from './src/db'; import { sql } from 'drizzle-orm'; async function main() { await db.execute(sql\TRUNCATE TABLE order_items, orders, payments, bills CASCADE;\); console.log('CLEARED'); process.exit(0); } main();  

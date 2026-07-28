@@ -12,11 +12,22 @@ export interface TenantContext {
   isPlatformAdmin: boolean;
 }
 
+const globalAny: any = global;
+if (!globalAny.authCache) {
+  globalAny.authCache = new Map<string, { data: TenantContext, expiresAt: number }>();
+}
+
 export async function getTenantContext(): Promise<TenantContext | null> {
   const { userId } = await auth();
 
   if (!userId) {
     return null;
+  }
+
+  // 1. Check local TTL Cache
+  const cached = globalAny.authCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
   }
 
   // Fetch user data directly from Clerk to get publicMetadata
@@ -28,31 +39,35 @@ export async function getTenantContext(): Promise<TenantContext | null> {
 
     const clerk = createClerkClient({ secretKey: clerkSecretKey });
     const user = await clerk.users.getUser(userId);
-    
+
     const isPlatformAdmin = user.publicMetadata?.platform_admin === true;
     const tenantId = user.publicMetadata?.tenant_id as string | undefined;
-    
+
     const userName = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.emailAddresses?.[0]?.emailAddress || 'User';
 
+    let contextData: TenantContext | null = null;
+
     if (isPlatformAdmin) {
-      return {
-        tenantId: '', // Platform admins don't have a specific tenant
+      contextData = {
+        tenantId: '',
         userId,
         role: 'platform_admin',
         userName,
         isPlatformAdmin: true,
       };
-    }
-
-    // Check if user has tenant_id in metadata (tenant owner)
-    if (tenantId) {
-      return {
+    } else if (tenantId) {
+      contextData = {
         tenantId,
         userId,
         role: 'owner',
         userName,
         isPlatformAdmin: false,
       };
+    }
+
+    if (contextData) {
+      globalAny.authCache.set(userId, { data: contextData, expiresAt: Date.now() + 60000 });
+      return contextData;
     }
 
     // Get staff record to find tenant and role
@@ -64,13 +79,16 @@ export async function getTenantContext(): Promise<TenantContext | null> {
       return null;
     }
 
-    return {
+    const newContext = {
       tenantId: staffRecord.tenantId,
       userId,
       role: staffRecord.role,
       userName: staffRecord.name || userName,
       isPlatformAdmin: false,
     };
+
+    globalAny.authCache.set(userId, { data: newContext, expiresAt: Date.now() + 60000 });
+    return newContext;
   } catch (error) {
     console.error('Error fetching user context from Clerk:', error);
     return null;
@@ -79,17 +97,17 @@ export async function getTenantContext(): Promise<TenantContext | null> {
 
 export async function requireTenantContext(): Promise<TenantContext> {
   const context = await getTenantContext();
-  
+
   if (!context) {
     throw new Error('Unauthorized: No tenant context');
   }
-  
+
   return context;
 }
 
 export async function requirePlatformAdmin(): Promise<TenantContext> {
   const { userId } = await auth();
-  
+
   if (!userId) {
     throw new Error('Unauthorized: Not authenticated');
   }
@@ -104,7 +122,7 @@ export async function requirePlatformAdmin(): Promise<TenantContext> {
     const clerk = createClerkClient({ secretKey: clerkSecretKey });
     const user = await clerk.users.getUser(userId);
     const isPlatformAdmin = user.publicMetadata?.platform_admin === true;
-    
+
     if (!isPlatformAdmin) {
       throw new Error('Unauthorized: Platform admin access required');
     }

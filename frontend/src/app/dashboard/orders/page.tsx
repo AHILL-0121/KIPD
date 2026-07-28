@@ -80,7 +80,7 @@ export default function OrdersPage() {
   };
 
   const fetchOrders = () => {
-    fetch('/api/orders')
+    fetch('/api/orders', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
       .then(res => res.json())
       .then(data => setOrders(Array.isArray(data) ? data : []))
       .catch(console.error)
@@ -101,8 +101,33 @@ export default function OrdersPage() {
       .then(res => res.json())
       .then(data => setTableOptions(Array.isArray(data) ? data : []))
       .catch(() => { });
-    const interval = setInterval(fetchOrders, 30000);
-    return () => clearInterval(interval);
+
+    // Establish Real-Time WebSocket link with Kitchen!
+    let eventSource: EventSource | null = null;
+    let isMounted = true;
+
+    fetch('/api/tenant/info')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!isMounted) return; // Prevent zombie sockets if unmounted before HTTP request finishes
+
+        if (data?.id) {
+          eventSource = new EventSource(`/api/sse/kds/${data.id}`);
+          eventSource.onmessage = (event) => {
+            const ticket = JSON.parse(event.data);
+            if (ticket.type !== 'connected') {
+              fetchOrders(); // Kitchen did something! Sync instantly!
+            }
+          };
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
   }, []);
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
@@ -125,7 +150,7 @@ export default function OrdersPage() {
     const tabs: Record<string, { table: TableOption; total: number; tickets: Order[] }> = {};
 
     orders.forEach(o => {
-      if (['served', 'cancelled'].includes(o.status)) return; // Ignore deeply closed tickets
+      if (['closed', 'cancelled'].includes(o.status)) return; // Only ignore physically paid/settled tickets
       if (!o.tableId) return;
 
       const table = tableOptions.find(t => t.id === o.tableId);
@@ -233,7 +258,7 @@ export default function OrdersPage() {
 
       setCheckoutTable(null);
       fetchOrders();
-      showToast(`Table ${checkoutTable.table.tableNumber} Tab Settled via Cash!`, 'success');
+      showToast(`Table ${checkoutTable.table.tableNumber} Bill Sent to Front Desk!`, 'success');
     } catch {
       showToast('Failed to settle tab.', 'error');
     } finally {
@@ -440,11 +465,8 @@ export default function OrdersPage() {
               </div>
 
               <div className="space-y-3">
-                <Button className="w-full py-6 text-lg bg-green-600 hover:bg-green-700 text-white" disabled={saving} onClick={() => handleSettleTab('cash')}>
-                  💵 Accept Cash Payment
-                </Button>
-                <Button className="w-full py-6 text-lg bg-blue-600 hover:bg-blue-700 text-white" disabled={saving} onClick={() => handleSettleTab('upi')}>
-                  📱 Wait for background Android UPI
+                <Button className="w-full py-6 text-lg bg-terra hover:bg-terra-dark text-white" disabled={saving} onClick={() => handleSettleTab('cash')}>
+                  <Receipt className="w-5 h-5 mr-2" /> Forward Bill to Front Desk
                 </Button>
                 <Button variant="ghost" className="w-full mt-2" onClick={() => setCheckoutTable(null)} disabled={saving}>
                   Cancel

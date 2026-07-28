@@ -4,6 +4,9 @@ import { properties, rooms, bookings, orders, outlets } from '@/db/schema';
 import { eq, and, gte, lte, inArray } from 'drizzle-orm';
 import { requireTenantContext } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: NextRequest) {
   try {
     // Get tenant context from user's Clerk metadata
@@ -83,12 +86,22 @@ export async function GET(request: NextRequest) {
 
     // Get active orders
     let activeOrders: any[] = [];
+    let recentOrdersList: any[] = [];
     if (outletIds.length > 0) {
       activeOrders = await db.query.orders.findMany({
         where: and(
           inArray(orders.outletId, outletIds),
-          inArray(orders.status, ['new', 'acknowledged', 'preparing'])
+          inArray(orders.status, ['new', 'acknowledged', 'preparing', 'ready', 'delivered'])
         ),
+      });
+      recentOrdersList = await db.query.orders.findMany({
+        where: inArray(orders.outletId, outletIds),
+        orderBy: (orders, { desc }) => [desc(orders.createdAt)],
+        limit: 5,
+        with: {
+          table: true,
+          orderItems: { with: { menuItem: true } }
+        }
       });
     }
 
@@ -110,7 +123,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const todayRevenue = 
+    const todayRevenue =
       todayBookings.reduce((sum, b) => sum + Number(b.totalAmount), 0) +
       todayOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
 
@@ -135,7 +148,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const weekRevenue = 
+    const weekRevenue =
       weekBookings.reduce((sum, b) => sum + Number(b.totalAmount), 0) +
       weekOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
 
@@ -149,7 +162,7 @@ export async function GET(request: NextRequest) {
       todayRevenue,
       weekRevenue,
       arrivals: todayCheckIns.slice(0, 5), // First 5 for preview
-      recentOrders: activeOrders.slice(0, 5),
+      recentOrders: recentOrdersList,
       hasProperties: true,
     });
   } catch (error) {

@@ -6,11 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Settings as SettingsIcon, 
-  Building2, 
-  Utensils, 
-  Webhook, 
+import {
+  Settings as SettingsIcon,
+  Building2,
+  Utensils,
+  Webhook,
   Save,
   Plus,
   Trash2
@@ -26,6 +26,24 @@ export default function SettingsPage() {
     currency: 'USD',
     timezone: 'America/New_York',
   });
+
+  const [receiptSettings, setReceiptSettings] = useState({
+    header: 'KIPD RESTAURANT',
+    subtext: 'GST INVOICE • WALK-IN',
+    footer: 'We Are Happy To Serve You'
+  });
+
+  useEffect(() => {
+    const saved = localStorage.getItem('kipd-receipt-config');
+    if (saved) {
+      setReceiptSettings(JSON.parse(saved));
+    }
+  }, []);
+
+  const saveReceiptSettings = () => {
+    localStorage.setItem('kipd-receipt-config', JSON.stringify(receiptSettings));
+    alert('Receipt Layout successfully saved!');
+  };
 
   const [outlets, setOutlets] = useState<Array<{
     id: string;
@@ -87,13 +105,13 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Property Name"
               value={propertySettings.name}
               onChange={(e) => setPropertySettings({ ...propertySettings, name: e.target.value })}
             />
-            
+
             <Select
               label="Currency"
               value={propertySettings.currency}
@@ -151,7 +169,7 @@ export default function SettingsPage() {
                 <CardDescription>Manage restaurants and service points</CardDescription>
               </div>
             </div>
-            
+
             <Button variant="ghost" size="sm">
               <Plus className="w-4 h-4" />
               Add Outlet
@@ -172,7 +190,7 @@ export default function SettingsPage() {
                     <div className="text-sm text-ink-muted capitalize">{outlet.type.replace('_', ' ')}</div>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-3">
                   <Badge variant={outlet.isActive ? 'sage' : 'stone'} dot>
                     {outlet.isActive ? 'Active' : 'Inactive'}
@@ -186,57 +204,69 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        {/* Webhooks */}
+        {/* Receipt Designer */}
         <Card hover={false}>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-sage rounded-lg flex items-center justify-center">
-                <Webhook className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 bg-amber rounded-lg flex items-center justify-center">
+                <SettingsIcon className="w-5 h-5 text-ink" />
               </div>
               <div>
-                <CardTitle>Webhooks</CardTitle>
-                <CardDescription>Configure event notifications</CardDescription>
+                <CardTitle>Thermal Receipt UI Editor</CardTitle>
+                <CardDescription>Customize the 80mm ESC/POS hardware printout typography.</CardDescription>
               </div>
             </div>
-            
-            <Button variant="ghost" size="sm">
-              <Plus className="w-4 h-4" />
-              Add Webhook
-            </Button>
           </div>
 
-          <div className="space-y-3">
-            {webhooks.map((webhook) => (
-              <div
-                key={webhook.id}
-                className="p-4 bg-cream rounded-xl border border-stone-200"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <div className="font-mono text-sm text-ink mb-2">{webhook.url}</div>
-                    <div className="flex flex-wrap gap-2">
-                      {webhook.events.map((event) => (
-                        <Badge key={event} variant="stone">
-                          {event}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-3">
-                    <Badge variant={webhook.isActive ? 'sage' : 'stone'} dot>
-                      {webhook.isActive ? 'Active' : 'Inactive'}
-                    </Badge>
-                    <button className="text-ink-muted hover:text-terra">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Header Brand Name</label>
+                <Input
+                  value={receiptSettings.header}
+                  onChange={e => setReceiptSettings({ ...receiptSettings, header: e.target.value.toUpperCase() })}
+                  placeholder="e.g. KIPD RESTAURANT"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Invoice Subtext (Tax Type)</label>
+                <Input
+                  value={receiptSettings.subtext}
+                  onChange={e => setReceiptSettings({ ...receiptSettings, subtext: e.target.value.toUpperCase() })}
+                  placeholder="e.g. GST INVOICE • WALK-IN"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Footer Message</label>
+                <Input
+                  value={receiptSettings.footer}
+                  onChange={e => setReceiptSettings({ ...receiptSettings, footer: e.target.value.toUpperCase() })}
+                  placeholder="e.g. WELLNESS AND HOSPITALITY"
+                />
+              </div>
+              <Button onClick={saveReceiptSettings} variant="sage" className="w-full mt-4">
+                <Save className="w-4 h-4" /> Save Layout Changes
+              </Button>
+            </div>
+
+            {/* Live Visual Preview Engine */}
+            <div className="flex items-center justify-center bg-stone-100 p-8 rounded-xl border border-stone-200">
+              <div className="p-4 bg-white border border-stone-300 font-mono text-xs w-full max-w-[260px] shadow-sm">
+                <div className="text-center mb-4 pb-4 border-b border-dashed border-stone-300">
+                  <h3 className="font-bold text-lg leading-tight uppercase tracking-widest mb-1">{receiptSettings.header || '...'}</h3>
+                  <p className="text-[10px] text-stone-500 uppercase leading-none">{receiptSettings.subtext || '...'}</p>
+                </div>
+                <div className="h-20 flex items-center justify-center text-stone-300 text-xs text-center border-y border-dashed border-stone-200 mb-4">
+                  [ Order Data Simulation ]
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] text-stone-500 font-bold tracking-widest uppercase">{receiptSettings.footer || '...'}</p>
                 </div>
               </div>
-            ))}
+            </div>
           </div>
         </Card>
       </div>
-    </div>
+    </div >
   );
 }

@@ -3,9 +3,13 @@ import { db } from '@/db';
 import { orders } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
-export const runtime = 'edge';
+// Switch to Node.js runtime instead of Edge to permit cross-API memory mapping via global objects!
+export const dynamic = 'force-dynamic';
 
-let clients: Map<string, ReadableStreamDefaultController> = new Map();
+const globalAny: any = global;
+if (!globalAny.sseClients) {
+  globalAny.sseClients = new Map<string, { controller: ReadableStreamDefaultController, channel: string }>();
+}
 
 export async function GET(
   request: NextRequest,
@@ -15,19 +19,19 @@ export async function GET(
 
   const stream = new ReadableStream({
     start(controller) {
-      // Store client connection
+      // Store client connection in the Global Socket Map, binding it to the requested channel
       const clientId = Math.random().toString(36);
-      clients.set(clientId, controller);
+      globalAny.sseClients.set(clientId, { controller, channel: outletId });
 
       // Send initial connection message
       const encoder = new TextEncoder();
       controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: 'connected' })}\n\n`)
+        encoder.encode(`data: ${JSON.stringify({ type: 'connected', channel: outletId })}\n\n`)
       );
 
       // Cleanup on disconnect
       request.signal.addEventListener('abort', () => {
-        clients.delete(clientId);
+        globalAny.sseClients.delete(clientId);
       });
     },
   });
@@ -41,16 +45,21 @@ export async function GET(
   });
 }
 
-// Helper function to broadcast updates (called from order creation)
-export function broadcastOrderUpdate(outletId: string, order: any) {
+// Helper function to broadcast updates securely to specific channels
+export function broadcastOrderUpdate(targetChannel: string, order: any) {
   const encoder = new TextEncoder();
   const data = encoder.encode(`data: ${JSON.stringify(order)}\n\n`);
-  
-  clients.forEach((controller) => {
-    try {
-      controller.enqueue(data);
-    } catch (error) {
-      console.error('Failed to send SSE update:', error);
+
+  if (!globalAny.sseClients) return;
+
+  globalAny.sseClients.forEach((client: { controller: ReadableStreamDefaultController, channel: string }) => {
+    // Strict Multi-Tenant Isolator: ONLY broadcast if strictly in the target channel 
+    if (client.channel === targetChannel) {
+      try {
+        client.controller.enqueue(data);
+      } catch (error) {
+        console.error('Failed to send SSE update:', error);
+      }
     }
   });
 }

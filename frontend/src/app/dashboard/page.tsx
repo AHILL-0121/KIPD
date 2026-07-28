@@ -3,16 +3,18 @@
 import { Card, CardIcon, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatusIndicator } from '@/components/ui/status-indicator';
-import { 
-  Hotel, 
-  Calendar, 
-  UtensilsCrossed, 
+import {
+  Hotel,
+  Calendar,
+  UtensilsCrossed,
   IndianRupee,
   TrendingUp,
   Clock
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { formatCurrency } from '@/lib/currency';
+import { LoadingState } from '@/components/ui/loading-state';
 
 type TenantType = 'hotel' | 'restaurant' | 'both';
 
@@ -46,36 +48,60 @@ export default function DashboardPage() {
   });
   const [tenantType, setTenantType] = useState<TenantType>('both');
   const [error, setError] = useState<string | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
   const showHotel = tenantType === 'hotel' || tenantType === 'both';
   const showRestaurant = tenantType === 'restaurant' || tenantType === 'both';
+  const router = useRouter();
 
   useEffect(() => {
-    // Fetch tenant type
+    let isBouncing = false;
+
+    // Fetch tenant type and user role FIRST
     fetch('/api/tenant/info')
       .then(res => res.json())
-      .then(data => { if (data.type) setTenantType(data.type); })
-      .catch(console.error);
+      .then(data => {
+        if (data.type) setTenantType(data.type);
 
-    // Fetch dashboard stats
-    fetch('/api/dashboard/stats')
-      .then(res => {
-        if (!res.ok) {
-          if (res.status === 401) {
-            throw new Error('NO_TENANT');
-          }
-          throw new Error('Failed to fetch stats');
+        // Strict Role-Based Bouncing
+        if (data.role === 'kitchen') {
+          isBouncing = true;
+          router.replace('/dashboard/kds');
+          return;
         }
-        return res.json();
+        if (data.role === 'waiter') {
+          isBouncing = true;
+          router.replace('/dashboard/orders');
+          return;
+        }
+
+        // Only fetch dashboard stats if we are NOT bouncing!
+        fetch('/api/dashboard/stats')
+          .then(res => {
+            if (!res.ok) {
+              if (res.status === 401) throw new Error('NO_TENANT');
+              throw new Error('Failed to fetch stats');
+            }
+            return res.json();
+          })
+          .then(data => setStats(data))
+          .catch(err => {
+            console.error(err);
+            if (err.message === 'NO_TENANT') setError('NO_TENANT');
+          })
+          .finally(() => {
+            if (!isBouncing) setIsReady(true);
+          });
       })
-      .then(data => setStats(data))
-      .catch(err => {
+      .catch((err) => {
         console.error(err);
-        if (err.message === 'NO_TENANT') {
-          setError('NO_TENANT');
-        }
+        setIsReady(true);
       });
-  }, []);
+  }, [router]);
+
+  if (!isReady) {
+    return <LoadingState message="Loading your operational metrics..." />;
+  }
 
   if (error === 'NO_TENANT') {
     return (
@@ -101,19 +127,19 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 md:p-8 overflow-x-hidden">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
+      <div className="mb-8 flex flex-row items-start md:items-center justify-between">
+        <div className="pr-2">
           <h1 className="section-title">Dashboard</h1>
           <p className="section-sub">Today&apos;s operations at a glance</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col items-center gap-1 md:flex-row md:items-center md:gap-3 flex-shrink-0">
           <StatusIndicator label="Live Updates" status="live" />
-          <span className="text-sm text-ink-muted">
-            {new Date().toLocaleDateString('en-US', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+          <span className="text-xs md:text-sm text-center md:text-right text-ink-muted leading-tight">
+            {new Date().toLocaleDateString('en-US', {
+              weekday: 'short',
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
             })}
           </span>
         </div>
@@ -174,86 +200,86 @@ export default function DashboardPage() {
       <div className={`grid gap-6 mb-8 ${showHotel && showRestaurant ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {/* Today's Arrivals */}
         {showHotel && (
-        <Card hover={false}>
-          <CardTitle>Today&apos;s Arrivals</CardTitle>
-          <CardDescription>Expected check-ins</CardDescription>
-          
-          <div className="mt-6 space-y-3">
-            {stats.arrivals && stats.arrivals.length > 0 ? (
-              stats.arrivals.map((arrival: any, index: number) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-cream rounded-xl">
-                  <div>
-                    <div className="font-medium text-ink">{arrival.guest?.name || 'Guest'}</div>
-                    <div className="text-sm text-ink-muted">
-                      Room {arrival.room?.roomNumber} • {arrival.room?.roomType?.name || 'Standard'}
+          <Card hover={false}>
+            <CardTitle>Today&apos;s Arrivals</CardTitle>
+            <CardDescription>Expected check-ins</CardDescription>
+
+            <div className="mt-6 space-y-3">
+              {stats.arrivals && stats.arrivals.length > 0 ? (
+                stats.arrivals.map((arrival: any, index: number) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-cream rounded-xl">
+                    <div>
+                      <div className="font-medium text-ink">{arrival.guest?.name || 'Guest'}</div>
+                      <div className="text-sm text-ink-muted">
+                        Room {arrival.room?.roomNumber} • {arrival.room?.roomType?.name || 'Standard'}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-medium text-ink">
+                        {new Date(arrival.checkInDate).toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                      <Badge variant="amber" className="mt-1">
+                        {arrival.status === 'checked_in' ? 'Checked In' : 'Expected'}
+                      </Badge>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-medium text-ink">
-                      {new Date(arrival.checkInDate).toLocaleTimeString('en-IN', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </div>
-                    <Badge variant="amber" className="mt-1">
-                      {arrival.status === 'checked_in' ? 'Checked In' : 'Expected'}
-                    </Badge>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-ink-muted">
+                  <Calendar className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p>No arrivals scheduled for today</p>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-8 text-ink-muted">
-                <Calendar className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                <p>No arrivals scheduled for today</p>
-              </div>
-            )}
-          </div>
-        </Card>
+              )}
+            </div>
+          </Card>
         )}
 
         {/* Recent Orders */}
         {showRestaurant && (
-        <Card hover={false}>
-          <CardTitle>Recent Orders</CardTitle>
-          <CardDescription>Latest restaurant activity</CardDescription>
-          
-          <div className="mt-6 space-y-3">
-            {stats.recentOrders && stats.recentOrders.length > 0 ? (
-              stats.recentOrders.map((order: any, index: number) => {
-                const statusVariant = 
-                  order.status === 'new' ? 'amber' :
-                  order.status === 'preparing' ? 'terra' : 'sage';
-                const statusLabel =
-                  order.status === 'new' ? 'New' :
-                  order.status === 'preparing' ? 'Preparing' : 'Ready';
-                
-                return (
-                  <div key={index} className="flex items-center justify-between p-3 bg-cream rounded-xl">
-                    <div>
-                      <div className="font-medium text-ink">
-                        {order.tableId ? `Table ${order.table?.tableNumber}` : `Room ${order.room?.roomNumber}`}
+          <Card hover={false}>
+            <CardTitle>Recent Orders</CardTitle>
+            <CardDescription>Latest restaurant activity</CardDescription>
+
+            <div className="mt-6 space-y-3">
+              {stats.recentOrders && stats.recentOrders.length > 0 ? (
+                stats.recentOrders.map((order: any, index: number) => {
+                  const statusVariant =
+                    order.status === 'new' ? 'amber' :
+                      order.status === 'preparing' ? 'terra' : 'sage';
+                  const statusLabel =
+                    order.status === 'new' ? 'New' :
+                      order.status === 'preparing' ? 'Preparing' : 'Ready';
+
+                  return (
+                    <div key={index} className="flex items-center justify-between p-3 bg-cream rounded-xl">
+                      <div>
+                        <div className="font-medium text-ink">
+                          {order.tableId ? `Table ${order.table?.tableNumber}` : `Room ${order.room?.roomNumber}`}
+                        </div>
+                        <div className="text-sm text-ink-muted">
+                          {order.type === 'room_service' ? 'Room Service' : 'Dine-in'} • {formatCurrency(order.totalAmount)}
+                        </div>
                       </div>
-                      <div className="text-sm text-ink-muted">
-                        {order.type === 'room_service' ? 'Room Service' : 'Dine-in'} • {formatCurrency(order.totalAmount)}
+                      <div className="text-right">
+                        <Badge variant={statusVariant as any} dot>{statusLabel}</Badge>
+                        <div className="text-xs text-ink-muted mt-1">
+                          {Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000)} min ago
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <Badge variant={statusVariant as any} dot>{statusLabel}</Badge>
-                      <div className="text-xs text-ink-muted mt-1">
-                        {Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000)} min ago
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="text-center py-8 text-ink-muted">
-                <UtensilsCrossed className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                <p>No recent orders</p>
-              </div>
-            )}
-          </div>
-        </Card>
+                  );
+                })
+              ) : (
+                <div className="text-center py-8 text-ink-muted">
+                  <UtensilsCrossed className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p>No recent orders</p>
+                </div>
+              )}
+            </div>
+          </Card>
         )}
       </div>
     </div>

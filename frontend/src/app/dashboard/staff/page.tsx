@@ -21,7 +21,9 @@ interface StaffMember {
 export default function StaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteData, setInviteData] = useState({ name: '', email: '', role: 'front_desk' });
+  const [creationMode, setCreationMode] = useState<'invite' | 'direct'>('invite');
+  const [inviteData, setInviteData] = useState({ name: '', email: '', role: 'front_desk', password: '' });
+  const [loading, setLoading] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,19 +42,31 @@ export default function StaffPage() {
   };
 
   const sendInvite = async () => {
-    await fetch('/api/staff/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(inviteData),
-    });
+    setLoading(true);
+    try {
+      const endpoint = creationMode === 'direct' ? '/api/staff/direct' : '/api/staff/invite';
 
-    setShowInviteModal(false);
-    setInviteData({ name: '', email: '', role: 'front_desk' });
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(inviteData),
+      });
 
-    // Refresh staff list
-    const response = await fetch('/api/staff');
-    const data = await response.json();
-    setStaff(data);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setShowInviteModal(false);
+      setInviteData({ name: '', email: '', role: 'front_desk', password: '' });
+
+      // Refresh staff list
+      const response = await fetch('/api/staff');
+      const staffList = await response.json();
+      setStaff(staffList);
+    } catch (e: any) {
+      alert(e.message || 'Error executing account creation');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const deleteStaff = async (id: string, name: string) => {
@@ -170,9 +184,24 @@ export default function StaffPage() {
                   <Mail className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="font-serif text-2xl font-bold">Invite Staff Member</h2>
-                  <p className="text-sm text-ink-muted">Send an invitation email</p>
+                  <h2 className="font-serif text-2xl font-bold">Add Staff Member</h2>
+                  <p className="text-sm text-ink-muted">Invite or directly register</p>
                 </div>
+              </div>
+
+              <div className="flex bg-stone-100 p-1 rounded-xl mb-6">
+                <button
+                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${creationMode === 'invite' ? 'bg-white shadow text-amber' : 'text-stone-500'}`}
+                  onClick={() => setCreationMode('invite')}
+                >
+                  Email Invite
+                </button>
+                <button
+                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${creationMode === 'direct' ? 'bg-white shadow text-terra' : 'text-stone-500'}`}
+                  onClick={() => setCreationMode('direct')}
+                >
+                  Direct Create
+                </button>
               </div>
 
               <div className="space-y-4">
@@ -186,10 +215,24 @@ export default function StaffPage() {
                 <Input
                   label="Email"
                   type="email"
-                  placeholder="john@hotel.com"
+                  placeholder={creationMode === 'direct' ? 'waiter1@hotel.local' : 'john@hotel.com'}
                   value={inviteData.email}
                   onChange={(e) => setInviteData({ ...inviteData, email: e.target.value })}
                 />
+
+                <AnimatePresence>
+                  {creationMode === 'direct' && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+                      <Input
+                        label="Assign Password"
+                        type="text"
+                        placeholder="Type a secure password"
+                        value={inviteData.password}
+                        onChange={(e) => setInviteData({ ...inviteData, password: e.target.value })}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 <Select
                   label="Role"
@@ -204,12 +247,11 @@ export default function StaffPage() {
                 />
 
                 <div className="flex gap-3 pt-4">
-                  <Button variant="ghost" className="flex-1" onClick={() => setShowInviteModal(false)}>
+                  <Button variant="ghost" className="flex-1" onClick={() => setShowInviteModal(false)} disabled={loading}>
                     Cancel
                   </Button>
-                  <Button variant="terra" className="flex-1" onClick={sendInvite}>
-                    <Mail className="w-4 h-4" />
-                    Send Invite
+                  <Button variant="terra" className="flex-1" onClick={sendInvite} disabled={loading}>
+                    {loading ? 'Processing...' : (creationMode === 'direct' ? 'Create Account' : 'Send Invite')}
                   </Button>
                 </div>
               </div>

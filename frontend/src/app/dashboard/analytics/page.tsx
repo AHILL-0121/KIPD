@@ -3,15 +3,15 @@
 import { useState, useEffect } from 'react';
 import { Card, CardIcon, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
-import { 
-  BarChart, 
-  Bar, 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -62,7 +62,7 @@ export default function AnalyticsPage() {
           <h1 className="section-title">Analytics & Reports</h1>
           <p className="section-sub">Performance insights and trends</p>
         </div>
-        
+
         <Select
           value={timeRange}
           onChange={(e) => setTimeRange(e.target.value)}
@@ -76,7 +76,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <Card hover={false}>
           <CardIcon variant="amber">
             <DollarSign className="w-5 h-5" />
@@ -124,11 +124,11 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <Card hover={false}>
           <CardTitle>Occupancy Trend</CardTitle>
           <CardDescription>Daily occupancy rate (%)</CardDescription>
-          
+
           <div className="mt-6 h-64">
             {stats.occupancyData?.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -151,7 +151,7 @@ export default function AnalyticsPage() {
         <Card hover={false}>
           <CardTitle>Revenue Breakdown</CardTitle>
           <CardDescription>Rooms vs F&B daily revenue</CardDescription>
-          
+
           <div className="mt-6 h-64">
             {stats.revenueData?.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -174,15 +174,15 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Additional Insights */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card hover={false}>
           <CardTitle>Revenue by Category</CardTitle>
           <CardDescription>Distribution of income sources</CardDescription>
-          
-          <div className="mt-6 h-64 flex items-center">
+
+          <div className="mt-6 h-auto sm:h-64 flex flex-col sm:flex-row items-center gap-6 sm:gap-0">
             {stats.categoryBreakdown?.length > 0 ? (
               <>
-                <ResponsiveContainer width="50%" height="100%">
+                <ResponsiveContainer width="100%" height={250} className="sm:w-1/2 sm:h-full">
                   <PieChart>
                     <Pie
                       data={stats.categoryBreakdown}
@@ -198,8 +198,8 @@ export default function AnalyticsPage() {
                     </Pie>
                   </PieChart>
                 </ResponsiveContainer>
-                
-                <div className="flex-1 space-y-3">
+
+                <div className="flex-1 w-full space-y-3">
                   {stats.categoryBreakdown.map((item: any, index: number) => (
                     <div key={index} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -222,7 +222,7 @@ export default function AnalyticsPage() {
         <Card hover={false}>
           <CardTitle>Top Menu Items</CardTitle>
           <CardDescription>Best sellers this week</CardDescription>
-          
+
           <div className="mt-6">
             {stats.topItems?.length > 0 ? (
               <div className="space-y-3">
