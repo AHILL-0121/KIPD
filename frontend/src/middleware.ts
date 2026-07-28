@@ -49,38 +49,9 @@ export default authMiddleware({
         return NextResponse.redirect(new URL('/sign-in', req.url));
       }
 
-      // Redirect platform admins to admin panel
-      try {
-        // Check cache first
-        const cached = edgeAuthCache.get(auth.userId);
-        if (cached && cached.expiresAt > Date.now()) {
-          if (cached.isAdmin) {
-            console.log(`[${timestamp}] 🔒 Middleware - Redirecting platform admin to admin panel [CACHED]`);
-            return NextResponse.redirect(new URL('/admin/tenants', req.url));
-          }
-        } else {
-          // Cache miss - Fetch from clerk
-          const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-          if (!clerkSecretKey) {
-            throw new Error('CLERK_SECRET_KEY is not defined');
-          }
-
-          const { createClerkClient } = await import('@clerk/nextjs/server');
-          const clerk = createClerkClient({ secretKey: clerkSecretKey });
-          const user = await clerk.users.getUser(auth.userId);
-
-          const isAdmin = user.publicMetadata?.platform_admin === true;
-          edgeAuthCache.set(auth.userId, { isAdmin, expiresAt: Date.now() + 60000 });
-
-          if (isAdmin) {
-            console.log(`[${timestamp}] 🔒 Middleware - Redirecting platform admin to admin panel`);
-            return NextResponse.redirect(new URL('/admin/tenants', req.url));
-          }
-        }
-      } catch (error) {
-        console.error(`[${timestamp}] 🔒 Middleware - Error checking admin status:`, error);
-        // Continue to dashboard if check fails
-      }
+      // Note: We deliberately removed the synchronous Platform Admin redirection check from the middleware
+      // because making a network request to Clerk's API here causes massive 3-5 second latency spikes 
+      // on every single dashboard page transition natively in Vercel Edge Serverless functions.
 
       console.log(`[${timestamp}] 🔒 Middleware - Allowing /dashboard access`);
     }
