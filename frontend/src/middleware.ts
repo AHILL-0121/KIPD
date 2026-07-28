@@ -4,6 +4,12 @@ import { NextResponse } from 'next/server';
 const edgeAuthCache = new Map<string, { isAdmin: boolean, expiresAt: number }>();
 
 export default authMiddleware({
+  authorizedParties: [
+    'capacitor://localhost',
+    'http://localhost',
+    'https://sa-kipd.vercel.app',
+    'capacitor://com.kipd.android'
+  ],
   publicRoutes: [
     '/',
     '/sign-in(.*)',
