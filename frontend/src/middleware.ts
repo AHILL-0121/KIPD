@@ -27,6 +27,16 @@ export default authMiddleware({
       return NextResponse.redirect(signInUrl);
     }
 
+    // Auto-redirect authenticated users from the Marketing Landing Page to their Dashboard
+    if (auth.userId && req.nextUrl.pathname === '/') {
+      return NextResponse.redirect(new URL('/dashboard', req.url));
+    }
+
+    // Auto-redirect authenticated users away from the auth pages
+    if (auth.userId && (req.nextUrl.pathname === '/sign-in' || req.nextUrl.pathname === '/sign-up')) {
+      return NextResponse.redirect(new URL('/dashboard', req.url));
+    }
+
     // Allow access to onboarding page for authenticated users
     if (req.nextUrl.pathname === '/onboarding') {
       return NextResponse.next();
