@@ -7,14 +7,6 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://sa-kipd.vercel.app/',
     cleartext: true
-  },
-  plugins: {
-    CapacitorCookies: {
-      enabled: true
-    },
-    CapacitorHttp: {
-      enabled: true
-    }
   }
 };
 
