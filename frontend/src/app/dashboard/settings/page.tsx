@@ -40,9 +40,21 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const saveReceiptSettings = () => {
+  const saveReceiptSettings = async () => {
+    // Save locally for immediate offline support
     localStorage.setItem('kipd-receipt-config', JSON.stringify(receiptSettings));
-    alert('Receipt Layout successfully saved!');
+
+    // Send PATCH request to API
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receiptSettings }),
+      });
+      alert('Receipt Layout successfully saved!');
+    } catch (error) {
+      alert('Failed to save layout to server, but saved locally.');
+    }
   };
 
   const [outlets, setOutlets] = useState<Array<{

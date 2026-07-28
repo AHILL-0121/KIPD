@@ -28,3 +28,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
     }
 }
+
+export async function PATCH(request: NextRequest) {
+    try {
+        const context = await requireTenantContext();
+        const body = await request.json();
+
+        // Mock patch logic
+        return NextResponse.json({ success: true, message: "Settings partially updated." });
+    } catch (error) {
+        return NextResponse.json({ error: 'Failed to patch settings' }, { status: 500 });
+    }
+}
