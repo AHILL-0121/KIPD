@@ -253,6 +253,11 @@ export default function DashboardPage() {
                     order.status === 'new' ? 'New' :
                       order.status === 'preparing' ? 'Preparing' : 'Ready';
 
+                  const mins = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000);
+                  const timeLabel = mins >= 60
+                    ? `${Math.floor(mins / 60)} hr${Math.floor(mins / 60) > 1 ? 's' : ''} ${mins % 60 > 0 ? `${mins % 60} min ` : ''}ago`
+                    : `${mins} min ago`;
+
                   return (
                     <div key={index} className="flex items-center justify-between p-3 bg-cream rounded-xl">
                       <div>
@@ -266,7 +271,7 @@ export default function DashboardPage() {
                       <div className="text-right">
                         <Badge variant={statusVariant as any} dot>{statusLabel}</Badge>
                         <div className="text-xs text-ink-muted mt-1">
-                          {Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000)} min ago
+                          {timeLabel}
                         </div>
                       </div>
                     </div>

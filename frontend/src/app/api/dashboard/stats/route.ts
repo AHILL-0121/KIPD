@@ -14,6 +14,14 @@ export async function GET(request: NextRequest) {
     const { tenantId } = context;
 
     // Get all properties for this tenant
+    // If tenantId is empty (e.g. Platform Admin bypassing), return empty/403
+    if (!tenantId) {
+      return NextResponse.json({
+        error: 'No tenant found for this user',
+        hasProperties: false,
+      }, { status: 403 });
+    }
+
     const tenantProperties = await db.query.properties.findMany({
       where: eq(properties.tenantId, tenantId),
     });
@@ -88,6 +96,9 @@ export async function GET(request: NextRequest) {
     let activeOrders: any[] = [];
     let recentOrdersList: any[] = [];
     if (outletIds.length > 0) {
+      const twentyFourHoursAgo = new Date();
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+
       activeOrders = await db.query.orders.findMany({
         where: and(
           inArray(orders.outletId, outletIds),
@@ -95,7 +106,10 @@ export async function GET(request: NextRequest) {
         ),
       });
       recentOrdersList = await db.query.orders.findMany({
-        where: inArray(orders.outletId, outletIds),
+        where: and(
+          inArray(orders.outletId, outletIds),
+          gte(orders.createdAt, twentyFourHoursAgo)
+        ),
         orderBy: (orders, { desc }) => [desc(orders.createdAt)],
         limit: 5,
         with: {

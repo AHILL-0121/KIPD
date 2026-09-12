@@ -4,9 +4,11 @@ import { NextResponse } from 'next/server';
 const edgeAuthCache = new Map<string, { isAdmin: boolean, expiresAt: number }>();
 
 export default authMiddleware({
+  clockSkewInMs: 1000 * 60 * 5, // 5 minutes
   authorizedParties: [
     'capacitor://localhost',
     'http://localhost',
+    'http://localhost:3000',
     'https://sa-kipd.vercel.app',
     'capacitor://com.kipd.android'
   ],
@@ -43,14 +45,10 @@ export default authMiddleware({
     }
 
     const timestamp = new Date().toISOString();
+    // Simply ensure user is authenticated for protected routes
     console.log(`[${timestamp}] 🔒 Middleware - Path:`, req.nextUrl.pathname);
     console.log(`[${timestamp}] 🔒 Middleware - User authenticated:`, !!auth.userId);
 
-    // NOTE: Session claims don't include public_metadata by default in Clerk.
-    // Authorization checks are done in API routes via requirePlatformAdmin() 
-    // which fetches user data directly from Clerk API.
-
-    // Simply ensure user is authenticated for protected routes
     if (req.nextUrl.pathname.startsWith('/admin')) {
       if (!auth.userId) {
         console.log(`[${timestamp}] 🔒 Middleware - Redirecting to sign-in (no auth)`);

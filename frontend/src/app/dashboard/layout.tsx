@@ -97,9 +97,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetch('/api/tenant/info')
-      .then(res => res.ok ? res.json() : null)
+      .then(res => {
+        if (res.status === 401) return res.json().then(data => data) // maybe it has role?
+        return res.ok ? res.json() : null;
+      })
       .then(data => {
-        if (data) {
+        if (data && data.error && (data.error === 'No tenant')) {
+          // If no tenant but user is active, they are an admin or orphaned
+          router.push('/admin/tenants');
+        } else if (data) {
           setTenantType(data.type || 'both');
           setTenantName(data.name || '');
           setUserRole(data.role || 'owner');
@@ -108,7 +114,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       })
       .catch(() => { })
       .finally(() => setIsNavReady(true));
-  }, []);
+  }, [router]);
 
   if (!isNavReady) {
     return <LoadingState message="Verifying your dashboard permissions..." />;

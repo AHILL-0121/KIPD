@@ -74,7 +74,7 @@ export default function SignInPage() {
         <div style={{ width: '100%', maxWidth: '360px' }}>
           <SignIn
             appearance={kipd_clerkAppearance}
-            redirectUrl="/dashboard"
+            fallbackRedirectUrl="/dashboard"
           />
         </div>
 

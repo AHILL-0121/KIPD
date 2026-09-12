@@ -96,7 +96,7 @@ export default function AnalyticsPage() {
             <Calendar className="w-5 h-5" />
           </CardIcon>
           <div className="text-3xl font-bold text-ink mb-1">{stats.occupancy || 0}%</div>
-          <div className="text-sm text-ink-muted">Avg Occupancy</div>
+          <div className="text-sm text-ink-muted">Table Occupancy</div>
           {stats.occupancyNote && (
             <div className="text-xs text-ink-muted mt-2">{stats.occupancyNote}</div>
           )}
@@ -107,9 +107,9 @@ export default function AnalyticsPage() {
             <Users className="w-5 h-5" />
           </CardIcon>
           <div className="text-3xl font-bold text-ink mb-1">{stats.guests || 0}</div>
-          <div className="text-sm text-ink-muted">Total Guests</div>
+          <div className="text-sm text-ink-muted">Total Orders</div>
           {stats.newGuests && (
-            <div className="text-xs text-ink-muted mt-2">{stats.newGuests} new guests</div>
+            <div className="text-xs text-ink-muted mt-2">{stats.newGuests} new orders</div>
           )}
         </Card>
 
@@ -126,8 +126,8 @@ export default function AnalyticsPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <Card hover={false}>
-          <CardTitle>Occupancy Trend</CardTitle>
-          <CardDescription>Daily occupancy rate (%)</CardDescription>
+          <CardTitle>Table Occupancy Trend</CardTitle>
+          <CardDescription>Daily table occupancy rate (%)</CardDescription>
 
           <div className="mt-6 h-64">
             {stats.occupancyData?.length > 0 ? (
@@ -150,7 +150,7 @@ export default function AnalyticsPage() {
 
         <Card hover={false}>
           <CardTitle>Revenue Breakdown</CardTitle>
-          <CardDescription>Rooms vs F&B daily revenue</CardDescription>
+          <CardDescription>Daily revenue trend</CardDescription>
 
           <div className="mt-6 h-64">
             {stats.revenueData?.length > 0 ? (
@@ -160,8 +160,7 @@ export default function AnalyticsPage() {
                   <XAxis dataKey="date" stroke="#A8A29E" />
                   <YAxis stroke="#A8A29E" />
                   <Tooltip />
-                  <Bar dataKey="rooms" fill="#E8A020" />
-                  <Bar dataKey="food" fill="#C8573A" />
+                  <Bar dataKey="food" name="Revenue" fill="#C8573A" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
