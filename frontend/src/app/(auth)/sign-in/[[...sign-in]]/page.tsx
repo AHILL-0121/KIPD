@@ -100,7 +100,7 @@ function KipMascot() {
         <radialGradient id="kg1" cx="38%" cy="30%" r="65%">
           <stop offset="0%" stopColor="#FFE08A" />
           <stop offset="55%" stopColor="#F5C96A" />
-          <stop offset="100%" stopColor="#E8A020" />
+          <stop offset="100%" stopColor="#0B6B6F" />
         </radialGradient>
         <radialGradient id="kg2" cx="50%" cy="40%" r="60%">
           <stop offset="0%" stopColor="#FFFAF0" />
@@ -123,11 +123,11 @@ function KipMascot() {
       <circle cx="50" cy="69" r="3" fill="white" opacity=".92" />
       <circle cx="73" cy="72" r="8" fill="#1A1410" />
       <circle cx="76" cy="69" r="3" fill="white" opacity=".92" />
-      <ellipse cx="60" cy="82" rx="4.5" ry="3.5" fill="#C8573A" />
-      <path d="M 49 89 Q 60 98 71 89" stroke="#C8573A" strokeWidth="2.2" strokeLinecap="round" />
-      <circle cx="48" cy="103" r="5" stroke="#C8573A" strokeWidth="2" opacity=".65" />
-      <rect x="51" y="101" width="14" height="4" rx="2" fill="#C8573A" opacity=".65" />
-      <rect x="58" y="105" width="3" height="5" rx="1" fill="#C8573A" opacity=".65" />
+      <ellipse cx="60" cy="82" rx="4.5" ry="3.5" fill="#AE231B" />
+      <path d="M 49 89 Q 60 98 71 89" stroke="#AE231B" strokeWidth="2.2" strokeLinecap="round" />
+      <circle cx="48" cy="103" r="5" stroke="#AE231B" strokeWidth="2" opacity=".65" />
+      <rect x="51" y="101" width="14" height="4" rx="2" fill="#AE231B" opacity=".65" />
+      <rect x="58" y="105" width="3" height="5" rx="1" fill="#AE231B" opacity=".65" />
       <path d="M 38 54 Q 50 14 60 4 Q 70 14 82 54 Q 68 46 60 48 Q 52 46 38 54 Z" fill="url(#kg3)" />
       <ellipse cx="60" cy="54" rx="22" ry="8" fill="#B84830" opacity=".5" />
       <circle cx="60" cy="4" r="7" fill="#FDF3DC" />

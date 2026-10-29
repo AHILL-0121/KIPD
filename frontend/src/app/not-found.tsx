@@ -30,20 +30,20 @@ export default function NotFound() {
               {/* Party hat */}
               <path 
                 d="M70 15 L95 65 L45 65 Z" 
-                fill="#C8573A" 
+                fill="#AE231B" 
                 stroke="#A0441C" 
                 strokeWidth="2"
               />
-              <ellipse cx="70" cy="65" rx="28" ry="8" fill="#C8573A" opacity="0.3" />
+              <ellipse cx="70" cy="65" rx="28" ry="8" fill="#AE231B" opacity="0.3" />
               <circle cx="70" cy="15" r="6" fill="#FAF8F4" />
               
               {/* Head */}
-              <circle cx="70" cy="85" r="45" fill="#E8A020" />
+              <circle cx="70" cy="85" r="45" fill="#0B6B6F" />
               <circle cx="70" cy="85" r="45" fill="url(#mascotGradient)" />
               
               {/* Ears */}
-              <ellipse cx="35" cy="70" rx="15" ry="25" fill="#E8A020" />
-              <ellipse cx="105" cy="70" rx="15" ry="25" fill="#E8A020" />
+              <ellipse cx="35" cy="70" rx="15" ry="25" fill="#0B6B6F" />
+              <ellipse cx="105" cy="70" rx="15" ry="25" fill="#0B6B6F" />
               <ellipse cx="35" cy="75" rx="8" ry="15" fill="#D89520" />
               <ellipse cx="105" cy="75" rx="8" ry="15" fill="#D89520" />
               
@@ -58,7 +58,7 @@ export default function NotFound() {
               </g>
               
               {/* Nose */}
-              <circle cx="70" cy="92" r="5" fill="#C8573A" />
+              <circle cx="70" cy="92" r="5" fill="#AE231B" />
               
               {/* Sad/confused mouth */}
               <path 
@@ -77,12 +77,12 @@ export default function NotFound() {
               <defs>
                 <radialGradient id="mascotGradient" cx="0.3" cy="0.3">
                   <stop offset="0%" stopColor="#FAE59F" stopOpacity="0.6" />
-                  <stop offset="100%" stopColor="#E8A020" stopOpacity="0" />
+                  <stop offset="100%" stopColor="#0B6B6F" stopOpacity="0" />
                 </radialGradient>
               </defs>
               
               {/* Question mark */}
-              <text x="110" y="45" fontSize="28" fill="#E8A020" fontWeight="bold">?</text>
+              <text x="110" y="45" fontSize="28" fill="#0B6B6F" fontWeight="bold">?</text>
             </motion.svg>
           </div>
           

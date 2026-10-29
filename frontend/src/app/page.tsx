@@ -17,7 +17,7 @@ export default function HomePage() {
             Kipd
             <motion.span
               className="w-2 h-2 rounded-full bg-amber"
-              animate={{ scale: [1, 1.4, 1], backgroundColor: ['#E8A020', '#C8573A', '#E8A020'] }}
+              animate={{ scale: [1, 1.4, 1], backgroundColor: ['#0B6B6F', '#7DD9D4', '#0B6B6F'] }}
               transition={{ duration: 2, repeat: Infinity }}
             />
           </Link>
@@ -48,7 +48,7 @@ export default function HomePage() {
             </div>
             
             <h1 className="font-serif text-5xl md:text-6xl font-bold text-ink mb-6 leading-tight">
-              Run your <em className="italic text-terra relative">hotel</em> with ease
+              Run your <em className="not-italic text-amber relative">hotel</em> with ease
             </h1>
             
             <p className="text-lg text-ink-muted mb-8 leading-relaxed">

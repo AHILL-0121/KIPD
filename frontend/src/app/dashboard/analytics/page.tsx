@@ -137,7 +137,7 @@ export default function AnalyticsPage() {
                   <XAxis dataKey="date" stroke="#A8A29E" />
                   <YAxis stroke="#A8A29E" />
                   <Tooltip />
-                  <Line type="monotone" dataKey="rate" stroke="#E8A020" strokeWidth={3} />
+                  <Line type="monotone" dataKey="rate" stroke="#0B6B6F" strokeWidth={3} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -160,7 +160,7 @@ export default function AnalyticsPage() {
                   <XAxis dataKey="date" stroke="#A8A29E" />
                   <YAxis stroke="#A8A29E" />
                   <Tooltip />
-                  <Bar dataKey="food" name="Revenue" fill="#C8573A" />
+                  <Bar dataKey="food" name="Revenue" fill="#AE231B" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (

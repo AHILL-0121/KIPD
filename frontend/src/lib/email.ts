@@ -53,7 +53,7 @@ export const emailTemplates = {
   }) => `
     <div style="font-family: 'DM Sans', sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
       <div style="text-align: center; margin-bottom: 40px;">
-        <h1 style="color: #E8A020; font-family: 'Playfair Display', serif; font-size: 32px; margin: 0;">Kipd</h1>
+        <h1 style="color: #0B6B6F; font-family: 'Playfair Display', serif; font-size: 32px; margin: 0;">Kipd</h1>
       </div>
       
       <h2 style="color: #1C1917; font-size: 24px; margin-bottom: 20px;">Booking Confirmed!</h2>
@@ -101,7 +101,7 @@ export const emailTemplates = {
   }) => `
     <div style="font-family: 'DM Sans', sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
       <div style="text-align: center; margin-bottom: 40px;">
-        <h1 style="color: #E8A020; font-family: 'Playfair Display', serif; font-size: 32px; margin: 0;">Kipd</h1>
+        <h1 style="color: #0B6B6F; font-family: 'Playfair Display', serif; font-size: 32px; margin: 0;">Kipd</h1>
       </div>
       
       <h2 style="color: #1C1917; font-size: 24px; margin-bottom: 20px;">You've been invited!</h2>
@@ -113,7 +113,7 @@ export const emailTemplates = {
       </p>
       
       <div style="text-align: center; margin: 40px 0;">
-        <a href="${esc(data.inviteUrl)}" style="display: inline-block; background: #E8A020; color: #1C1917; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 500;">
+        <a href="${esc(data.inviteUrl)}" style="display: inline-block; background: #0B6B6F; color: #1C1917; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 500;">
           Accept Invitation
         </a>
       </div>

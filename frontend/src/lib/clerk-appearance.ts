@@ -15,27 +15,27 @@ export const kipd_clerkAppearance: Appearance = {
   },
   variables: {
     // ── Core brand colors ─────────────────────────────
-    colorPrimary:           "#E8A020",   // Amber — all primary actions
+    colorPrimary:           "#0B6B6F",   // Amber — all primary actions
 
-    colorDanger:   "#C8573A",            // Terracotta — errors
-    colorSuccess:  "#5E8C6A",            // Sage — success
-    colorWarning:  "#E8A020",            // Amber — warnings
+    colorDanger:   "#AE231B",            // Terracotta — errors
+    colorSuccess:  "#126B40",            // Sage — success
+    colorWarning:  "#7F4C00",            // Amber — warnings
 
     // ── Background ────────────────────────────────────
     colorBackground:        "#FFFFFF",
     colorInputBackground:   "#FFFFFF",
 
     // ── Text ──────────────────────────────────────────
-    colorText:              "#1A1410",
-    colorTextSecondary:     "#6B5D52",
+    colorText:              "#18202E",
+    colorTextSecondary:     "#5B6678",
 
     // ── Input borders ─────────────────────────────────
-    colorInputText:         "#1A1410",
+    colorInputText:         "#18202E",
 
     // ── Shapes & sizing ───────────────────────────────
     borderRadius:           "12px",
-    fontFamily:             "'DM Sans', sans-serif",
-    fontFamilyButtons:      "'DM Sans', sans-serif",
+    fontFamily:             "var(--font-sans), system-ui, sans-serif",
+    fontFamilyButtons:      "var(--font-sans), system-ui, sans-serif",
 
     // ── Font sizes ────────────────────────────────────
     fontSize:               "0.9rem",
@@ -135,14 +135,14 @@ export const kipd_clerkAppearance: Appearance = {
       borderRadius:   "12px",
       padding:        "12px 16px",
       fontSize:       "0.9rem",
-      color:          "#1A1410",
+      color:          "#18202E",
       background:     "white",
       transition:     "all 0.2s ease",
       outline:        "none",
       width:          "100%",
       "&:focus": {
-        borderColor: "#E8A020",
-        boxShadow:   "0 0 0 3px rgba(232,160,32,0.13)",
+        borderColor: "#0B6B6F",
+        boxShadow:   "0 0 0 3px rgba(11, 107, 111,0.13)",
       },
       "&::placeholder": {
         color: "#C8BBA8",
@@ -151,7 +151,7 @@ export const kipd_clerkAppearance: Appearance = {
     formFieldInputShowPasswordButton: {
       color: "#A89880",
       "&:hover": {
-        color: "#6B5D52",
+        color: "#5B6678",
       },
     },
     formFieldAction: {
@@ -160,38 +160,38 @@ export const kipd_clerkAppearance: Appearance = {
       textDecoration: "none",
       transition: "color 0.2s",
       "&:hover": {
-        color: "#C47A10",
+        color: "#0B6B6F",
       },
     },
     formFieldSuccessText: {
       color: "#5E8C6A",
     },
     formFieldErrorText: {
-      color:    "#C8573A",
+      color:    "#AE231B",
       fontSize: "0.75rem",
     },
     formFieldWarningText: {
-      color: "#E8A020",
+      color: "#0B6B6F",
     },
 
     // ── Primary action button ─────────────────────────
     formButtonPrimary: {
-      background:    "#E8A020",
-      color:         "#1A1410",
+      background:    "#0B6B6F",
+      color:         "#FFFFFF",
       fontWeight:    "600",
       fontSize:      "0.9rem",
       letterSpacing: "0.02em",
       borderRadius:  "12px",
       padding:       "13px 24px",
       border:        "none",
-      boxShadow:     "0 4px 16px rgba(232,160,32,0.35)",
+      boxShadow:     "none",
       transition:    "all 0.25s cubic-bezier(.34,1.56,.64,1)",
       width:         "100%",
       marginTop:     "8px",
       "&:hover": {
-        background: "#D4901A",
+        background: "#085659",
         transform:  "translateY(-2px)",
-        boxShadow:  "0 8px 28px rgba(232,160,32,0.45)",
+        boxShadow:  "0 8px 28px rgba(11, 107, 111,0.45)",
       },
       "&:active": {
         transform: "scale(0.98)",
@@ -200,7 +200,7 @@ export const kipd_clerkAppearance: Appearance = {
 
     // ── Secondary buttons ─────────────────────────────
     formButtonReset: {
-      color: "#6B5D52",
+      color: "#5B6678",
     },
 
     // ── Footer / links ────────────────────────────────
@@ -211,15 +211,15 @@ export const kipd_clerkAppearance: Appearance = {
       textAlign:    "center",
     },
     footerActionText: {
-      color:    "#6B5D52",
+      color:    "#5B6678",
       fontSize: "0.8rem",
     },
     footerActionLink: {
-      color:          "#C47A10",
+      color:          "#0B6B6F",
       fontWeight:     "500",
       textDecoration: "none",
       "&:hover": {
-        color: "#C8573A",
+        color: "#AE231B",
       },
     },
     footerPages: {
@@ -232,16 +232,16 @@ export const kipd_clerkAppearance: Appearance = {
       borderRadius: "10px",
       fontSize:     "1.1rem",
       fontWeight:   "600",
-      color:        "#1A1410",
+      color:        "#18202E",
       "&:focus": {
-        borderColor: "#E8A020",
-        boxShadow:   "0 0 0 3px rgba(232,160,32,0.15)",
+        borderColor: "#0B6B6F",
+        boxShadow:   "0 0 0 3px rgba(11, 107, 111,0.15)",
       },
     },
 
     // ── Alert / error banners ─────────────────────────
     alertText: {
-      color:    "#C8573A",
+      color:    "#AE231B",
       fontSize: "0.8rem",
     },
     alert: {
@@ -253,7 +253,7 @@ export const kipd_clerkAppearance: Appearance = {
     // ── Internal badge ────────────────────────────────
     badge: {
       background:   "#FDF3DC",
-      color:        "#C47A10",
+      color:        "#0B6B6F",
       borderRadius: "99px",
       fontSize:     "0.68rem",
     },

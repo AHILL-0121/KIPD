@@ -19,7 +19,7 @@
 .kipd-left {
   flex: 1;
   position: relative;
-  background: #1A1410;
+  background: #0E1218;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -45,8 +45,8 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 70% 55% at 20% 20%, rgba(232, 160, 32, .14) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 60% at 85% 75%, rgba(200, 87, 58, .10) 0%, transparent 60%);
+    radial-gradient(ellipse 70% 55% at 20% 20%, rgba(11, 107, 111, .14) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 85% 75%, rgba(174, 35, 27, .10) 0%, transparent 60%);
 }
 
 .kipd-left-grain {
@@ -72,7 +72,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #E8A020;
+  background: #0B6B6F;
   animation: kipd-dot 2.2s ease-in-out infinite;
 }
 
@@ -81,17 +81,17 @@
   0%,
   100% {
     transform: scale(1);
-    background: #E8A020;
+    background: #0B6B6F;
   }
 
   50% {
     transform: scale(1.5);
-    background: #C8573A;
+    background: #7DD9D4;
   }
 }
 
 .kipd-logo-text {
-  font-family: 'Playfair Display', serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   font-size: 1.5rem;
   font-weight: 700;
   color: white;
@@ -109,7 +109,7 @@
 
 .kipd-kip {
   animation: kipd-float 3.2s ease-in-out infinite;
-  filter: drop-shadow(0 12px 32px rgba(232, 160, 32, .3));
+  filter: drop-shadow(0 12px 32px rgba(11, 107, 111, .3));
 }
 
 @keyframes kipd-float {
@@ -127,7 +127,7 @@
 .kipd-mascot-shadow {
   width: 90px;
   height: 16px;
-  background: radial-gradient(ellipse, rgba(232, 160, 32, .35) 0%, transparent 70%);
+  background: radial-gradient(ellipse, rgba(11, 107, 111, .35) 0%, transparent 70%);
   border-radius: 50%;
   animation: kipd-shadow 3.2s ease-in-out infinite;
   margin-top: 4px;
@@ -155,7 +155,7 @@
 }
 
 .kipd-quote blockquote {
-  font-family: 'Playfair Display', serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   font-size: clamp(1.1rem, 1.8vw, 1.5rem);
   font-style: italic;
   color: rgba(255, 255, 255, .82);
@@ -165,7 +165,7 @@
 
 .kipd-quote blockquote em {
   font-style: normal;
-  color: #F5C96A;
+  color: #7DD9D4;
 }
 
 .kipd-quote cite {
@@ -205,7 +205,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #E8A020;
+  background: #0B6B6F;
   opacity: .8;
   flex-shrink: 0;
 }
@@ -232,8 +232,8 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 80% 50% at 80% 10%, rgba(232, 160, 32, .07) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 60% at 10% 90%, rgba(200, 87, 58, .05) 0%, transparent 60%);
+    radial-gradient(ellipse 80% 50% at 80% 10%, rgba(11, 107, 111, .07) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 60% at 10% 90%, rgba(174, 35, 27, .05) 0%, transparent 60%);
 }
 
 @keyframes kipd-form-in {
@@ -263,7 +263,7 @@
   font-size: .68rem;
   letter-spacing: .2em;
   text-transform: uppercase;
-  color: #C47A10;
+  color: #0B6B6F;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -278,17 +278,17 @@
 }
 
 .kipd-title {
-  font-family: 'Playfair Display', serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   font-size: clamp(1.8rem, 3vw, 2.3rem);
   font-weight: 700;
   line-height: 1.1;
-  color: #1A1410;
+  color: #0E1218;
   margin-bottom: 8px;
 }
 
 .kipd-title em {
-  font-style: italic;
-  color: #C8573A;
+  font-style: normal;
+  color: #0B6B6F;
 }
 
 .kipd-subtitle {

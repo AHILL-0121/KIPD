@@ -9,7 +9,7 @@ import { RANGES, buildPeriod, changeText, type Range } from '@/lib/periods';
 export const dynamic = 'force-dynamic';
 
 /** Chart colours for the category split. They cycle if a restaurant has more categories than this. */
-const PALETTE = ['#C8573A', '#E8A020', '#5E8C6A', '#78716C', '#A8A29E', '#1C1917'];
+const PALETTE = ['#AE231B', '#0B6B6F', '#5E8C6A', '#78716C', '#A8A29E', '#1C1917'];
 
 /**
  * Food and beverage analytics for the selected period, in the restaurant's own time zone.

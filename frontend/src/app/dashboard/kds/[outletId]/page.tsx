@@ -93,7 +93,7 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
           <button
             onClick={toggleSound}
             aria-pressed={soundOn}
-            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${soundOn ? 'bg-stone-800 text-stone-200' : 'bg-amber text-ink'}`}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${soundOn ? 'bg-stone-800 text-stone-200' : 'bg-amber text-white'}`}
           >
             {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             {soundOn ? 'Sound on' : 'Enable sound for new orders'}

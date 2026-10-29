@@ -64,7 +64,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                   flex items-center gap-3 py-3 rounded-xl
                   transition-all duration-200
                   ${isActive
-                    ? 'bg-amber text-ink font-medium shadow-sm'
+                    ? 'bg-amber-pale text-amber-deep font-semibold'
                     : 'text-ink-muted hover:bg-stone-100 hover:text-ink'
                   }
                   ${isCollapsed ? 'justify-center px-0' : 'px-4'}

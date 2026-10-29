@@ -14,15 +14,15 @@ interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'ref' | 'children'
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ children, variant = 'primary', size = 'md', isLoading, asChild = false, className = '', ...props }, ref) => {
-    const baseClasses = 'inline-flex items-center gap-2 font-medium rounded-xl transition-all duration-300 relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed';
-    
+    const baseClasses = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-colors duration-150 relative overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber disabled:opacity-50 disabled:cursor-not-allowed';
+
     const variantClasses = {
-      primary: 'bg-amber text-ink shadow-[0_4px_16px_rgba(232,160,32,0.35)] hover:shadow-[0_8px_28px_rgba(232,160,32,0.45)] hover:-translate-y-0.5',
-      ghost: 'bg-transparent text-ink-soft border-[1.5px] border-stone-200 hover:bg-stone-100 hover:border-stone-300',
-      terra: 'bg-terra text-white shadow-[0_4px_16px_rgba(200,87,58,0.3)] hover:shadow-[0_8px_28px_rgba(200,87,58,0.4)] hover:-translate-y-0.5',
-      sage: 'bg-sage text-white shadow-[0_4px_16px_rgba(94,140,106,0.3)] hover:shadow-[0_8px_28px_rgba(94,140,106,0.4)] hover:-translate-y-0.5',
+      primary: 'bg-amber text-white hover:bg-amber-deep',
+      ghost: 'bg-transparent text-ink-soft border border-stone-200 hover:bg-stone-100 hover:border-stone-300',
+      terra: 'bg-terra text-white hover:brightness-90',
+      sage: 'bg-sage text-white hover:brightness-90',
     };
-    
+
     const sizeClasses = {
       sm: 'px-4 py-2 text-sm',
       md: 'px-6 py-3 text-base',
@@ -42,7 +42,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <motion.button
         ref={ref}
-        whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         className={classes}
         disabled={isLoading || props.disabled}
@@ -57,7 +56,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           )}
           {children}
         </span>
-        <span className="absolute inset-0 bg-white opacity-0 hover:opacity-20 transition-opacity" />
       </motion.button>
     );
   }

@@ -1,26 +1,19 @@
 import type { Metadata } from 'next'
-import { DM_Sans, Playfair_Display, DM_Mono } from 'next/font/google'
+import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 
-const dmSans = DM_Sans({ 
+const plexSans = IBM_Plex_Sans({
   subsets: ['latin'],
-  variable: '--font-dm-sans',
-  weight: ['300', '400', '500', '600', '700']
+  variable: '--font-sans',
+  weight: ['400', '500', '600', '700'],
 })
 
-const playfair = Playfair_Display({ 
+const plexMono = IBM_Plex_Mono({
   subsets: ['latin'],
-  variable: '--font-playfair',
-  weight: ['400', '600', '700'],
-  style: ['normal', 'italic']
-})
-
-const dmMono = DM_Mono({ 
-  subsets: ['latin'],
-  variable: '--font-dm-mono',
-  weight: ['400', '500']
+  variable: '--font-mono',
+  weight: ['400', '500'],
 })
 
 export const metadata: Metadata = {
@@ -35,7 +28,7 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider>
-      <html lang="en" className={`${dmSans.variable} ${playfair.variable} ${dmMono.variable}`}>
+      <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
         <body className="font-sans bg-cream text-ink antialiased">
           {children}
           <Toaster />

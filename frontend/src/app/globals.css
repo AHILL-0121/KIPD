@@ -4,9 +4,6 @@
 
 /* ─── CSS VARIABLES ─────────────────────────────────────── */
 :root {
-  --font-dm-sans: 'DM Sans', sans-serif;
-  --font-playfair: 'Playfair Display', serif;
-  --font-dm-mono: 'DM Mono', monospace;
 }
 
 /* ─── GLOBAL RESETS ──────────────────────────────────────── */
@@ -37,7 +34,7 @@ body {
   pointer-events: none;
   width: 8px;
   height: 8px;
-  background: #C8573A;
+  background: #AE231B;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   transition: width 0.2s ease, height 0.2s ease, background 0.2s ease;
@@ -52,7 +49,7 @@ body {
   pointer-events: none;
   width: 32px;
   height: 32px;
-  border: 2px solid #C8573A;
+  border: 2px solid #AE231B;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   transition: width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
@@ -66,14 +63,14 @@ body:has(a:hover) #cursor-dot,
 body:has(button:hover) #cursor-dot {
   width: 16px;
   height: 16px;
-  background: #C8573A;
+  background: #AE231B;
 }
 
 body:has(a:hover) #cursor-ring,
 body:has(button:hover) #cursor-ring {
   width: 52px;
   height: 52px;
-  border-color: #C8573A;
+  border-color: #AE231B;
   opacity: 0.3;
 }
 
@@ -114,11 +111,11 @@ body:has(button:hover) #cursor-ring {
 
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(94, 140, 106, 0.4);
+    box-shadow: 0 0 0 0 rgba(18, 107, 64, 0.4);
   }
 
   50% {
-    box-shadow: 0 0 0 6px rgba(94, 140, 106, 0);
+    box-shadow: 0 0 0 6px rgba(18, 107, 64, 0);
   }
 }
 
@@ -136,10 +133,10 @@ body:has(button:hover) #cursor-ring {
 
 /* ─── UTILITY CLASSES ────────────────────────────────────── */
 .section-label {
-  font-family: var(--font-dm-mono);
+  font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 500;
-  color: #C68510;
+  color: #0B6B6F;
   text-transform: uppercase;
   letter-spacing: 0.15em;
   display: flex;
@@ -152,23 +149,24 @@ body:has(button:hover) #cursor-ring {
   display: block;
   width: 20px;
   height: 1px;
-  background: #C68510;
+  background: #0B6B6F;
 }
 
 .section-title {
-  font-family: var(--font-playfair);
-  font-size: 2.5rem;
-  font-weight: 700;
-  color: #1C1917;
+  font-family: var(--font-sans);
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #18202E;
   margin-top: 12px;
 }
 
 .section-sub {
   font-size: 1rem;
-  color: #6B6662;
-  margin-top: 16px;
+  color: #5B6678;
+  margin-top: 6px;
   max-width: 700px;
-  line-height: 1.7;
+  line-height: 1.5;
 }
 
 /* ─── SCROLLBAR ──────────────────────────────────────────── */
@@ -178,16 +176,16 @@ body:has(button:hover) #cursor-ring {
 }
 
 ::-webkit-scrollbar-track {
-  background: #F5F5F4;
+  background: #EDF0F4;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #D6D3D1;
+  background: #B5BDCA;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #A8A29E;
+  background: #7A8596;
 }
 
 /* ─── TRANSITIONS ────────────────────────────────────────── */
@@ -197,7 +195,7 @@ body:has(button:hover) #cursor-ring {
 
 /* ─── GLASS EFFECT ───────────────────────────────────────── */
 .glass {
-  background: rgba(250, 248, 244, 0.8);
+  background: rgba(244, 245, 247, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
