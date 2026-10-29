@@ -246,7 +246,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
 
         {/* Main Route Children */}
-        <div style={{ transform: `translateY(${pullY * 0.5}px)`, transition: pullY === 0 ? 'transform 0.3s ease-out' : 'none' }}>
+        {/* The transform exists only while pulling: even translateY(0) makes every `fixed` child (dialogs, toasts)
+            position itself against this box instead of the window, which cut dialogs off and left the sidebar undimmed. */}
+        <div style={pullY > 0 ? { transform: `translateY(${pullY * 0.5}px)` } : undefined}>
           <nav aria-label="Breadcrumb" className="hidden md:block sticky top-0 z-30 bg-cream/95 backdrop-blur border-b border-stone-200 px-8 py-2.5">
             <ol className="flex items-center flex-wrap text-sm">
               {crumbsFor(pathname).map((c, i, all) => {

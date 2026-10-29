@@ -11,6 +11,7 @@ import { StatusIndicator } from '@/components/ui/status-indicator';
 import { LoadingState } from '@/components/ui/loading-state';
 import { formatCurrency } from '@/lib/currency';
 import { useLive } from '@/lib/use-live';
+import { orderStatus } from '@/lib/order-status';
 
 type TenantType = 'hotel' | 'restaurant' | 'both';
 
@@ -31,16 +32,6 @@ interface DashboardStats {
 const EMPTY: DashboardStats = {
   occupancyRate: 0, totalRooms: 0, occupiedRooms: 0, todayCheckIns: 0, todayCheckOuts: 0,
   activeOrders: 0, todayRevenue: 0, weekRevenue: 0, arrivals: [], recentOrders: [], hasProperties: false,
-};
-
-/** How an order's status reads here. Matches the kitchen screen: new is highlighted, in-progress is neutral, ready is green. */
-const ORDER_STATUS: Record<string, { label: string; variant: 'amber' | 'terra' | 'sage' | 'stone' }> = {
-  new: { label: 'New', variant: 'amber' },
-  acknowledged: { label: 'New', variant: 'amber' },
-  preparing: { label: 'Preparing', variant: 'stone' },
-  ready: { label: 'Ready', variant: 'sage' },
-  served: { label: 'Served', variant: 'stone' },
-  cancelled: { label: 'Cancelled', variant: 'terra' },
 };
 
 function StatCard({ href, icon, tone, value, label, note }: {
@@ -294,7 +285,7 @@ export default function DashboardPage() {
             <div className="mt-6 space-y-3">
               {stats.recentOrders && stats.recentOrders.length > 0 ? (
                 stats.recentOrders.map((order: any, index: number) => {
-                  const status = ORDER_STATUS[order.status] ?? { label: order.status, variant: 'stone' as const };
+                  const status = orderStatus(order.status);
                   return (
                     <div key={order.id ?? index} className="flex items-center justify-between gap-3 p-3 bg-cream rounded-xl">
                       <div className="min-w-0">
@@ -306,7 +297,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <Badge variant={status.variant} dot>{status.label}</Badge>
+                        <Badge variant={status.tone} dot>{status.label}</Badge>
                         <div className="text-xs text-ink-muted mt-1">
                           {formatDistanceToNow(new Date(order.createdAt), { addSuffix: true })}
                         </div>
