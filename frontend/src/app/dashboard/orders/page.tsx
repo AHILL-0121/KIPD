@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useLive } from '@/lib/use-live';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -79,6 +80,8 @@ export default function OrdersPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  const [channel, setChannel] = useState<string | null>(null);
+
   const fetchOrders = () => {
     fetch('/api/orders', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
       .then(res => res.json())
@@ -102,33 +105,13 @@ export default function OrdersPage() {
       .then(data => setTableOptions(Array.isArray(data) ? data : []))
       .catch(() => { });
 
-    // Establish Real-Time WebSocket link with Kitchen!
-    let eventSource: EventSource | null = null;
-    let isMounted = true;
-
     fetch('/api/tenant/info')
       .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (!isMounted) return; // Prevent zombie sockets if unmounted before HTTP request finishes
-
-        if (data?.id) {
-          eventSource = new EventSource(`/api/sse/kds/${data.id}`);
-          eventSource.onmessage = (event) => {
-            const ticket = JSON.parse(event.data);
-            if (ticket.type !== 'connected') {
-              fetchOrders(); // Kitchen did something! Sync instantly!
-            }
-          };
-        }
-      });
-
-    return () => {
-      isMounted = false;
-      if (eventSource) {
-        eventSource.close();
-      }
-    };
+      .then(data => { if (data?.id) setChannel(data.id); })
+      .catch(() => { });
   }, []);
+
+  useLive(fetchOrders, channel);
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {

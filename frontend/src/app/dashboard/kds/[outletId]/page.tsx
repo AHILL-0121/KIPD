@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLive } from '@/lib/use-live';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StatusIndicator } from '@/components/ui/status-indicator';
@@ -34,41 +35,25 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
       .then(data => { if (data?.role) setUserRole(data.role); })
       .catch(() => { });
 
-    // Fetch initial orders
+  }, []);
+
+  // Orders already on screen, so only genuinely new tickets make a sound.
+  const seen = useRef<Set<string> | null>(null);
+  const load = useCallback(() => {
     fetch(`/api/kds/${params.outletId}`, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
-      .then(res => res.json())
-      .then(data => setOrders(data))
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+      .then((data: KDSOrder[]) => {
+        if (!Array.isArray(data)) return;
+        const known = seen.current;
+        if (known && data.some(o => !known.has(o.id))) new Audio('/notification.mp3').play().catch(() => { });
+        seen.current = new Set(data.map(o => o.id));
+        setOrders(data);
+      })
       .catch(console.error);
-
-    // Setup SSE for real-time updates
-    const eventSource = new EventSource(`/api/sse/kds/${params.outletId}`);
-    eventSource.onmessage = (event) => {
-      const newOrder = JSON.parse(event.data);
-      if (newOrder.type === 'connected') return;
-
-      setOrders(prev => {
-        // 1. If it was marked as ready/served by another kitchen iPad, auto-delete it from our screen!
-        if (['ready', 'served', 'closed', 'cancelled'].includes(newOrder.status)) {
-          return prev.filter(o => o.id !== newOrder.id);
-        }
-
-        // 2. Otherwise safely add or intelligently update it without creating duplicates
-        const existingIdx = prev.findIndex(o => o.id === newOrder.id);
-        if (existingIdx !== -1) {
-          const updated = [...prev];
-          updated[existingIdx] = newOrder;
-          return updated;
-        } else {
-          // Play sound alert for brand new tickets
-          const audio = new Audio('/notification.mp3');
-          audio.play().catch(() => { });
-          return [newOrder, ...prev];
-        }
-      });
-    };
-
-    return () => eventSource.close();
   }, [params.outletId]);
+
+  useEffect(() => { load(); }, [load]);
+  useLive(load, params.outletId);
 
   const updateStatus = async (orderId: string, newStatus: KDSOrder['status']) => {
     // Instantly commit optimistic update so the UI feels native

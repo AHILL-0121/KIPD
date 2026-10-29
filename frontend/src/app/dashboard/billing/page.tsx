@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useLive } from '@/lib/use-live';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +45,8 @@ export default function BillingPage() {
     footer: 'WE ARE HAPPY TO SERVE YOU'
   });
 
+  const [channel, setChannel] = useState<string | null>(null);
+
   useEffect(() => {
     fetchBills();
 
@@ -52,32 +55,10 @@ export default function BillingPage() {
       try { setReceiptConfig(JSON.parse(savedConfig)); } catch (e) { }
     }
 
-    // Bind real-time Front Desk Sync
-    let eventSource: EventSource | null = null;
-    let isMounted = true;
-
     fetch('/api/tenant/info')
       .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (!isMounted) return; // Prevent zombie socket leaking due to pending fetch!
-
-        if (data?.id) {
-          eventSource = new EventSource(`/api/sse/kds/${data.id}`);
-          eventSource.onmessage = (event) => {
-            const ticket = JSON.parse(event.data);
-            if (ticket.type !== 'connected') {
-              fetchBills(); // Instantly sync new tabs settled from Waiter POS!
-            }
-          };
-        }
-      });
-
-    return () => {
-      isMounted = false;
-      if (eventSource) {
-        eventSource.close();
-      }
-    };
+      .then(data => { if (data?.id) setChannel(data.id); })
+      .catch(() => { });
   }, []);
 
   const fetchBills = () => {
@@ -86,6 +67,8 @@ export default function BillingPage() {
       .then(data => setBills(data))
       .catch(console.error);
   };
+
+  useLive(fetchBills, channel);
 
   const handleRecordPayment = async () => {
     if (!selectedBill) return;
