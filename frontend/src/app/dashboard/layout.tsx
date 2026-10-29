@@ -15,8 +15,10 @@ import {
   Settings,
   QrCode,
   ChefHat,
-  ChevronLeft,
   ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ConciergeBell,
   LogOut,
   RefreshCw
 } from 'lucide-react';
@@ -56,6 +58,21 @@ const ROLE_LABELS: Record<string, string> = {
   kitchen: 'Kitchen Staff',
 };
 
+/** "/dashboard/restaurant/qr" becomes Dashboard > Restaurant > Table QR codes. IDs in the path are skipped. */
+const CRUMB_LABELS: Record<string, string> = { kds: 'Kitchen Display', qr: 'Table QR codes' };
+function crumbsFor(pathname: string | null) {
+  const parts = (pathname ?? '').split('/').filter(Boolean).slice(1); // drop "dashboard"
+  const out = [{ label: 'Dashboard', href: '/dashboard' }];
+  let href = '/dashboard';
+  for (const part of parts) {
+    href += `/${part}`;
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(part)) continue;
+    const label = CRUMB_LABELS[part] ?? navigation.find((n) => n.href === href)?.name ?? part.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase());
+    out.push({ label, href });
+  }
+  return out;
+}
+
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [tenantType, setTenantType] = useState<TenantType>('both');
@@ -64,6 +81,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [userName, setUserName] = useState('');
   const [isNavReady, setIsNavReady] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  useEffect(() => {
+    try { setIsCollapsed(localStorage.getItem('kipd-sidebar') === 'collapsed'); } catch { /* storage blocked: stay expanded */ }
+  }, []);
+  const toggleCollapsed = () => {
+    setIsCollapsed((c) => {
+      try { localStorage.setItem('kipd-sidebar', c ? 'open' : 'collapsed'); } catch { /* ignore */ }
+      return !c;
+    });
+  };
   const router = useRouter();
   const { signOut } = useClerk();
 
@@ -126,26 +152,21 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-cream pb-20 md:pb-0">
-      {/* Sidebar - Desktop */}
-      <aside className={`hidden md:flex fixed left-0 top-0 bottom-0 bg-white border-r border-stone-200 flex-col z-20 transition-all duration-300 ${isCollapsed ? 'w-20' : 'w-64'}`}>
-        <div className={`p-6 border-b border-stone-200 flex items-center h-[88px] ${isCollapsed ? 'justify-center px-4' : 'justify-between'}`}>
-          {!isCollapsed && (
-            <div className="overflow-hidden">
-              <Link href="/dashboard" className="font-serif text-2xl font-bold text-ink block">
-                Kipd
-              </Link>
-              <p className="text-xs text-stone-400 mt-1 truncate">{tenantName || 'Your Property'}</p>
-            </div>
-          )}
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-ink transition-colors flex-shrink-0"
-          >
-            {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
-          </button>
-        </div>
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-lg focus:bg-amber focus:px-4 focus:py-2 focus:text-white">Skip to content</a>
 
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto overflow-x-hidden">
+      {/* Sidebar - Desktop */}
+      <aside className={`hidden md:flex fixed left-0 top-0 bottom-0 bg-white border-r border-stone-200 flex-col z-20 p-3 transition-[width] duration-200 ${isCollapsed ? 'w-[72px]' : 'w-64'}`}>
+        <Link href="/dashboard" className="flex items-center gap-2.5 h-12 px-2 mb-2 rounded-lg whitespace-nowrap overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber">
+          <span className="w-[30px] h-[30px] rounded-lg bg-amber text-white grid place-items-center flex-none"><ConciergeBell className="w-[18px] h-[18px]" aria-hidden="true" /></span>
+          {!isCollapsed && (
+            <span className="min-w-0">
+              <b className="block text-[1.1875rem] leading-5 font-bold tracking-tight text-ink">Kipd</b>
+              <span className="block text-xs text-ink-muted truncate">{tenantName || 'Your property'}</span>
+            </span>
+          )}
+        </Link>
+
+        <nav aria-label="Main" className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden">
           {filteredNav.map((item) => {
             const Icon = item.icon;
             const isActive = item.href === '/dashboard'
@@ -157,25 +178,31 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 key={item.name}
                 href={item.href}
                 title={isCollapsed ? item.name : undefined}
-                className={`
-                  flex items-center gap-3 py-3 rounded-xl
-                  transition-all duration-200
-                  ${isActive
-                    ? 'bg-amber-pale text-amber-deep font-semibold'
-                    : 'text-ink-muted hover:bg-stone-100 hover:text-ink'
-                  }
-                  ${isCollapsed ? 'justify-center px-0' : 'px-4'}
-                `}
+                aria-current={isActive ? 'page' : undefined}
+                aria-label={isCollapsed ? item.name : undefined}
+                className={`flex items-center gap-3 h-11 rounded-lg px-3 font-medium whitespace-nowrap transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
+                  isActive ? 'bg-amber-pale text-amber-deep font-semibold' : 'text-ink-soft hover:bg-stone-100 hover:text-ink'
+                }`}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && <span className="whitespace-nowrap overflow-hidden">{item.name}</span>}
+                <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
+                {!isCollapsed && <span className="overflow-hidden">{item.name}</span>}
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-stone-200 h-[76px] flex items-center">
-          <div className={`flex items-center gap-3 w-full ${isCollapsed ? 'justify-center' : 'px-2'}`}>
+        <div className="border-t border-stone-200 pt-3 space-y-1.5">
+          <button
+            onClick={toggleCollapsed}
+            aria-expanded={!isCollapsed}
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="flex items-center gap-3 h-10 w-full rounded-lg px-3 font-medium text-ink-soft hover:bg-stone-100 hover:text-ink whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
+          >
+            {isCollapsed ? <PanelLeftOpen className="w-5 h-5 flex-shrink-0" aria-hidden="true" /> : <PanelLeftClose className="w-5 h-5 flex-shrink-0" aria-hidden="true" />}
+            {!isCollapsed && <span>Collapse</span>}
+          </button>
+          <div className={`flex items-center gap-3 px-2 py-1 ${isCollapsed ? 'justify-center' : ''}`}>
             <UserButton afterSignOutUrl="/sign-in" />
             {!isCollapsed && (
               <>
@@ -186,9 +213,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 <button
                   onClick={() => signOut(() => router.push('/sign-in'))}
                   title="Log out"
-                  className="hidden md:flex p-2 text-stone-400 hover:text-terra hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                  aria-label="Log out"
+                  className="p-2 text-ink-muted hover:text-terra hover:bg-terra-pale rounded-lg transition-colors flex-shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
                 >
-                  <LogOut className="w-[18px] h-[18px]" />
+                  <LogOut className="w-[18px] h-[18px]" aria-hidden="true" />
                 </button>
               </>
             )}
@@ -198,7 +226,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* Main Content with Pull-to-Refresh Wrapper */}
       <main
-        className={`transition-all duration-300 min-h-screen relative ${isCollapsed ? 'ml-0 md:ml-20' : 'ml-0 md:ml-64'}`}
+        id="main"
+        className={`transition-[margin] duration-200 min-h-screen relative ${isCollapsed ? 'ml-0 md:ml-[72px]' : 'ml-0 md:ml-64'}`}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -218,6 +247,22 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
         {/* Main Route Children */}
         <div style={{ transform: `translateY(${pullY * 0.5}px)`, transition: pullY === 0 ? 'transform 0.3s ease-out' : 'none' }}>
+          <nav aria-label="Breadcrumb" className="hidden md:block sticky top-0 z-30 bg-cream/95 backdrop-blur border-b border-stone-200 px-8 py-2.5">
+            <ol className="flex items-center flex-wrap text-sm">
+              {crumbsFor(pathname).map((c, i, all) => {
+                const last = i === all.length - 1;
+                return (
+                  <li key={c.href} className="flex items-center">
+                    {i > 0 && <ChevronRight className="w-4 h-4 mx-1 text-stone-400" aria-hidden="true" />}
+                    {last
+                      ? <span aria-current="page" className="px-1.5 font-semibold text-ink">{c.label}</span>
+                      : <Link href={c.href} className="px-1.5 py-1 rounded-md text-ink-soft hover:bg-stone-100 hover:text-ink hover:underline underline-offset-4">{c.label}</Link>}
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+
           {/* Mobile Profile & Role Identity Banner */}
           <div className="md:hidden px-4 pt-5 pb-0 flex items-center gap-2 text-[11px] font-mono tracking-wide uppercase text-ink-muted/80 z-40">
             <span>{userName || 'Staff'}</span>
@@ -230,7 +275,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </main>
 
       {/* Bottom Navigation - Mobile (Horizontally Scrollable) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex items-center overflow-x-auto px-2 pb-safe z-50 h-[72px] hide-scrollbar" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+      <nav aria-label="Main (mobile)" className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex items-center overflow-x-auto px-2 pb-safe z-50 h-[72px] hide-scrollbar" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         {filteredNav.map((item) => {
           const Icon = item.icon;
           const isActive = item.href === '/dashboard'
@@ -241,6 +286,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <Link
               key={item.name}
               href={item.href}
+              aria-current={isActive ? 'page' : undefined}
               className={`
                 flex flex-col items-center justify-center min-w-[72px] h-full space-y-1 px-3 flex-shrink-0
                 transition-all duration-200
