@@ -1,69 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 import { db } from '@/db';
-import { staff } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import { sendEmail, emailTemplates } from '@/lib/email';
-import { requireTenantContext } from '@/lib/auth';
+import { staff, staffInvites } from '@/db/schema';
+import { ROLES, requireTenant } from '@/lib/auth';
+import { handleError } from '@/lib/http';
 
-export async function GET(request: NextRequest) {
+/**
+ * The team list: active staff, plus invitations still waiting to be accepted.
+ * Pending invitations are shaped like staff (isActive: false) so the screen can list them together.
+ * Tokens are never sent to the browser (they are not even stored: only a hash is).
+ */
+export async function GET() {
   try {
-    const context = await requireTenantContext();
-    const { tenantId } = context;
+    const { tenantId } = await requireTenant(ROLES.manage);
 
-    const allStaff = await db.query.staff.findMany({
-      where: eq(staff.tenantId, tenantId),
-      orderBy: (staff, { desc }) => [desc(staff.createdAt)],
-    });
+    const [members, invites] = await Promise.all([
+      db.query.staff.findMany({ where: eq(staff.tenantId, tenantId), orderBy: (s, { desc }) => [desc(s.createdAt)] }),
+      db.select().from(staffInvites).where(and(
+        eq(staffInvites.tenantId, tenantId), isNull(staffInvites.acceptedAt), gt(staffInvites.expiresAt, new Date()),
+      )),
+    ]);
 
-    return NextResponse.json(allStaff);
+    const pending = invites.map((i) => ({
+      id: i.id, tenantId: i.tenantId, propertyId: null, clerkId: 'pending',
+      email: i.email, name: i.name, role: i.role, isActive: false, createdAt: i.createdAt,
+    }));
+    return NextResponse.json([...pending, ...members].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)));
   } catch (error) {
-    console.error('Get staff error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch staff' },
-      { status: 500 }
-    );
+    return handleError(error, 'Failed to fetch staff');
   }
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const context = await requireTenantContext();
-    const { tenantId } = context;
-
-    const body = await request.json();
-    const { name, email, role } = body;
-
-    // Create temp clerk ID (in production, this would be done after user accepts invite)
-    const tempClerkId = `pending_${Math.random().toString(36).substring(7)}`;
-
-    // Create staff member
-    const [staffMember] = await db.insert(staff).values({
-      tenantId,
-      clerkId: tempClerkId,
-      name,
-      email,
-      role,
-      isActive: false, // Activated after accepting invite
-    }).returning();
-
-    // Send invitation email
-    await sendEmail({
-      to: email,
-      subject: 'Welcome to the Team!',
-      html: emailTemplates.staffInvite({
-        name,
-        hotelName: 'Your Hotel',
-        role,
-        inviteUrl: `${process.env.NEXT_PUBLIC_APP_URL}/accept-invite?token=${staffMember.id}`,
-      }),
-    });
-
-    return NextResponse.json({ success: true, staffMember });
-  } catch (error) {
-    console.error('Create staff error:', error);
-    return NextResponse.json(
-      { error: 'Failed to create staff member' },
-      { status: 500 }
-    );
-  }
-}
+export const dynamic = 'force-dynamic';

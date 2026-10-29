@@ -1,114 +1,113 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { and, eq } from 'drizzle-orm';
+import { z } from 'zod';
 import { db } from '@/db';
-import { roomTypes, properties } from '@/db/schema';
-import { eq, inArray } from 'drizzle-orm';
-import { requireTenantContext } from '@/lib/auth';
+import { roomTypes } from '@/db/schema';
+import { ROLES, requireTenant } from '@/lib/auth';
+import { assertUuid, badRequest, handleError, notFound, parseJson } from '@/lib/http';
+import { firstProperty } from '@/lib/tenant-scope';
 
-export async function GET(request: NextRequest) {
+const basePrice = z.coerce.number().positive().max(10_000_000);
+const fields = {
+  name: z.string().trim().min(1).max(80),
+  basePrice,
+  maxOccupancy: z.coerce.number().int().min(1).max(20),
+  amenities: z.array(z.string().max(40)).max(30),
+  description: z.string().max(500),
+};
+
+const createSchema = z.object({
+  name: fields.name,
+  basePrice: fields.basePrice,
+  maxOccupancy: fields.maxOccupancy.optional().default(2),
+  amenities: fields.amenities.optional().default([]),
+  description: fields.description.optional().default(''),
+});
+
+const updateSchema = z.object({
+  id: z.string().uuid(),
+  name: fields.name.optional(),
+  basePrice: fields.basePrice.optional(),
+  maxOccupancy: fields.maxOccupancy.optional(),
+  amenities: fields.amenities.optional(),
+  description: fields.description.optional(),
+});
+
+export async function GET() {
   try {
-    const context = await requireTenantContext();
-    const { tenantId } = context;
-
-    const tenantProperties = await db.query.properties.findMany({
-      where: eq(properties.tenantId, tenantId),
+    const { tenantId } = await requireTenant();
+    const all = await db.query.roomTypes.findMany({
+      where: eq(roomTypes.tenantId, tenantId),
+      orderBy: (t, { asc }) => [asc(t.name)],
     });
-
-    if (tenantProperties.length === 0) {
-      return NextResponse.json([]);
-    }
-
-    const propertyIds = tenantProperties.map(p => p.id);
-
-    const allRoomTypes = await db.query.roomTypes.findMany({
-      where: inArray(roomTypes.propertyId, propertyIds),
-      orderBy: (roomTypes, { asc }) => [asc(roomTypes.name)],
-    });
-
-    return NextResponse.json(allRoomTypes);
+    return NextResponse.json(all);
   } catch (error) {
-    console.error('Get room types error:', error);
-    return NextResponse.json({ error: 'Failed to fetch room types' }, { status: 500 });
+    return handleError(error, 'Failed to fetch room types');
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const context = await requireTenantContext();
-    const { tenantId } = context;
-    const body = await request.json();
-    const { name, basePrice, maxOccupancy, amenities, description } = body;
+    const { tenantId } = await requireTenant(ROLES.manage);
+    const body = await parseJson(request, createSchema);
 
-    if (!name || !basePrice) {
-      return NextResponse.json({ error: 'Name and base price are required' }, { status: 400 });
-    }
-
-    // Get tenant's first property
-    const property = await db.query.properties.findFirst({
-      where: eq(properties.tenantId, tenantId),
-    });
-
-    if (!property) {
-      return NextResponse.json({ error: 'No property found' }, { status: 400 });
-    }
+    const property = await firstProperty(tenantId);
+    if (!property) throw badRequest('No property found');
 
     const [roomType] = await db.insert(roomTypes).values({
+      tenantId,
       propertyId: property.id,
-      name,
-      basePrice: basePrice.toString(),
-      maxOccupancy: maxOccupancy || 2,
-      amenities: amenities || [],
-      description: description || '',
+      name: body.name,
+      basePrice: body.basePrice.toFixed(2),
+      maxOccupancy: body.maxOccupancy,
+      amenities: body.amenities,
+      description: body.description,
     }).returning();
 
     return NextResponse.json({ success: true, roomType });
   } catch (error) {
-    console.error('Create room type error:', error);
-    return NextResponse.json({ error: 'Failed to create room type' }, { status: 500 });
+    return handleError(error, 'Failed to create room type');
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    await requireTenantContext();
-    const body = await request.json();
-    const { id, name, basePrice, maxOccupancy, amenities, description } = body;
+    const { tenantId } = await requireTenant(ROLES.manage);
+    const { id, basePrice: price, ...rest } = await parseJson(request, updateSchema);
 
-    if (!id) {
-      return NextResponse.json({ error: 'Room type ID required' }, { status: 400 });
+    const updates: Partial<typeof roomTypes.$inferInsert> = {};
+    for (const [key, value] of Object.entries(rest)) {
+      if (value !== undefined) (updates as Record<string, unknown>)[key] = value;
     }
+    if (price !== undefined) updates.basePrice = price.toFixed(2);
+    if (Object.keys(updates).length === 0) return NextResponse.json({ success: true });
 
-    await db.update(roomTypes)
-      .set({
-        ...(name && { name }),
-        ...(basePrice && { basePrice: basePrice.toString() }),
-        ...(maxOccupancy && { maxOccupancy }),
-        ...(amenities && { amenities }),
-        ...(description !== undefined && { description }),
-      })
-      .where(eq(roomTypes.id, id));
+    const rows = await db.update(roomTypes)
+      .set(updates)
+      .where(and(eq(roomTypes.id, id), eq(roomTypes.tenantId, tenantId)))
+      .returning({ id: roomTypes.id });
+    if (!rows[0]) throw notFound('Room type');
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Update room type error:', error);
-    return NextResponse.json({ error: 'Failed to update room type' }, { status: 500 });
+    return handleError(error, 'Failed to update room type');
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    await requireTenantContext();
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const { tenantId } = await requireTenant(ROLES.manage);
+    const id = assertUuid(new URL(request.url).searchParams.get('id'), 'Room type');
 
-    if (!id) {
-      return NextResponse.json({ error: 'Room type ID required' }, { status: 400 });
-    }
-
-    await db.delete(roomTypes).where(eq(roomTypes.id, id));
+    const rows = await db.delete(roomTypes)
+      .where(and(eq(roomTypes.id, id), eq(roomTypes.tenantId, tenantId)))
+      .returning({ id: roomTypes.id });
+    if (!rows[0]) throw notFound('Room type');
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Delete room type error:', error);
-    return NextResponse.json({ error: 'Failed to delete room type' }, { status: 500 });
+    return handleError(error, 'Failed to delete room type');
   }
 }
+
+export const dynamic = 'force-dynamic';

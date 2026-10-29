@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { properties, rooms, bookings, orders, outlets } from '@/db/schema';
 import { eq, and, gte, lte, inArray } from 'drizzle-orm';
-import { requireTenantContext } from '@/lib/auth';
+import { requireTenant } from '@/lib/auth';
+import { startOfDayInZone, startOfNextDayInZone } from '@/lib/tz';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -10,7 +11,7 @@ export const revalidate = 0;
 export async function GET(request: NextRequest) {
   try {
     // Get tenant context from user's Clerk metadata
-    const context = await requireTenantContext();
+    const context = await requireTenant();
     const { tenantId } = context;
 
     // Get all properties for this tenant
@@ -45,10 +46,9 @@ export async function GET(request: NextRequest) {
 
     const propertyIds = tenantProperties.map(p => p.id);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // "Today" is the hotel's day, not the server's.
+    const today = startOfDayInZone(context.timezone);
+    const tomorrow = startOfNextDayInZone(context.timezone);
 
     // Get all rooms for occupancy calculation
     const allRooms = await db.query.rooms.findMany({
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
       activeOrders = await db.query.orders.findMany({
         where: and(
           inArray(orders.outletId, outletIds),
-          inArray(orders.status, ['new', 'acknowledged', 'preparing', 'ready', 'delivered'])
+          inArray(orders.status, ['new', 'acknowledged', 'preparing', 'ready', 'served'])
         ),
       });
       recentOrdersList = await db.query.orders.findMany({

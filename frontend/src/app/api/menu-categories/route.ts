@@ -1,87 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { and, eq } from 'drizzle-orm';
+import { z } from 'zod';
 import { db } from '@/db';
-import { menuCategories, outlets, properties } from '@/db/schema';
-import { eq, inArray } from 'drizzle-orm';
-import { requireTenantContext } from '@/lib/auth';
+import { menuCategories } from '@/db/schema';
+import { ROLES, requireTenant } from '@/lib/auth';
+import { assertUuid, badRequest, handleError, notFound, parseJson } from '@/lib/http';
+import { firstOutlet } from '@/lib/tenant-scope';
 
-export async function GET(request: NextRequest) {
+const createSchema = z.object({ name: z.string().trim().min(1).max(80) });
+
+export async function GET() {
   try {
-    const context = await requireTenantContext();
-    const { tenantId } = context;
-
-    const tenantProperties = await db.query.properties.findMany({
-      where: eq(properties.tenantId, tenantId),
-    });
-    if (tenantProperties.length === 0) return NextResponse.json([]);
-
-    const propertyIds = tenantProperties.map(p => p.id);
-    const tenantOutlets = await db.query.outlets.findMany({
-      where: inArray(outlets.propertyId, propertyIds),
-    });
-    if (tenantOutlets.length === 0) return NextResponse.json([]);
-
-    const outletIds = tenantOutlets.map(o => o.id);
+    const { tenantId } = await requireTenant();
     const categories = await db.query.menuCategories.findMany({
-      where: inArray(menuCategories.outletId, outletIds),
-      orderBy: (cat, { asc }) => [asc(cat.sortOrder)],
+      where: eq(menuCategories.tenantId, tenantId),
+      orderBy: (c, { asc }) => [asc(c.sortOrder)],
     });
-
     return NextResponse.json(categories);
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch categories' }, { status: 500 });
+    return handleError(error, 'Failed to fetch categories');
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const context = await requireTenantContext();
-    const { tenantId } = context;
-    const body = await request.json();
-    const { name } = body;
+    const { tenantId } = await requireTenant(ROLES.manage);
+    const { name } = await parseJson(request, createSchema);
 
-    if (!name) {
-      return NextResponse.json({ error: 'Category name is required' }, { status: 400 });
-    }
+    const outlet = await firstOutlet(tenantId);
+    if (!outlet) throw badRequest('No outlet found. Create a restaurant outlet first.');
 
-    // Get first outlet
-    const tenantProperties = await db.query.properties.findMany({
-      where: eq(properties.tenantId, tenantId),
-    });
-    if (tenantProperties.length === 0) {
-      return NextResponse.json({ error: 'No property found' }, { status: 400 });
-    }
-
-    const tenantOutlets = await db.query.outlets.findMany({
-      where: inArray(outlets.propertyId, tenantProperties.map(p => p.id)),
-    });
-    if (tenantOutlets.length === 0) {
-      return NextResponse.json({ error: 'No outlet found. Create a restaurant outlet first.' }, { status: 400 });
-    }
-
-    const [category] = await db.insert(menuCategories).values({
-      outletId: tenantOutlets[0].id,
-      name,
-    }).returning();
-
+    const [category] = await db.insert(menuCategories).values({ tenantId, outletId: outlet.id, name }).returning();
     return NextResponse.json({ success: true, category });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to create category' }, { status: 500 });
+    return handleError(error, 'Failed to create category');
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    await requireTenantContext();
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const { tenantId } = await requireTenant(ROLES.manage);
+    const id = assertUuid(new URL(request.url).searchParams.get('id'), 'Category');
 
-    if (!id) {
-      return NextResponse.json({ error: 'Category ID required' }, { status: 400 });
-    }
+    const rows = await db.delete(menuCategories)
+      .where(and(eq(menuCategories.id, id), eq(menuCategories.tenantId, tenantId)))
+      .returning({ id: menuCategories.id });
+    if (!rows[0]) throw notFound('Category');
 
-    await db.delete(menuCategories).where(eq(menuCategories.id, id));
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to delete category' }, { status: 500 });
+    return handleError(error, 'Failed to delete category');
   }
 }
+
+export const dynamic = 'force-dynamic';

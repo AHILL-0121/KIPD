@@ -34,7 +34,6 @@ export function useUPIPayment() {
         const setupListener = async () => {
             try {
                 listenerObj = await PaymentNotification.addListener('onPaymentReceived', (event) => {
-                    console.log('UPI Payment received event payload:', event);
                     setLatestPayment(event);
                 });
             } catch (error) {

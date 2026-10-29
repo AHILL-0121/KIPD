@@ -383,7 +383,7 @@ export default function TenantsPage() {
                 </div>
 
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
-                  <p className="text-amber-900">⚠️ Make sure to save these credentials! They won't be shown again.</p>
+                  <p className="text-amber-900">⚠️ Make sure to save these credentials! They won&apos;t be shown again.</p>
                 </div>
               </div>
 

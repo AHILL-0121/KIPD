@@ -365,7 +365,7 @@ export default function OrdersPage() {
               <div className="flex justify-between items-center mb-6 shrink-0">
                 <div>
                   <h2 className="font-serif text-2xl font-bold">Fire Ticket to KDS</h2>
-                  <p className="text-sm text-ink-muted">Add items to a table's running tab.</p>
+                  <p className="text-sm text-ink-muted">Add items to a table&apos;s running tab.</p>
                 </div>
                 <button onClick={() => setShowCreate(false)} className="bg-stone-100 p-2 rounded-full hover:bg-stone-200"><X className="w-5 h-5" /></button>
               </div>

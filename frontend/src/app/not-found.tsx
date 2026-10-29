@@ -101,7 +101,7 @@ export default function NotFound() {
         </h1>
         
         <p className="text-lg text-ink-muted mb-12 max-w-md mx-auto leading-relaxed">
-          The page you're looking for doesn't exist or has been moved. 
+          The page you&apos;re looking for doesn&apos;t exist or has been moved. 
           Let me help you find your way back!
         </p>
         

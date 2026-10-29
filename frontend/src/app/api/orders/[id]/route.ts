@@ -1,31 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { orders } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import { requireTenantContext } from '@/lib/auth';
+import { z } from 'zod';
+import { ROLES, requireTenant } from '@/lib/auth';
+import { handleError, parseJson } from '@/lib/http';
+import { ORDER_STATUS_INPUT, setOrderStatus } from '@/lib/order-events';
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+const schema = z.object({ status: z.enum(ORDER_STATUS_INPUT) });
+
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    await requireTenantContext();
-    const { id } = params;
-    const body = await request.json();
-    const { status } = body;
-
-    const validStatuses = ['new', 'acknowledged', 'preparing', 'ready', 'served', 'cancelled'];
-    if (!validStatuses.includes(status)) {
-      return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
-    }
-
-    await db.update(orders)
-      .set({ status, updatedAt: new Date() })
-      .where(eq(orders.id, id));
-
+    const { tenantId } = await requireTenant(ROLES.kitchen);
+    const { status } = await parseJson(request, schema);
+    await setOrderStatus(tenantId, params.id, status);
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Update order error:', error);
-    return NextResponse.json({ error: 'Failed to update order' }, { status: 500 });
+    return handleError(error, 'Failed to update order');
   }
 }

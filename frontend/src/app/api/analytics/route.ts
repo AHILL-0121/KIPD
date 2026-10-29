@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { bookings, orders, bills, properties, outlets, tables } from '@/db/schema';
 import { eq, and, gte, lte, inArray } from 'drizzle-orm';
-import { requireTenantContext } from '@/lib/auth';
+import { requireTenant } from '@/lib/auth';
+import { startOfDayInZone } from '@/lib/tz';
 
 export async function GET(request: NextRequest) {
   try {
-    const context = await requireTenantContext();
+    const context = await requireTenant();
     const { tenantId } = context;
 
     const { searchParams } = new URL(request.url);
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     switch (range) {
       case 'day':
-        startDate.setHours(0, 0, 0, 0);
+        startDate = startOfDayInZone(context.timezone);
         break;
       case 'week':
         startDate.setDate(now.getDate() - 7);

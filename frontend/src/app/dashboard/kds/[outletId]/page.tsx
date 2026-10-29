@@ -70,7 +70,7 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
     return () => eventSource.close();
   }, [params.outletId]);
 
-  const updateStatus = async (orderId: string, newStatus: string) => {
+  const updateStatus = async (orderId: string, newStatus: KDSOrder['status']) => {
     // Instantly commit optimistic update so the UI feels native
     setOrders(prev => {
       if (newStatus === 'ready') return prev.filter(o => o.id !== orderId);

@@ -198,7 +198,7 @@ export default function BillingPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-3xl font-bold text-ink mb-1">{formatCurrency(recentPaid.reduce((sum, b) => sum + b.totalAmount, 0))}</div>
-              <div className="text-sm text-ink-muted">Today's Collections</div>
+              <div className="text-sm text-ink-muted">Today&apos;s Collections</div>
             </div>
             <CreditCard className="w-8 h-8 text-terra" />
           </div>

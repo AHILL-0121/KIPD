@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import { db } from '@/db';
 import { payments, bills } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
@@ -40,9 +40,10 @@ export async function POST(request: NextRequest) {
 
         if (payment) {
           // Update bill status
+          // Record the amount and time too, not just the status (a "paid" bill with 0 paid was misleading).
           await db.update(bills)
-            .set({ status: 'paid' })
-            .where(eq(bills.id, payment.billId));
+            .set({ status: 'paid', paidAmount: sql`${bills.totalAmount}`, settledAt: new Date() })
+            .where(and(eq(bills.id, payment.billId), eq(bills.tenantId, payment.tenantId)));
         }
         
         break;

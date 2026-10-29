@@ -25,20 +25,14 @@ export default function OnboardingPage() {
 
     const metadata = user.publicMetadata as { platform_admin?: boolean; tenant_id?: string };
     
-    console.log('🔍 Onboarding - User metadata:', metadata);
-    console.log('🔍 platform_admin:', metadata?.platform_admin, 'type:', typeof metadata?.platform_admin);
-    console.log('🔍 tenant_id:', metadata?.tenant_id);
     
     // If user has platform_admin or tenant_id, redirect them
     if (metadata?.platform_admin === true) {
-      console.log('✅ Redirecting to /admin/tenants');
       router.push('/admin/tenants');
     } else if (metadata?.tenant_id) {
-      console.log('✅ Redirecting to /dashboard');
       router.push('/dashboard');
     } else {
       // User has no permissions, show onboarding
-      console.log('ℹ️ No permissions, showing onboarding');
       setLoading(false);
     }
   }, [user, isLoaded, router]);
@@ -69,7 +63,7 @@ export default function OnboardingPage() {
             <Crown className="h-8 w-8 text-amber mx-auto mb-3" />
             <h3 className="font-semibold text-ink mb-2">Platform Admin</h3>
             <p className="text-sm text-ink-muted">
-              If you're setting up Kipd for the first time, you need platform admin access.
+              If you&apos;re setting up Kipd for the first time, you need platform admin access.
             </p>
           </Card>
 
@@ -77,7 +71,7 @@ export default function OnboardingPage() {
             <Users className="h-8 w-8 text-sage mx-auto mb-3" />
             <h3 className="font-semibold text-ink mb-2">Staff Member</h3>
             <p className="text-sm text-ink-muted">
-              If you're joining an existing hotel/restaurant, ask your manager to invite you.
+              If you&apos;re joining an existing hotel/restaurant, ask your manager to invite you.
             </p>
           </Card>
         </div>
@@ -91,7 +85,7 @@ export default function OnboardingPage() {
                 <li>Go to <a href="https://dashboard.clerk.com" target="_blank" rel="noopener" className="text-amber-deep hover:underline">Clerk Dashboard</a></li>
                 <li>Select your Kipd app → <strong>Users</strong></li>
                 <li>Click your user (email: <strong>{user?.primaryEmailAddress?.emailAddress}</strong>)</li>
-                <li>Add to <strong>Public metadata</strong>: <code className="bg-white px-2 py-0.5 rounded">{"{"}"platform_admin": true{"}"}</code></li>
+                <li>Add to <strong>Public metadata</strong>: <code className="bg-white px-2 py-0.5 rounded">{"{"}&quot;platform_admin&quot;: true{"}"}</code></li>
                 <li>Save and refresh this page</li>
               </ol>
             </div>
@@ -103,7 +97,7 @@ export default function OnboardingPage() {
             variant="primary" 
             onClick={() => window.location.reload()}
           >
-            I've Updated My Permissions
+            I&apos;ve Updated My Permissions
           </Button>
           
           <Button 

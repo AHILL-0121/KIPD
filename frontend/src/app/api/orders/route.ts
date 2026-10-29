@@ -1,169 +1,98 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { and, eq, notInArray } from 'drizzle-orm';
+import { z } from 'zod';
 import { db } from '@/db';
-import { orders, orderItems, menuItems, outlets, properties } from '@/db/schema';
-import { eq, inArray, and, ne } from 'drizzle-orm';
-import { requireTenantContext } from '@/lib/auth';
-import { broadcastOrderUpdate } from '@/app/api/sse/kds/[outletId]/route';
-
-
-export async function POST(request: NextRequest) {
-  try {
-    const context = await requireTenantContext();
-    const { tenantId } = context;
-    const body = await request.json();
-    const { tableId, roomId, type, items: orderItemsData, specialInstructions } = body;
-
-    // Get tenant outlets
-    const tenantProperties = await db.query.properties.findMany({
-      where: eq(properties.tenantId, tenantId),
-    });
-    if (tenantProperties.length === 0) {
-      return NextResponse.json({ error: 'No property found' }, { status: 404 });
-    }
-    const propertyIds = tenantProperties.map(p => p.id);
-    const tenantOutlets = await db.query.outlets.findMany({
-      where: inArray(outlets.propertyId, propertyIds),
-    });
-    if (tenantOutlets.length === 0) {
-      return NextResponse.json({ error: 'No outlet found' }, { status: 404 });
-    }
-    const outletId = tenantOutlets[0].id;
-
-    // Calculate total
-    let totalAmount = 0;
-    for (const item of orderItemsData) {
-      const menuItem = await db.query.menuItems.findFirst({
-        where: eq(menuItems.id, item.menuItemId),
-      });
-      if (menuItem) {
-        totalAmount += Number(menuItem.price) * item.quantity;
-      }
-    }
-
-    // Create order
-    const [order] = await db.insert(orders).values({
-      outletId,
-      tableId: tableId || null,
-      roomId: roomId || null,
-      type: type || (tableId ? 'dine_in' : 'room_service'),
-      status: 'new',
-      totalAmount: totalAmount.toString(),
-      specialInstructions: specialInstructions || null,
-    }).returning();
-
-    // Create order items
-    for (const item of orderItemsData) {
-      const menuItem = await db.query.menuItems.findFirst({
-        where: eq(menuItems.id, item.menuItemId),
-      });
-      if (menuItem) {
-        await db.insert(orderItems).values({
-          orderId: order.id,
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          price: menuItem.price,
-          notes: item.notes || null,
-        });
-      }
-    }
-
-    // Immediately fetch the fully mapped ticket we just constructed
-    const fullOrder = await db.query.orders.findFirst({
-      where: eq(orders.id, order.id),
-      with: {
-        table: true,
-        room: true,
-        orderItems: {
-          with: { menuItem: true },
-        },
-      },
-    });
-
-    // Seamlessly map it to the KDS layout specification and broadcast it to the Server-Sent Event Pipe!
-    if (fullOrder) {
-      const kdsOrder = {
-        id: fullOrder.id,
-        type: fullOrder.type,
-        tableNumber: fullOrder.table?.tableNumber,
-        roomNumber: fullOrder.room?.roomNumber,
-        status: fullOrder.status,
-        specialInstructions: fullOrder.specialInstructions,
-        createdAt: fullOrder.createdAt,
-        items: fullOrder.orderItems.map((oi: any) => ({
-          name: oi.menuItem?.name || 'Unknown Item',
-          quantity: oi.quantity,
-          notes: oi.notes,
-        })),
-      };
-
-      try {
-        // Trigger realtime physical browser refresh for all connected iPads locally
-        broadcastOrderUpdate(outletId, kdsOrder);
-        // Also fire globally to the Tenant's unified dashboard channel (for Waiters/Billing)
-        broadcastOrderUpdate(tenantId, kdsOrder);
-      } catch (skip) { }
-    }
-
-    return NextResponse.json({ success: true, orderId: order.id });
-  } catch (error) {
-    console.error('Order creation error:', error);
-    return NextResponse.json({ error: 'Failed to create order' }, { status: 500 });
-  }
-}
+import { orderItems, orders } from '@/db/schema';
+import { ROLES, requireTenant } from '@/lib/auth';
+import { badRequest, handleError, parseJson } from '@/lib/http';
+import { publishOrder } from '@/lib/order-events';
+import { firstOutlet, ownedMenuItems, ownedRoom, ownedTable } from '@/lib/tenant-scope';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function GET(request: NextRequest) {
+const createSchema = z.object({
+  type: z.enum(['dine_in', 'room_service']).optional(),
+  tableId: z.string().uuid().nullish(),
+  roomId: z.string().uuid().nullish(),
+  specialInstructions: z.string().max(500).nullish(),
+  items: z.array(z.object({
+    menuItemId: z.string().uuid(),
+    quantity: z.number().int().min(1).max(99),
+    notes: z.string().max(200).nullish(),
+  })).min(1).max(60),
+});
+
+export async function POST(request: NextRequest) {
   try {
-    const context = await requireTenantContext();
-    const { tenantId } = context;
+    const { tenantId } = await requireTenant(ROLES.orders);
+    const body = await parseJson(request, createSchema);
 
-    // Get all properties for this tenant
-    const tenantProperties = await db.query.properties.findMany({
-      where: eq(properties.tenantId, tenantId),
-    });
+    // 1. Where does the order go? A table fixes the outlet; otherwise the tenant's first outlet.
+    let outletId: string;
+    if (body.tableId) {
+      outletId = (await ownedTable(tenantId, body.tableId)).outletId;
+    } else {
+      const outlet = await firstOutlet(tenantId);
+      if (!outlet) throw badRequest('No outlet found');
+      outletId = outlet.id;
+    }
+    if (body.roomId) await ownedRoom(tenantId, body.roomId);
 
-    if (tenantProperties.length === 0) {
-      return NextResponse.json([]);
+    // 2. Every item must be on this tenant's menu, in this outlet, and available. Prices come from the DB.
+    const ids = [...new Set(body.items.map((i) => i.menuItemId))];
+    const found = await ownedMenuItems(tenantId, ids);
+    const byId = new Map(found.map((m) => [m.id, m]));
+    for (const id of ids) {
+      const item = byId.get(id);
+      if (!item || item.outletId !== outletId) throw badRequest('One or more items are not on the menu for this outlet');
+      if (item.isAvailable === false) throw badRequest(`${item.name} is currently unavailable`);
     }
 
-    const propertyIds = tenantProperties.map(p => p.id);
+    // 3. Total in whole paise so floats can't drift.
+    const paise = body.items.reduce((sum, i) => sum + Math.round(Number(byId.get(i.menuItemId)!.price) * 100) * i.quantity, 0);
 
-    // Get all outlets for these properties
-    const tenantOutlets = await db.query.outlets.findMany({
-      where: inArray(outlets.propertyId, propertyIds),
-    });
+    // 4. Order and its items are written together or not at all.
+    const orderId = crypto.randomUUID();
+    await db.batch([
+      db.insert(orders).values({
+        id: orderId,
+        tenantId,
+        outletId,
+        tableId: body.tableId ?? null,
+        roomId: body.roomId ?? null,
+        type: body.type ?? (body.tableId ? 'dine_in' : 'room_service'),
+        status: 'new',
+        totalAmount: (paise / 100).toFixed(2),
+        specialInstructions: body.specialInstructions ?? null,
+      }),
+      db.insert(orderItems).values(body.items.map((i) => ({
+        tenantId,
+        orderId,
+        menuItemId: i.menuItemId,
+        quantity: i.quantity,
+        price: byId.get(i.menuItemId)!.price,
+        notes: i.notes ?? null,
+      }))),
+    ]);
 
-    if (tenantOutlets.length === 0) {
-      return NextResponse.json([]);
-    }
-
-    const outletIds = tenantOutlets.map(o => o.id);
-
-    const allOrders = await db.query.orders.findMany({
-      where: and(
-        inArray(orders.outletId, outletIds),
-        ne(orders.status, 'closed'),
-        ne(orders.status, 'cancelled')
-      ),
-      with: {
-        orderItems: {
-          with: {
-            menuItem: true,
-          },
-        },
-        table: true,
-      },
-      orderBy: (orders, { desc }) => [desc(orders.createdAt)],
-    });
-
-    return NextResponse.json(allOrders);
+    await publishOrder(tenantId, orderId);
+    return NextResponse.json({ success: true, orderId });
   } catch (error) {
-    console.error('Get orders error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch orders' },
-      { status: 500 }
-    );
+    return handleError(error, 'Failed to create order');
+  }
+}
+
+export async function GET() {
+  try {
+    const { tenantId } = await requireTenant(ROLES.kitchen);
+    const all = await db.query.orders.findMany({
+      where: and(eq(orders.tenantId, tenantId), notInArray(orders.status, ['closed', 'cancelled'])),
+      with: { orderItems: { with: { menuItem: true } }, table: true },
+      orderBy: (o, { desc }) => [desc(o.createdAt)],
+    });
+    return NextResponse.json(all);
+  } catch (error) {
+    return handleError(error, 'Failed to fetch orders');
   }
 }

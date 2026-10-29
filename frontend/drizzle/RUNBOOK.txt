@@ -1,0 +1,68 @@
+DATABASE: RUNBOOK
+=================
+
+What is in this folder
+  0000_init.sql    The whole schema, generated from src/db/schema.ts. One migration, because the database
+                   was started from scratch (there was no data to preserve).
+  meta/            Drizzle's snapshots. Commit them. Never edit by hand.
+
+How the database protects tenants (so you know what you can rely on)
+  Every tenant-owned table has tenant_id NOT NULL. Foreign keys between them are composite
+  (tenant_id, parent_id) -> parent(tenant_id, id), so a row can never reference another tenant's parent,
+  even if application code has a bug. tests/integrity.test.ts tries 12 such attacks against the real schema.
+
+NEW environments (dev, CI, a preview, a new customer database)
+  npm run db:migrate          Creates everything. Nothing else is needed.
+
+THE ONE-TIME FRESH START OF THE EXISTING DATABASE
+  This DELETES ALL DATA in the database named by DATABASE_URL (.env.local). Nothing here has been run for you.
+
+  0. REHEARSE FIRST, on a copy.
+     In the Neon console create a BRANCH of your database and put the branch's connection string in .env.local.
+     Do steps 1 to 4 on the branch. Check the app against it (a Vercel preview deployment can point at it).
+     Only when that is clean, put the real connection string back and repeat on the real database.
+     (Never rehearsed: `drizzle-kit migrate` itself against Neon. This is the step that finds out.)
+
+  1. See what would be deleted (changes nothing):
+       npm run db:reset
+     It prints the database host and every table with its row count, then refuses to continue.
+
+  2. Delete everything. Retype the host it printed:
+       npm run db:reset -- --confirm=<the host>
+     Wrong or missing host: it refuses. After this the database is empty.
+
+  3. Rebuild:
+       npm run db:migrate
+       npm run db:drift          must print "OK"
+
+  4. Deploy the new application code. The old code does NOT work with the new schema (and the new code does
+     not work with the old one), so steps 2 to 4 should be done close together. Expect a few minutes during
+     which the app is unavailable.
+
+  5. Recreate your tenants.
+     Logins live in Clerk and were not touched. The platform-admin flag is also in Clerk, so existing
+     platform admins still work. Sign in, open /admin, create each tenant again using the owner's EXISTING
+     email: the owner's login is relinked to the new tenant automatically.
+     Until you do, an owner is told "This account no longer exists".
+     Staff must be invited again (their records were in the database).
+     If you ever need a brand new platform admin:
+       npm run admin:create -- person@example.com          (shows who it would change)
+       npm run admin:create -- person@example.com --yes    (does it)
+
+CHANGING THE SCHEMA LATER
+  1. Edit src/db/schema.ts
+  2. npm run db:generate -- --name what_changed       (writes drizzle/NNNN_what_changed.sql)
+  3. READ the SQL. If it adds a rule that existing data could break (a new NOT NULL, UNIQUE or CHECK),
+     put a pre-flight at the top of the file that fixes or reports bad rows with a clear message, and add a
+     test for it. (Earlier in this project's history, migration 0001 did exactly this; see git history.)
+  4. npm test           (the tests build their database from these files, so they test the migration)
+  5. Commit the .sql, meta/ and schema.ts together.
+  6. Rehearse on a Neon branch, then npm run db:migrate on the real database.
+
+  Never run `drizzle-kit push` against production: it changes the database without leaving a record.
+  Migrations only go forward. To undo one, restore a Neon branch or point-in-time.
+
+CHECKING FOR DRIFT (read-only, any time)
+  npm run db:drift
+  Compares the live database with schema.ts: tables, columns, types, NOT NULL, indexes, check constraints,
+  unique constraints and foreign keys. Exit code 1 means someone changed the database by hand.

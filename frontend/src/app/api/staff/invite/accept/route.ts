@@ -1,51 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { staff } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
+import { z } from 'zod';
+import { clerkClient } from '@clerk/nextjs';
 import { auth } from '@clerk/nextjs/server';
+import { db } from '@/db';
+import { staff, staffInvites } from '@/db/schema';
+import { HttpError, handleError, parseJson, unauthorized } from '@/lib/http';
+import { hashInviteToken, isInviteToken } from '@/lib/invites';
+
+const schema = z.object({ token: z.string().refine(isInviteToken, 'Invalid invite token') });
 
 export async function POST(request: NextRequest) {
-    try {
-        const { userId } = auth();
-        if (!userId) {
-            return NextResponse.json({ error: 'You must be logged in to accept an invitation.' }, { status: 401 });
-        }
+  try {
+    const { userId } = auth();
+    if (!userId) throw unauthorized();
 
-        const body = await request.json();
-        const { token } = body;
+    const { token } = await parseJson(request, schema);
 
-        if (!token) {
-            return NextResponse.json({ error: 'Missing invite token.' }, { status: 400 });
-        }
+    const [invite] = await db.select().from(staffInvites)
+      .where(and(eq(staffInvites.tokenHash, hashInviteToken(token)), isNull(staffInvites.acceptedAt))).limit(1);
+    if (!invite) throw new HttpError(404, 'Invitation not found or already accepted.');
+    if (invite.expiresAt.getTime() < Date.now()) throw new HttpError(410, 'This invitation has expired. Ask your manager to send a new one.');
 
-        // Find the pending staff record
-        const [pendingStaff] = await db.query.staff.findMany({
-            where: and(
-                eq(staff.clerkId, `pending_${token}`),
-                eq(staff.isActive, false)
-            ),
-        });
-
-        if (!pendingStaff) {
-            return NextResponse.json({ error: 'Invitation not found or already accepted.' }, { status: 404 });
-        }
-
-        // Verify if this real ClerkUser is already a staff member globally? 
-        // Usually, you should ensure they don't accept multiple invites for the same tenant.
-
-        // 1. Swap the pending_token with their REAL authenticated Clerk ID!
-        // 2. Mark the account active to officially grant Dashboard Access!
-        await db.update(staff)
-            .set({
-                clerkId: userId,
-                isActive: true,
-                updatedAt: new Date()
-            })
-            .where(eq(staff.id, pendingStaff.id));
-
-        return NextResponse.json({ success: true, role: pendingStaff.role });
-    } catch (error) {
-        console.error('Invite Acceptance Error:', error);
-        return NextResponse.json({ error: 'Failed to accept invitation.' }, { status: 500 });
+    // The invitation is for one email address. The person accepting must be signed in with that address,
+    // and Clerk must have verified it. Otherwise anyone who got hold of the link could take the seat.
+    const user = await clerkClient.users.getUser(userId);
+    const verified = (user.emailAddresses ?? [])
+      .filter((e) => e.verification?.status === 'verified')
+      .map((e) => e.emailAddress.toLowerCase());
+    if (!verified.includes(invite.email.toLowerCase())) {
+      throw new HttpError(403, 'This invitation was sent to a different email address. Sign in with the address that received it.');
     }
+
+    // One login can belong to one workplace.
+    const [existing] = await db.select({ id: staff.id }).from(staff).where(eq(staff.clerkId, userId)).limit(1);
+    if (existing) throw new HttpError(409, 'This account already belongs to a team.');
+
+    await db.batch([
+      db.insert(staff).values({
+        tenantId: invite.tenantId, clerkId: userId, email: invite.email, name: invite.name, role: invite.role, isActive: true,
+      }),
+      db.update(staffInvites).set({ acceptedAt: new Date() }).where(eq(staffInvites.id, invite.id)),
+    ]);
+    return NextResponse.json({ success: true, role: invite.role });
+  } catch (error) {
+    return handleError(error, 'Failed to accept invitation.');
+  }
 }

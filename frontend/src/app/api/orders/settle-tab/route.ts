@@ -1,126 +1,85 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { and, eq, inArray, notInArray } from 'drizzle-orm';
+import { z } from 'zod';
 import { db } from '@/db';
-import { orders, bills, payments, guests } from '@/db/schema';
-import { eq, and, ne } from 'drizzle-orm';
-import { requireTenantContext } from '@/lib/auth';
-import { broadcastOrderUpdate } from '@/app/api/sse/kds/[outletId]/route';
+import { bills, guests, orders } from '@/db/schema';
+import { ROLES, requireTenant } from '@/lib/auth';
+import { badRequest, handleError, parseJson } from '@/lib/http';
+import { broadcastOrderUpdate } from '@/lib/realtime';
+import { ownedTable } from '@/lib/tenant-scope';
+
+const schema = z.object({
+  tableId: z.string().uuid(),
+  paymentMethod: z.enum(['cash', 'upi']).optional(),
+});
+
+const GST_HALF = 0.025; // 2.5% CGST + 2.5% SGST. Hard-coded for now (checklist section 7).
 
 export async function POST(request: NextRequest) {
-    try {
-        const context = await requireTenantContext();
-        const body = await request.json();
-        const { tableId, paymentMethod } = body;
+  try {
+    const context = await requireTenant(ROLES.billing);
+    const { tenantId } = context;
+    const { tableId } = await parseJson(request, schema);
 
-        if (!tableId) {
-            return NextResponse.json({ error: 'Table ID is required' }, { status: 400 });
-        }
+    // The table must belong to this tenant. Everything below hangs off it.
+    const table = await ownedTable(tenantId, tableId);
 
-        // A real POS would generate a 'Bill' record here.
-        // Since our bills table strictly requires a Hotel Booking guest_id, 
-        // for this restaurant 'Walk-In' POS flow, we will simply close the active tickets.
-        // Future Expansion: Create a 'Walk-in' guest profile to map the revenue formally.
+    const openOrders = await db.query.orders.findMany({
+      where: and(eq(orders.tenantId, tenantId), eq(orders.tableId, table.id), notInArray(orders.status, ['cancelled', 'closed'])),
+      with: { orderItems: { with: { menuItem: true } } },
+    });
+    if (openOrders.length === 0) throw badRequest('No active tickets on this table to settle.');
 
-        // Get all unpaid orders for this table (including 'served' food that hasn't been billed yet)
-        const openOrders = await db.query.orders.findMany({
-            where: and(
-                eq(orders.tableId, tableId),
-                ne(orders.status, 'cancelled'),
-                ne(orders.status, 'closed')
-            ),
-            with: {
-                orderItems: {
-                    with: { menuItem: true }
-                }
-            }
-        });
-
-        if (openOrders.length === 0) {
-            return NextResponse.json({ error: 'No active tickets on this table to settle.' }, { status: 400 });
-        }
-
-        // 1. Calculate Tab Total & Condense the Order Items for the Receipt!
-        let subtotalAmount = 0;
-        const itemsMap = new Map<string, { qty: number; rate: number; amt: number; name: string }>();
-
-        for (const order of openOrders) {
-            // Because order.totalAmount might not precisely match our raw items if someone modified the DB, we recalculate from raw to be strictly legally safe.
-            for (const item of order.orderItems) {
-                const rate = Number(item.price);
-                const amt = rate * item.quantity;
-                subtotalAmount += amt;
-
-                const name = item.menuItem?.name || 'Custom Item';
-                if (itemsMap.has(name)) {
-                    const existing = itemsMap.get(name)!;
-                    existing.qty += item.quantity;
-                    existing.amt += amt;
-                } else {
-                    itemsMap.set(name, { qty: item.quantity, rate, amt, name });
-                }
-            }
-        }
-
-        // Compute Indian Taxes (2.5% CGST + 2.5% SGST)
-        const cgst = Number((subtotalAmount * 0.025).toFixed(2));
-        const sgst = Number((subtotalAmount * 0.025).toFixed(2));
-        const totalAmount = Math.round(subtotalAmount + cgst + sgst); // Round to nearest Indian Rupee
-
-        // Build the physical structured payload for the Thermal Printer
-        const receiptBreakdown = {
-            subtotal: subtotalAmount,
-            cgst,
-            sgst,
-            total: totalAmount,
-            items: Array.from(itemsMap.values())
-        };
-
-        // 2. We need a Guest account to legally map the Bill! Since they are anonymous walk-ins, we generate/fetch a dummy profile natively.
-        let walkInGuest = await db.query.guests.findFirst({
-            where: and(
-                eq(guests.tenantId, context.tenantId),
-                eq(guests.email, 'walkin@kipd.local')
-            )
-        });
-
-        if (!walkInGuest) {
-            const [newWalkIn] = await db.insert(guests)
-                .values({
-                    tenantId: context.tenantId,
-                    email: 'walkin@kipd.local',
-                    name: 'Restaurant Walk-in'
-                })
-                .returning();
-            walkInGuest = newWalkIn;
-        }
-
-        // 3. Generate Formal OPEN Invoice in global Billing Engine for the Front Desk!
-        // We do NOT log a payment yet. This formally hands the ticket over to the Cashier!
-        const [newBill] = await db.insert(bills)
-            .values({
-                guestId: walkInGuest.id,
-                totalAmount: totalAmount.toString(),
-                status: 'open',
-                itemsBreakdown: receiptBreakdown,
-                settledAt: new Date()
-                // No paidAmount, no paidAt, no payments log!
-            })
-            .returning();
-
-        // 5. Finalize Front Desk Handoff: Mark POS orders as 'closed', attaching them to the final Bill, erasing them from Waiter iPad
-        for (const order of openOrders) {
-            await db.update(orders)
-                .set({ status: 'closed', billId: newBill.id, updatedAt: new Date() })
-                .where(eq(orders.id, order.id));
-        }
-
-        // Fire global network ping to physically re-render the Dashboards and Waiter iPads!
-        try {
-            broadcastOrderUpdate(context.tenantId, { type: 'bill_settled', id: newBill.id });
-        } catch (skip) { }
-
-        return NextResponse.json({ success: true, settledOrders: openOrders.length, status: 'sent_to_billing' });
-    } catch (error) {
-        console.error('Settle Tab Error:', error);
-        return NextResponse.json({ error: 'Failed to settle table tab' }, { status: 500 });
+    // Recalculate from line items rather than trusting stored order totals.
+    let subtotal = 0;
+    const itemsMap = new Map<string, { qty: number; rate: number; amt: number; name: string }>();
+    for (const order of openOrders) {
+      for (const item of order.orderItems) {
+        const rate = Number(item.price);
+        const amt = rate * item.quantity;
+        subtotal += amt;
+        const name = item.menuItem?.name || 'Custom Item';
+        const existing = itemsMap.get(name);
+        if (existing) { existing.qty += item.quantity; existing.amt += amt; }
+        else itemsMap.set(name, { qty: item.quantity, rate, amt, name });
+      }
     }
+    const cgst = Number((subtotal * GST_HALF).toFixed(2));
+    const sgst = Number((subtotal * GST_HALF).toFixed(2));
+    const total = Math.round(subtotal + cgst + sgst);
+    const receipt = { subtotal, cgst, sgst, total, items: Array.from(itemsMap.values()) };
+
+    // Anonymous walk-ins are billed to one placeholder guest per tenant.
+    // Race-safe: the unique index on (tenant, lower(email)) means two simultaneous first-ever settles
+    // cannot create two walk-in guests.
+    await db.insert(guests)
+      .values({ tenantId, email: 'walkin@kipd.local', name: 'Restaurant Walk-in' })
+      .onConflictDoNothing();
+    const walkIn = await db.query.guests.findFirst({
+      where: and(eq(guests.tenantId, tenantId), eq(guests.email, 'walkin@kipd.local')),
+    });
+    if (!walkIn) throw badRequest('Could not prepare the walk-in guest');
+
+    // Create the bill and close the tickets together or not at all.
+    const billId = crypto.randomUUID();
+    await db.batch([
+      db.insert(bills).values({
+        id: billId,
+        tenantId,
+        guestId: walkIn.id,
+        totalAmount: total.toString(),
+        status: 'open',
+        itemsBreakdown: receipt,
+        settledAt: new Date(),
+      }),
+      db.update(orders)
+        .set({ status: 'closed', billId, updatedAt: new Date() })
+        .where(and(eq(orders.tenantId, tenantId), inArray(orders.id, openOrders.map((o) => o.id)))),
+    ]);
+
+    broadcastOrderUpdate(tenantId, { type: 'bill_settled', id: billId });
+    return NextResponse.json({ success: true, settledOrders: openOrders.length, status: 'sent_to_billing' });
+  } catch (error) {
+    return handleError(error, 'Failed to settle table tab');
+  }
 }

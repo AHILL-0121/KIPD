@@ -1,74 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { HttpError, handleError, parseJson } from '@/lib/http';
+import { sendEmail } from '@/lib/email';
 
+const schema = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: z.string().trim().email().max(200),
+  company: z.string().trim().min(1).max(150),
+  message: z.string().trim().max(2000).optional().default(''),
+});
+
+const esc = (v: string) =>
+  v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/**
+ * Public "request access" form. Sends the request to CONTACT_ADMIN_EMAIL.
+ * Before this, the message was only printed to the server log and then discarded while the visitor was told it was sent.
+ * TODO: rate limit this route (checklist section 1). It is public.
+ */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { name, email, company, message } = body;
+    const { name, email, company, message } = await parseJson(request, schema);
 
-    // Validate required fields
-    if (!name || !email || !company) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
-    }
+    const to = process.env.CONTACT_ADMIN_EMAIL;
+    if (!to) throw new HttpError(503, 'Access requests are not set up yet. Please try again later.');
 
-    // In a production environment, you would use a service like:
-    // - SendGrid
-    // - AWS SES
-    // - Resend
-    // - Nodemailer with SMTP
-    
-    // For now, we'll log to console and return success
-    // TODO: Implement actual email sending
-    console.log('📧 Contact Admin Request:');
-    console.log('Name:', name);
-    console.log('Email:', email);
-    console.log('Company:', company);
-    console.log('Message:', message || '(no message)');
-    console.log('To: testsmtp20251@gmail.com');
-    console.log('---');
-
-    // Simulate email sending success
-    // In production, replace this with actual email API call:
-    /*
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'Kipd Platform <noreply@kipd.app>',
-        to: 'testsmtp20251@gmail.com',
-        subject: `New Access Request from ${company}`,
-        html: `
-          <h2>New Kipd Access Request</h2>
-          <p><strong>Name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Company:</strong> ${company}</p>
-          <p><strong>Message:</strong></p>
-          <p>${message || 'No message provided'}</p>
-          <hr/>
-          <p>Reply to this email to continue the conversation with ${name}.</p>
-        `
-      })
+    const sent = await sendEmail({
+      to,
+      subject: `New Kipd access request from ${company.slice(0, 80)}`,
+      html: `<h2>New Kipd access request</h2>
+        <p><strong>Name:</strong> ${esc(name)}</p>
+        <p><strong>Email:</strong> ${esc(email)}</p>
+        <p><strong>Company:</strong> ${esc(company)}</p>
+        <p><strong>Message:</strong></p><p>${esc(message || 'No message provided').replace(/\n/g, '<br>')}</p>`,
     });
-    */
+    if (!sent.success) throw new HttpError(502, 'We could not send your request. Please try again.');
 
-    return NextResponse.json(
-      { 
-        success: true,
-        message: 'Contact request received. Administrator will be in touch soon.'
-      },
-      { status: 200 }
-    );
-
+    return NextResponse.json({ success: true, message: 'Request received. We will be in touch soon.' });
   } catch (error) {
-    console.error('Error processing contact request:', error);
-    return NextResponse.json(
-      { error: 'Failed to process request' },
-      { status: 500 }
-    );
+    return handleError(error, 'Failed to process request');
   }
 }

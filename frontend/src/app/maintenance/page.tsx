@@ -4,19 +4,12 @@ import { KipdIllustration } from '@/components/mascot/KipdIllustration';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 
-interface MaintenanceModeProps {
-  title?: string;
-  message?: string;
-  estimatedTime?: string;
-  onRefresh?: () => void;
-}
+// A Next.js page cannot take props, so these were always the defaults. Edit the text here.
+const title = 'System Maintenance';
+const message = "We're currently performing scheduled maintenance to improve your experience. We'll be back shortly!";
+const estimatedTime: string | undefined = undefined;
 
-export default function MaintenanceMode({
-  title = "System Maintenance",
-  message = "We're currently performing scheduled maintenance to improve your experience. We'll be back shortly!",
-  estimatedTime,
-  onRefresh
-}: MaintenanceModeProps) {
+export default function MaintenanceMode() {
   return (
     <div className="min-h-screen bg-canvas flex items-center justify-center px-4">
       <div className="max-w-2xl w-full text-center">
@@ -39,7 +32,7 @@ export default function MaintenanceMode({
         <Button 
           variant="primary" 
           size="lg" 
-          onClick={onRefresh || (() => window.location.reload())}
+          onClick={() => window.location.reload()}
           className="gap-2"
         >
           <RefreshCw className="h-5 w-5" />

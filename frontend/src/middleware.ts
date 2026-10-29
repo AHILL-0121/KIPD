@@ -1,8 +1,6 @@
 import { authMiddleware } from '@clerk/nextjs';
 import { NextResponse } from 'next/server';
 
-const edgeAuthCache = new Map<string, { isAdmin: boolean, expiresAt: number }>();
-
 export default authMiddleware({
   clockSkewInMs: 1000 * 60 * 5, // 5 minutes
   authorizedParties: [
@@ -10,7 +8,7 @@ export default authMiddleware({
     'http://localhost',
     'http://localhost:3000',
     'https://sa-kipd.vercel.app',
-    'capacitor://com.kipd.android'
+    'capacitor://com.kipd.android',
   ],
   publicRoutes: [
     '/',
@@ -19,65 +17,35 @@ export default authMiddleware({
     '/book/(.*)',
     '/menu/(.*)',
     '/onboarding',
+    // Stripe calls this without a Clerk session. The route verifies Stripe's signature itself.
+    '/api/webhooks/stripe',
   ],
 
   async afterAuth(auth, req) {
-    // If not authenticated and not on public route, redirect to sign-in
+    const path = req.nextUrl.pathname;
+
+    // Not signed in and not on a public route: send to sign-in (APIs get a 401 from their own guards).
     if (!auth.userId && !auth.isPublicRoute) {
       const signInUrl = new URL('/sign-in', req.url);
       signInUrl.searchParams.set('redirect_url', req.url);
       return NextResponse.redirect(signInUrl);
     }
 
-    // Auto-redirect authenticated users from the Marketing Landing Page to their Dashboard
-    if (auth.userId && req.nextUrl.pathname === '/') {
+    // Signed-in users skip the marketing page and the auth pages.
+    if (auth.userId && (path === '/' || path === '/sign-in' || path === '/sign-up')) {
       return NextResponse.redirect(new URL('/dashboard', req.url));
     }
 
-    // Auto-redirect authenticated users away from the auth pages
-    if (auth.userId && (req.nextUrl.pathname === '/sign-in' || req.nextUrl.pathname === '/sign-up')) {
-      return NextResponse.redirect(new URL('/dashboard', req.url));
-    }
-
-    // Allow access to onboarding page for authenticated users
-    if (req.nextUrl.pathname === '/onboarding') {
-      return NextResponse.next();
-    }
-
-    const timestamp = new Date().toISOString();
-    // Simply ensure user is authenticated for protected routes
-    console.log(`[${timestamp}] 🔒 Middleware - Path:`, req.nextUrl.pathname);
-    console.log(`[${timestamp}] 🔒 Middleware - User authenticated:`, !!auth.userId);
-
-    if (req.nextUrl.pathname.startsWith('/admin')) {
-      if (!auth.userId) {
-        console.log(`[${timestamp}] 🔒 Middleware - Redirecting to sign-in (no auth)`);
-        return NextResponse.redirect(new URL('/sign-in', req.url));
-      }
-      console.log(`[${timestamp}] 🔒 Middleware - Allowing /admin access (authorization checked in API routes)`);
-    }
-
-    if (req.nextUrl.pathname.startsWith('/dashboard')) {
-      if (!auth.userId) {
-        console.log(`[${timestamp}] 🔒 Middleware - Redirecting to sign-in (no auth)`);
-        return NextResponse.redirect(new URL('/sign-in', req.url));
-      }
-
-      // Note: We deliberately removed the synchronous Platform Admin redirection check from the middleware
-      // because making a network request to Clerk's API here causes massive 3-5 second latency spikes 
-      // on every single dashboard page transition natively in Vercel Edge Serverless functions.
-
-      console.log(`[${timestamp}] 🔒 Middleware - Allowing /dashboard access`);
-    }
-
+    // Role and tenant checks happen in the API routes and the dashboard layout. A Clerk
+    // lookup here added several seconds to every page transition on the edge runtime.
     return NextResponse.next();
   },
 });
 
 export const config = {
   matcher: [
-    "/((?!.+\\.[\\w]+$|_next).*)",
-    "/",
-    "/(api|trpc)(.*)"
+    '/((?!.+\\.[\\w]+$|_next).*)',
+    '/',
+    '/(api|trpc)(.*)',
   ],
 };

@@ -15,10 +15,8 @@ export default function SignInPage() {
       const isPlatformAdmin = user.publicMetadata?.platform_admin === true;
 
       if (isPlatformAdmin) {
-        console.log('✅ Sign-in complete, redirecting to admin panel...');
         router.push('/admin/tenants');
       } else {
-        console.log('✅ Sign-in complete, redirecting to dashboard...');
         router.push('/dashboard');
       }
     }
@@ -46,8 +44,8 @@ export default function SignInPage() {
         {/* Quote */}
         <blockquote className="kipd-quote">
           <blockquote>
-            "The best hospitality is when guests feel{" "}
-            <em>expected</em> — not just welcomed."
+            &quot;The best hospitality is when guests feel{" "}
+            <em>expected</em> — not just welcomed.&quot;
           </blockquote>
           <cite>— Kipd, Hotel &amp; Restaurant OS</cite>
         </blockquote>
@@ -74,7 +72,6 @@ export default function SignInPage() {
         <div style={{ width: '100%', maxWidth: '360px' }}>
           <SignIn
             appearance={kipd_clerkAppearance}
-            fallbackRedirectUrl="/dashboard"
           />
         </div>
 

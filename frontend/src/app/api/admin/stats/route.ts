@@ -1,51 +1,37 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { requirePlatformAdmin } from '@/lib/auth';
+import { NextResponse } from 'next/server';
+import { count, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { tenants } from '@/db/schema';
-import { eq, count, sql } from 'drizzle-orm';
+import { requirePlatformAdmin } from '@/lib/auth';
+import { handleError } from '@/lib/http';
 
-export async function GET(request: NextRequest) {
+/** Monthly price per plan, in USD. Plan names are enforced by the database (basic, pro, enterprise). */
+const PLAN_PRICE: Record<string, number> = { basic: 49, pro: 149, enterprise: 399 };
+
+export async function GET() {
   try {
     await requirePlatformAdmin();
 
-    // Get total tenants
-    const [{ totalTenants }] = await db
-      .select({ totalTenants: count() })
-      .from(tenants);
-
-    // Get active tenants
-    const [{ activeTenants }] = await db
-      .select({ activeTenants: count() })
+    // One grouped query instead of loading every tenant. Deleted tenants are ignored.
+    const rows = await db
+      .select({ plan: tenants.plan, status: tenants.status, n: count() })
       .from(tenants)
-      .where(eq(tenants.status, 'active'));
+      .where(isNull(tenants.deletedAt))
+      .groupBy(tenants.plan, tenants.status);
 
-    // Get suspended tenants
-    const [{ suspendedTenants }] = await db
-      .select({ suspendedTenants: count() })
-      .from(tenants)
-      .where(eq(tenants.status, 'suspended'));
-
-    // Calculate MRR (simplified)
-    const tenantsList = await db.query.tenants.findMany();
-    const mrr = tenantsList.reduce((sum, tenant) => {
-      const planPrices: Record<string, number> = {
-        starter: 49,
-        professional: 149,
-        enterprise: 399,
-      };
-      return sum + (planPrices[tenant.plan] || 0);
-    }, 0);
-
-    return NextResponse.json({
-      totalTenants,
-      activeTenants,
-      suspendedTenants,
-      mrr,
-    });
+    let totalTenants = 0, activeTenants = 0, suspendedTenants = 0, mrr = 0;
+    for (const r of rows) {
+      totalTenants += r.n;
+      if (r.status === 'active') {
+        activeTenants += r.n;
+        mrr += (PLAN_PRICE[r.plan] ?? 0) * r.n; // only paying (active) tenants count towards revenue
+      }
+      if (r.status === 'suspended') suspendedTenants += r.n;
+    }
+    return NextResponse.json({ totalTenants, activeTenants, suspendedTenants, mrr });
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    );
+    return handleError(error, 'Failed to load platform stats');
   }
 }
+
+export const dynamic = 'force-dynamic';

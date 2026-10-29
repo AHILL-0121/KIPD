@@ -1,54 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { and, eq } from 'drizzle-orm';
+import { z } from 'zod';
 import { db } from '@/db';
 import { bookings, rooms } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import { requireTenantContext } from '@/lib/auth';
+import { ROLES, requireTenant } from '@/lib/auth';
+import { handleError, parseJson } from '@/lib/http';
+import { ownedBooking } from '@/lib/tenant-scope';
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+const schema = z.object({ action: z.enum(['check-in', 'check-out', 'cancel']) });
+
+const TRANSITIONS = {
+  'check-in': { booking: 'checked_in', room: 'occupied' },
+  'check-out': { booking: 'checked_out', room: 'cleaning' },
+  cancel: { booking: 'cancelled', room: 'available' },
+} as const;
+
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    await requireTenantContext();
-    const { id } = params;
-    const body = await request.json();
-    const { action } = body;
+    const { tenantId } = await requireTenant(ROLES.frontDesk);
+    const { action } = await parseJson(request, schema);
 
-    // Get the booking first to find the room
-    const booking = await db.query.bookings.findFirst({
-      where: eq(bookings.id, id),
-    });
+    // 404 if the booking isn't in this tenant's properties.
+    const booking = await ownedBooking(tenantId, params.id);
+    const next = TRANSITIONS[action];
 
-    if (!booking) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
-    }
-
-    if (action === 'check-in') {
-      await db.update(bookings)
-        .set({ status: 'checked_in' })
-        .where(eq(bookings.id, id));
-      await db.update(rooms)
-        .set({ status: 'occupied' })
-        .where(eq(rooms.id, booking.roomId));
-    } else if (action === 'check-out') {
-      await db.update(bookings)
-        .set({ status: 'checked_out' })
-        .where(eq(bookings.id, id));
-      await db.update(rooms)
-        .set({ status: 'cleaning' })
-        .where(eq(rooms.id, booking.roomId));
-    } else if (action === 'cancel') {
-      await db.update(bookings)
-        .set({ status: 'cancelled' })
-        .where(eq(bookings.id, id));
-      await db.update(rooms)
-        .set({ status: 'available' })
-        .where(eq(rooms.id, booking.roomId));
-    }
+    await db.batch([
+      db.update(bookings).set({ status: next.booking }).where(and(eq(bookings.id, booking.id), eq(bookings.tenantId, tenantId))),
+      db.update(rooms).set({ status: next.room }).where(and(eq(rooms.id, booking.roomId), eq(rooms.tenantId, tenantId))),
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Update booking error:', error);
-    return NextResponse.json({ error: 'Failed to update booking' }, { status: 500 });
+    return handleError(error, 'Failed to update booking');
   }
 }

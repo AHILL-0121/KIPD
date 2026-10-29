@@ -1,65 +1,59 @@
 import { NextRequest } from 'next/server';
-import { db } from '@/db';
-import { orders } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { requireTenant } from '@/lib/auth';
+import { HttpError, forbidden, handleError } from '@/lib/http';
+import { heartbeat, registerClient, send, unregisterClient } from '@/lib/realtime';
+import { ownedOutlet } from '@/lib/tenant-scope';
 
-// Switch to Node.js runtime instead of Edge to permit cross-API memory mapping via global objects!
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
-const globalAny: any = global;
-if (!globalAny.sseClients) {
-  globalAny.sseClients = new Map<string, { controller: ReadableStreamDefaultController, channel: string }>();
-}
+/**
+ * Live order stream. The channel in the URL is either this tenant's id or one of
+ * its outlet ids. Anything else is refused, so one tenant can never listen to
+ * another tenant's kitchen.
+ */
+export async function GET(request: NextRequest, { params }: { params: { outletId: string } }) {
+  let channel: string;
+  try {
+    const { tenantId } = await requireTenant();
+    channel = params.outletId;
+    if (channel !== tenantId) {
+      try {
+        await ownedOutlet(tenantId, channel);
+      } catch (e) {
+        throw e instanceof HttpError && e.status === 404 ? forbidden() : e;
+      }
+    }
+  } catch (error) {
+    return handleError(error, 'Failed to open the live stream');
+  }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { outletId: string } }
-) {
-  const { outletId } = params;
+  let clientId = '';
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const cleanup = () => {
+    if (timer) clearInterval(timer);
+    if (clientId) unregisterClient(clientId);
+  };
 
   const stream = new ReadableStream({
     start(controller) {
-      // Store client connection in the Global Socket Map, binding it to the requested channel
-      const clientId = Math.random().toString(36);
-      globalAny.sseClients.set(clientId, { controller, channel: outletId });
-
-      // Send initial connection message
-      const encoder = new TextEncoder();
-      controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: 'connected', channel: outletId })}\n\n`)
-      );
-
-      // Cleanup on disconnect
-      request.signal.addEventListener('abort', () => {
-        globalAny.sseClients.delete(clientId);
-      });
+      clientId = registerClient(channel, controller);
+      send(controller, { type: 'connected', channel });
+      // Proxies and mobile networks close idle streams; a comment line every 25 s keeps it open.
+      timer = setInterval(() => {
+        try { heartbeat(controller); } catch { cleanup(); }
+      }, 25_000);
+      request.signal.addEventListener('abort', cleanup);
     },
+    cancel: cleanup,
   });
 
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
     },
-  });
-}
-
-// Helper function to broadcast updates securely to specific channels
-export function broadcastOrderUpdate(targetChannel: string, order: any) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(`data: ${JSON.stringify(order)}\n\n`);
-
-  if (!globalAny.sseClients) return;
-
-  globalAny.sseClients.forEach((client: { controller: ReadableStreamDefaultController, channel: string }) => {
-    // Strict Multi-Tenant Isolator: ONLY broadcast if strictly in the target channel 
-    if (client.channel === targetChannel) {
-      try {
-        client.controller.enqueue(data);
-      } catch (error) {
-        console.error('Failed to send SSE update:', error);
-      }
-    }
   });
 }

@@ -79,7 +79,7 @@ export default function AcceptInvitePage({ params }: { params: { token: string }
                     <span className="text-3xl">🎉</span>
                 </div>
 
-                <h1 className="font-serif text-3xl font-bold text-ink mb-2">You've been invited!</h1>
+                <h1 className="font-serif text-3xl font-bold text-ink mb-2">You&apos;ve been invited!</h1>
                 <p className="text-stone-500 mb-8">
                     You have been formally invited to join the management platform as a <span className="font-bold text-amber">{inviteDetails?.role}</span>.
                 </p>

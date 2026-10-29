@@ -1,146 +1,97 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { and, eq } from 'drizzle-orm';
+import { z } from 'zod';
 import { db } from '@/db';
-import { tables, outlets, properties } from '@/db/schema';
-import { eq, inArray } from 'drizzle-orm';
-import { requireTenantContext } from '@/lib/auth';
+import { orders, tables } from '@/db/schema';
+import { ROLES, requireTenant } from '@/lib/auth';
+import { assertUuid, badRequest, handleError, notFound, parseJson } from '@/lib/http';
+import { firstOutlet, ownedTable } from '@/lib/tenant-scope';
 
-async function getTenantOutletIds(tenantId: string): Promise<string[]> {
-  const tenantProperties = await db.query.properties.findMany({
-    where: eq(properties.tenantId, tenantId),
-  });
-  if (tenantProperties.length === 0) return [];
-  const propertyIds = tenantProperties.map(p => p.id);
-  const tenantOutlets = await db.query.outlets.findMany({
-    where: inArray(outlets.propertyId, propertyIds),
-  });
-  return tenantOutlets.map(o => o.id);
-}
+const tableNumber = z.coerce.string().trim().min(1).max(20);
+const capacity = z.coerce.number().int().min(1).max(100);
 
-export async function GET(request: NextRequest) {
+const createSchema = z.object({ tableNumber, capacity: capacity.optional().default(4) });
+const patchSchema = z.object({ tableId: z.string().uuid(), tableNumber: tableNumber.optional(), capacity: capacity.optional() });
+
+export async function GET() {
   try {
-    const context = await requireTenantContext();
-    const outletIds = await getTenantOutletIds(context.tenantId);
-    if (outletIds.length === 0) return NextResponse.json([]);
-
-    const allTables = await db.query.tables.findMany({
-      where: inArray(tables.outletId, outletIds),
+    const { tenantId } = await requireTenant();
+    const all = await db.query.tables.findMany({
+      where: eq(tables.tenantId, tenantId),
       with: { outlet: true },
-      orderBy: (tables, { asc }) => [asc(tables.tableNumber)],
+      orderBy: (t, { asc }) => [asc(t.tableNumber)],
     });
-
-    return NextResponse.json(allTables);
+    return NextResponse.json(all);
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch tables' }, { status: 500 });
+    return handleError(error, 'Failed to fetch tables');
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const context = await requireTenantContext();
-    if (!['owner', 'manager'].includes(context.role)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
+    const { tenantId } = await requireTenant(ROLES.manage);
+    const body = await parseJson(request, createSchema);
 
-    const body = await request.json();
-    const { tableNumber, capacity } = body;
+    const outlet = await firstOutlet(tenantId);
+    if (!outlet) throw badRequest('No outlet found. Set up a restaurant first.');
 
-    if (!tableNumber) {
-      return NextResponse.json({ error: 'Table number is required' }, { status: 400 });
-    }
-
-    const outletIds = await getTenantOutletIds(context.tenantId);
-    if (outletIds.length === 0) {
-      return NextResponse.json({ error: 'No outlet found. Set up a restaurant first.' }, { status: 400 });
-    }
-
-    // Get outlet + slug for QR code URL
-    const outlet = await db.query.outlets.findFirst({
-      where: eq(outlets.id, outletIds[0]),
-    });
-
-    const [newTable] = await db.insert(tables).values({
-      outletId: outletIds[0],
-      tableNumber: String(tableNumber),
-      capacity: capacity || 4,
+    // The table's QR link carries its own id, so choose the id first and store the link in one insert.
+    const id = crypto.randomUUID();
+    const [created] = await db.insert(tables).values({
+      id,
+      tenantId,
+      outletId: outlet.id,
+      tableNumber: body.tableNumber,
+      capacity: body.capacity,
+      qrCode: `/menu/${outlet.slug}/${id}`,
     }).returning();
 
-    // Generate QR code URL: /menu/[outletSlug]/[tableId]
-    const qrUrl = `/menu/${outlet?.slug || 'restaurant'}/${newTable.id}`;
-    const [updated] = await db.update(tables)
-      .set({ qrCode: qrUrl })
-      .where(eq(tables.id, newTable.id))
-      .returning();
-
-    return NextResponse.json(updated, { status: 201 });
+    return NextResponse.json(created, { status: 201 });
   } catch (error) {
-    console.error('Create table error:', error);
-    return NextResponse.json({ error: 'Failed to create table' }, { status: 500 });
+    return handleError(error, 'Failed to create table');
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
-    const context = await requireTenantContext();
-    if (!['owner', 'manager'].includes(context.role)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
+    const { tenantId } = await requireTenant(ROLES.manage);
+    const body = await parseJson(request, patchSchema);
+    await ownedTable(tenantId, body.tableId);
 
-    const body = await request.json();
-    const { tableId, tableNumber, capacity } = body;
-
-    if (!tableId) {
-      return NextResponse.json({ error: 'Table ID is required' }, { status: 400 });
-    }
-
-    // Verify table belongs to tenant
-    const outletIds = await getTenantOutletIds(context.tenantId);
-    const table = await db.query.tables.findFirst({
-      where: eq(tables.id, tableId),
-    });
-    if (!table || !outletIds.includes(table.outletId)) {
-      return NextResponse.json({ error: 'Table not found' }, { status: 404 });
-    }
-
-    const updates: Record<string, any> = {};
-    if (tableNumber !== undefined) updates.tableNumber = String(tableNumber);
-    if (capacity !== undefined) updates.capacity = capacity;
+    const updates: Partial<typeof tables.$inferInsert> = {};
+    if (body.tableNumber !== undefined) updates.tableNumber = body.tableNumber;
+    if (body.capacity !== undefined) updates.capacity = body.capacity;
+    if (Object.keys(updates).length === 0) throw badRequest('Nothing to update');
 
     const [updated] = await db.update(tables)
       .set(updates)
-      .where(eq(tables.id, tableId))
+      .where(and(eq(tables.id, body.tableId), eq(tables.tenantId, tenantId)))
       .returning();
+    if (!updated) throw notFound('Table');
 
     return NextResponse.json(updated);
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to update table' }, { status: 500 });
+    return handleError(error, 'Failed to update table');
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const context = await requireTenantContext();
-    if (!['owner', 'manager'].includes(context.role)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
+    const { tenantId } = await requireTenant(ROLES.manage);
+    const id = assertUuid(new URL(request.url).searchParams.get('id'), 'Table');
+    await ownedTable(tenantId, id);
 
-    const { searchParams } = new URL(request.url);
-    const tableId = searchParams.get('id');
-    if (!tableId) {
-      return NextResponse.json({ error: 'Table ID required' }, { status: 400 });
-    }
+    // Orders keep their history. The composite foreign key cannot "set null" a single column,
+    // so unlink them first. Both steps succeed or fail together.
+    await db.batch([
+      db.update(orders).set({ tableId: null }).where(and(eq(orders.tableId, id), eq(orders.tenantId, tenantId))),
+      db.delete(tables).where(and(eq(tables.id, id), eq(tables.tenantId, tenantId))),
+    ]);
 
-    // Verify table belongs to tenant
-    const outletIds = await getTenantOutletIds(context.tenantId);
-    const table = await db.query.tables.findFirst({
-      where: eq(tables.id, tableId),
-    });
-    if (!table || !outletIds.includes(table.outletId)) {
-      return NextResponse.json({ error: 'Table not found' }, { status: 404 });
-    }
-
-    await db.delete(tables).where(eq(tables.id, tableId));
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to delete table' }, { status: 500 });
+    return handleError(error, 'Failed to delete table');
   }
 }
+
+export const dynamic = 'force-dynamic';

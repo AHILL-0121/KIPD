@@ -1,5 +1,14 @@
 import nodemailer from 'nodemailer';
 
+/** Escape user-supplied text before it goes into an HTML email. */
+const esc = (value: unknown) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 export interface EmailOptions {
   to: string | string[];
   subject: string;
@@ -25,7 +34,6 @@ export async function sendEmail({ to, subject, html }: EmailOptions) {
       html,
     });
 
-    console.log(`[EMAIL SENT] MessageId: ${info.messageId}`);
     return { success: true, id: info.messageId };
   } catch (error) {
     console.error('[EMAIL ERROR] Failed to send email:', error);
@@ -50,28 +58,28 @@ export const emailTemplates = {
       
       <h2 style="color: #1C1917; font-size: 24px; margin-bottom: 20px;">Booking Confirmed!</h2>
       
-      <p style="color: #6B6662; line-height: 1.6;">Dear ${data.guestName},</p>
+      <p style="color: #6B6662; line-height: 1.6;">Dear ${esc(data.guestName)},</p>
       
       <p style="color: #6B6662; line-height: 1.6;">
-        Your reservation at <strong>${data.hotelName}</strong> has been confirmed.
+        Your reservation at <strong>${esc(data.hotelName)}</strong> has been confirmed.
       </p>
       
       <div style="background: #FAF8F4; border-radius: 12px; padding: 24px; margin: 30px 0;">
         <div style="margin-bottom: 12px;">
           <strong style="color: #1C1917;">Booking ID:</strong>
-          <span style="color: #6B6662;"> ${data.bookingId}</span>
+          <span style="color: #6B6662;"> ${esc(data.bookingId)}</span>
         </div>
         <div style="margin-bottom: 12px;">
           <strong style="color: #1C1917;">Room Type:</strong>
-          <span style="color: #6B6662;"> ${data.roomType}</span>
+          <span style="color: #6B6662;"> ${esc(data.roomType)}</span>
         </div>
         <div style="margin-bottom: 12px;">
           <strong style="color: #1C1917;">Check-in:</strong>
-          <span style="color: #6B6662;"> ${data.checkIn}</span>
+          <span style="color: #6B6662;"> ${esc(data.checkIn)}</span>
         </div>
         <div>
           <strong style="color: #1C1917;">Check-out:</strong>
-          <span style="color: #6B6662;"> ${data.checkOut}</span>
+          <span style="color: #6B6662;"> ${esc(data.checkOut)}</span>
         </div>
       </div>
       
@@ -98,14 +106,14 @@ export const emailTemplates = {
       
       <h2 style="color: #1C1917; font-size: 24px; margin-bottom: 20px;">You've been invited!</h2>
       
-      <p style="color: #6B6662; line-height: 1.6;">Hi ${data.name},</p>
+      <p style="color: #6B6662; line-height: 1.6;">Hi ${esc(data.name)},</p>
       
       <p style="color: #6B6662; line-height: 1.6;">
-        You've been invited to join <strong>${data.hotelName}</strong> as a <strong>${data.role}</strong>.
+        You've been invited to join <strong>${esc(data.hotelName)}</strong> as a <strong>${esc(data.role)}</strong>.
       </p>
       
       <div style="text-align: center; margin: 40px 0;">
-        <a href="${data.inviteUrl}" style="display: inline-block; background: #E8A020; color: #1C1917; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 500;">
+        <a href="${esc(data.inviteUrl)}" style="display: inline-block; background: #E8A020; color: #1C1917; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 500;">
           Accept Invitation
         </a>
       </div>

@@ -63,8 +63,8 @@ export default function ContactAdminPage() {
         {/* Quote */}
         <blockquote className="kipd-quote">
           <blockquote>
-            "The best hospitality is when guests feel{" "}
-            <em>expected</em> — not just welcomed."
+            &quot;The best hospitality is when guests feel{" "}
+            <em>expected</em> — not just welcomed.&quot;
           </blockquote>
           <cite>— Kipd, Hotel &amp; Restaurant OS</cite>
         </blockquote>
@@ -101,7 +101,7 @@ export default function ContactAdminPage() {
               <p className="kipd-eyebrow">Get Access</p>
               <h1 className="kipd-title">Contact<br /><em>Platform Admin</em></h1>
               <p className="kipd-subtitle">
-                Access to Kipd is managed by invitation. Send us your details and we'll get you set up.
+                Access to Kipd is managed by invitation. Send us your details and we&apos;ll get you set up.
               </p>
             </div>
 

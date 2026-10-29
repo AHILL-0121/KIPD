@@ -60,6 +60,17 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 
+# ─── Secrets and signing keys (never commit) ──────────────────────────────────
+key.md
+*.pem
+*.keystore
+*.jks
+
+# ─── Generated build / lint output ────────────────────────────────────────────
+frontend/lint-error.txt
+frontend/android/build-log.txt
+frontend/android/build-out.txt
+
 # ─── OS / Editor noise ────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

@@ -10,8 +10,12 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
-    "admin:create": "tsx scripts/create-admin.ts",
-    "admin:setup": "tsx scripts/setup-admin.ts"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "drizzle-kit migrate",
+    "db:drift": "tsx scripts/db-drift.ts",
+    "db:reset": "tsx scripts/db-reset.ts",
+    "admin:create": "tsx scripts/create-platform-admin.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
@@ -40,6 +44,7 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.13",
     "@types/node": "^20.11.0",
     "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.5",
@@ -52,6 +57,7 @@
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^2.1.9"
   }
 }

@@ -27,7 +27,7 @@ export function OfflineState({ onRetry, size = 'md' }: OfflineStateProps) {
       />
       
       <h2 className="text-3xl font-display text-ink mt-6 mb-2">
-        You're Offline
+        You&apos;re Offline
       </h2>
       
       <p className="text-ink-muted text-center max-w-md mb-8">

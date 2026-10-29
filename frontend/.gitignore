@@ -36,5 +36,5 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 
-# Drizzle
-drizzle/
+# Drizzle: the migrations in drizzle/ ARE the database history and MUST be committed.
+# (This used to ignore the whole folder, which would have hidden every migration.)

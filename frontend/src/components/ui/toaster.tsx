@@ -76,7 +76,6 @@ export function useToast() {
   if (!context) {
     return {
       toast: (type: ToastType, title: string, message?: string) => {
-        console.log(`Toast: [${type}] ${title}`, message);
       },
     };
   }
