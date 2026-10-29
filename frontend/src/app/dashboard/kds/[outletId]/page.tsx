@@ -2,11 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLive } from '@/lib/use-live';
-import { Badge } from '@/components/ui/badge';
+import { HoldButton } from '@/components/ui/hold-button';
 import { Button } from '@/components/ui/button';
-import { StatusIndicator } from '@/components/ui/status-indicator';
-import { KipdIllustration } from '@/components/mascot/KipdIllustration';
-import { Clock, MapPin, AlertCircle, Volume2, VolumeX } from 'lucide-react';
+import { Clock, MapPin, AlertCircle, Volume2, VolumeX, ChefHat } from 'lucide-react';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 
 interface KDSOrder {
@@ -27,6 +25,9 @@ interface KDSOrder {
 export default function KDSPage({ params }: { params: { outletId: string } }) {
   const [orders, setOrders] = useState<KDSOrder[]>([]);
   const [userRole, setUserRole] = useState<string>('');
+  const [undo, setUndo] = useState<{ id: string; label: string } | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     // Fetch User Role to determine if KDS is Read-Only
@@ -64,165 +65,136 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
   useEffect(() => { load(); }, [load]);
   useLive(load, params.outletId);
 
-  const updateStatus = async (orderId: string, newStatus: KDSOrder['status']) => {
-    // Instantly commit optimistic update so the UI feels native
-    setOrders(prev => {
-      if (newStatus === 'ready') return prev.filter(o => o.id !== orderId);
-      return prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
-    });
-
-    await fetch(`/api/orders/${orderId}/status`, {
+  const send = async (orderId: string, status: KDSOrder['status']) => {
+    const res = await fetch(`/api/orders/${orderId}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
+      body: JSON.stringify({ status }),
     });
+    if (!res.ok) throw new Error(res.status === 403 ? 'You are not allowed to change orders.' : 'Could not update the order. Please try again.');
   };
+
+  const updateStatus = async (order: KDSOrder, newStatus: KDSOrder['status']) => {
+    setProblem(null);
+    // Show the change at once; if the server says no, put the real state back and tell the cook.
+    setOrders(prev => (newStatus === 'ready' ? prev.filter(o => o.id !== order.id) : prev.map(o => (o.id === order.id ? { ...o, status: newStatus } : o))));
+    try {
+      await send(order.id, newStatus);
+      if (newStatus === 'ready') {
+        const label = order.type === 'dine_in' ? `Table ${order.tableNumber}` : `Room ${order.roomNumber}`;
+        setUndo({ id: order.id, label });
+        if (undoTimer.current) clearTimeout(undoTimer.current);
+        undoTimer.current = setTimeout(() => setUndo(null), 8000);
+      }
+    } catch (e) {
+      setProblem(e instanceof Error ? e.message : 'Could not update the order.');
+      load();
+    }
+  };
+
+  const undoReady = async () => {
+    if (!undo) return;
+    const { id } = undo;
+    setUndo(null);
+    try { await send(id, 'preparing'); } catch (e) { setProblem(e instanceof Error ? e.message : 'Could not undo.'); }
+    load();
+  };
+
+  const canAct = ['owner', 'manager', 'waiter', 'kitchen'].includes(userRole);
+  // Oldest first: the ticket that has waited longest is always top-left.
+  const queue = [...orders].sort((x, y) => +new Date(x.createdAt) - +new Date(y.createdAt));
 
   return (
     <div className="min-h-screen bg-ink p-4 md:p-6 overflow-x-hidden">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 md:mb-8 pb-4 md:pb-6 border-b border-stone-700">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-stone-500">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-white mb-2">
-            Kitchen Display System
-          </h1>
-          <p className="text-stone-400">Real-time order queue</p>
+          <h1 className="text-2xl font-semibold text-white">Kitchen</h1>
+          <p className="text-stone-300 text-sm" aria-live="polite">{queue.length === 0 ? 'No open orders' : `${queue.length} open order${queue.length === 1 ? '' : 's'}, oldest first`}</p>
         </div>
-
-        <div className="flex items-center gap-4">
-          <button
-            onClick={toggleSound}
-            aria-pressed={soundOn}
-            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${soundOn ? 'bg-stone-800 text-stone-200' : 'bg-amber text-white'}`}
-          >
-            {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            {soundOn ? 'Sound on' : 'Enable sound for new orders'}
-          </button>
-          <StatusIndicator label="Live Updates" status="live" />
-        </div>
+        <button
+          onClick={toggleSound}
+          aria-pressed={soundOn}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${soundOn ? 'bg-stone-500/40 text-white' : 'bg-white text-ink'}`}
+        >
+          {soundOn ? <Volume2 className="w-4 h-4" aria-hidden="true" /> : <VolumeX className="w-4 h-4" aria-hidden="true" />}
+          {soundOn ? 'Sound on' : 'Enable sound for new orders'}
+        </button>
       </div>
 
-      {/* Orders Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {orders.map((order) => {
+      {problem && <p role="alert" className="mb-4 rounded-lg bg-terra-pale p-3 text-terra font-medium">{problem}</p>}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        {queue.map((order) => {
           const minutesAgo = differenceInMinutes(new Date(), new Date(order.createdAt));
-          const isUrgent = minutesAgo > 15;
+          const late = minutesAgo >= 15;
           const timeAgo = formatDistanceToNow(new Date(order.createdAt), { addSuffix: true });
+          const where = order.type === 'dine_in' ? `Table ${order.tableNumber}` : `Room ${order.roomNumber}`;
+          const isNew = order.status === 'new' || order.status === 'acknowledged';
 
           return (
-            <div
+            <article
               key={order.id}
-              className={`
-                bg-white rounded-2xl p-6 shadow-xl
-                border-4 transition-all duration-300
-                ${isUrgent ? 'border-terra animate-pulse' : 'border-transparent'}
-                ${order.status === 'new' ? 'ring-4 ring-amber' : ''}
-              `}
+              aria-label={`${where}, ${order.status}${late ? ', late' : ''}`}
+              className={`bg-white rounded-xl p-5 border-2 ${late ? 'border-terra' : isNew ? 'border-amber' : 'border-stone-200'}`}
             >
-              {/* Header */}
-              <div className="flex items-start justify-between mb-4">
+              <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <MapPin className="w-5 h-5 text-ink-muted" />
-                    <span className="font-bold text-2xl text-ink">
-                      {order.type === 'dine_in'
-                        ? `Table ${order.tableNumber}`
-                        : `Room ${order.roomNumber}`
-                      }
-                    </span>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <MapPin className="w-5 h-5 text-ink-muted" aria-hidden="true" />
+                    <h2 className="font-bold text-2xl text-ink">{where}</h2>
                   </div>
-
-                  <div className={`flex items-center gap-2 text-sm ${isUrgent ? 'text-terra font-bold' : 'text-ink-muted'}`}>
-                    {isUrgent && <AlertCircle className="w-4 h-4" />}
-                    <Clock className="w-4 h-4" />
-                    <span>{timeAgo} ({minutesAgo} min)</span>
+                  <div className={`flex items-center gap-1.5 text-sm ${late ? 'text-terra font-semibold' : 'text-ink-muted'}`}>
+                    {late ? <AlertCircle className="w-4 h-4" aria-hidden="true" /> : <Clock className="w-4 h-4" aria-hidden="true" />}
+                    <span>{late ? 'Late: ' : ''}{timeAgo}</span>
                   </div>
                 </div>
-
-                <Badge
-                  variant={order.status === 'new' ? 'amber' : order.status === 'preparing' ? 'terra' : 'stone'}
-                  className="text-base"
-                >
-                  {order.status}
-                </Badge>
+                <span className={`rounded-full px-3 py-1 text-sm font-semibold ${isNew ? 'bg-amber-pale text-amber-deep' : 'bg-stone-100 text-ink-soft'}`}>
+                  {isNew ? 'New' : order.status === 'preparing' ? 'Preparing' : order.status}
+                </span>
               </div>
 
-              {/* Items */}
-              <div className="space-y-3 mb-6">
+              <ul className="space-y-3 mb-5">
                 {order.items.map((item, idx) => (
-                  <div key={idx} className="border-l-4 border-amber pl-3">
-                    <div className="font-bold text-xl text-ink mb-1">
-                      {item.quantity}x {item.name}
-                    </div>
-                    {item.notes && (
-                      <div className="text-sm text-terra italic bg-terra-pale p-2 rounded">
-                        ⚠️ {item.notes}
-                      </div>
-                    )}
-                  </div>
+                  <li key={idx} className="border-l-4 border-amber pl-3">
+                    <div className="font-bold text-xl text-ink">{item.quantity} × {item.name}</div>
+                    {item.notes && <div className="mt-1 text-sm text-terra bg-terra-pale p-2 rounded"><span className="font-semibold">Note:</span> {item.notes}</div>}
+                  </li>
                 ))}
-              </div>
+              </ul>
 
               {order.specialInstructions && (
-                <div className="bg-amber-pale border-2 border-amber p-4 rounded-xl mb-4 text-ink">
-                  <div className="font-bold mb-1">Special Instructions:</div>
+                <div className="bg-amber-pale border border-amber-200 p-3 rounded-lg mb-4 text-ink">
+                  <div className="font-semibold text-sm mb-0.5">Special instructions</div>
                   <div className="text-sm">{order.specialInstructions}</div>
                 </div>
               )}
 
-              {/* Actions (Restricted to Kitchen Staff & Managers) */}
-              {['kitchen', 'manager'].includes(userRole) ? (
-                <div className="flex gap-3">
-                  {order.status === 'new' && (
-                    <Button
-                      className="flex-1 text-lg py-4"
-                      variant="terra"
-                      onClick={() => updateStatus(order.id, 'preparing')}
-                    >
-                      Start Preparing
-                    </Button>
-                  )}
-                  {order.status === 'preparing' && (
-                    <Button
-                      className="flex-1 text-lg py-4"
-                      variant="sage"
-                      onClick={() => updateStatus(order.id, 'ready')}
-                    >
-                      Mark Ready
-                    </Button>
-                  )}
-                  {order.status === 'acknowledged' && (
-                    <Button
-                      className="flex-1 text-lg py-4"
-                      variant="terra"
-                      onClick={() => updateStatus(order.id, 'preparing')}
-                    >
-                      Start Cooking
-                    </Button>
-                  )}
-                </div>
+              {canAct ? (
+                isNew ? (
+                  <HoldButton className="w-full" onConfirm={() => updateStatus(order, 'preparing')}>Accept order</HoldButton>
+                ) : order.status === 'preparing' ? (
+                  <Button className="w-full text-lg py-4" variant="sage" onClick={() => updateStatus(order, 'ready')}>Mark ready</Button>
+                ) : null
               ) : (
-                <div className="text-center p-3 rounded-lg bg-stone-800 text-stone-400 text-sm">
-                  Viewing in Read-Only Mode (Kitchen Staff Only)
-                </div>
+                <p className="text-center p-3 rounded-lg bg-stone-100 text-ink-soft text-sm">Your role can view this screen but not change orders.</p>
               )}
-            </div>
+            </article>
           );
         })}
       </div>
 
-      {orders.length === 0 && (
-        <div className="flex items-center justify-center py-24">
-          <div className="text-center">
-            <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-12 inline-block">
-              <KipdIllustration
-                scene="order-ready"
-                size="xl"
-              />
-              <p className="text-white text-2xl font-display mt-8">All Caught Up!</p>
-              <p className="text-stone-400 mt-3 text-lg">New orders will appear here automatically</p>
-            </div>
-          </div>
+      {queue.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <ChefHat className="w-12 h-12 text-stone-300 mb-4" aria-hidden="true" />
+          <p className="text-white text-xl font-semibold">All caught up</p>
+          <p className="text-stone-300 mt-1">New orders appear here automatically.</p>
+        </div>
+      )}
+
+      {undo && (
+        <div role="status" className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-lg bg-white px-5 py-3 shadow-xl">
+          <span className="text-ink font-medium">{undo.label} marked ready</span>
+          <button onClick={undoReady} className="font-semibold text-amber underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber">Undo</button>
         </div>
       )}
     </div>
