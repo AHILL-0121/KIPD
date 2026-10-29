@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StatusIndicator } from '@/components/ui/status-indicator';
 import { KipdIllustration } from '@/components/mascot/KipdIllustration';
-import { Clock, MapPin, AlertCircle } from 'lucide-react';
+import { Clock, MapPin, AlertCircle, Volume2, VolumeX } from 'lucide-react';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 
 interface KDSOrder {
@@ -39,13 +39,22 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
 
   // Orders already on screen, so only genuinely new tickets make a sound.
   const seen = useRef<Set<string> | null>(null);
+  // Browsers only allow sound after a tap on the page, so the kitchen turns it on once per visit.
+  const [soundOn, setSoundOn] = useState(false);
+  const soundRef = useRef(false);
+  soundRef.current = soundOn;
+  const chime = () => new Audio('/notification.mp3').play().then(() => true).catch(() => false);
+  const toggleSound = async () => {
+    if (soundOn) return setSoundOn(false);
+    if (await chime()) setSoundOn(true); // the test chime doubles as the proof that sound works
+  };
   const load = useCallback(() => {
     fetch(`/api/kds/${params.outletId}`, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
       .then(res => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
       .then((data: KDSOrder[]) => {
         if (!Array.isArray(data)) return;
         const known = seen.current;
-        if (known && data.some(o => !known.has(o.id))) new Audio('/notification.mp3').play().catch(() => { });
+        if (known && soundRef.current && data.some(o => !known.has(o.id))) chime();
         seen.current = new Set(data.map(o => o.id));
         setOrders(data);
       })
@@ -80,7 +89,17 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
           <p className="text-stone-400">Real-time order queue</p>
         </div>
 
-        <StatusIndicator label="Live Updates" status="live" />
+        <div className="flex items-center gap-4">
+          <button
+            onClick={toggleSound}
+            aria-pressed={soundOn}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${soundOn ? 'bg-stone-800 text-stone-200' : 'bg-amber text-ink'}`}
+          >
+            {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            {soundOn ? 'Sound on' : 'Enable sound for new orders'}
+          </button>
+          <StatusIndicator label="Live Updates" status="live" />
+        </div>
       </div>
 
       {/* Orders Grid */}

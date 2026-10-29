@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -466,6 +467,11 @@ export default function RestaurantPage() {
                   )}
 
                   <div className="flex gap-2 pt-3 border-t border-stone-200">
+                    {table.qrCode && (
+                      <Link href="/dashboard/restaurant/qr" className="flex-1">
+                        <Button size="sm" variant="ghost" className="w-full"><QrCode className="w-4 h-4" /> Print QR</Button>
+                      </Link>
+                    )}
                     {table.qrCode && (
                       <Button size="sm" variant="ghost" className="flex-1" onClick={() => copyQrLink(table)}>
                         {copiedId === table.id ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
