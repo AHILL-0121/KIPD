@@ -58,8 +58,10 @@ describe('the dashboard uses the hotel\'s day, not the server\'s', () => {
     await q(`update orders set created_at = '2020-01-01'`);
     await q(`update bookings set created_at = '2020-01-01'`);
     // 17:00 UTC = 22:30 in India on the 29th.  19:00 UTC = 00:30 in India on the 30th.
-    await q(`insert into orders (tenant_id, outlet_id, total_amount, status, created_at) values ('${A.tenant}', '${A.outlet}', '111.00', 'served', '2026-10-29T17:00:00Z')`);
-    await q(`insert into orders (tenant_id, outlet_id, total_amount, status, created_at) values ('${A.tenant}', '${A.outlet}', '222.00', 'served', '2026-10-29T19:00:00Z')`);
+    // Revenue on the dashboard is money collected, so the two events are payments.
+    await q(`update payments set created_at = '2020-01-01'`);
+    await q(`insert into payments (tenant_id, bill_id, amount, method, created_at) values ('${A.tenant}', '${A.bill}', '111.00', 'cash', '2026-10-29T17:00:00Z')`);
+    await q(`insert into payments (tenant_id, bill_id, amount, method, created_at) values ('${A.tenant}', '${A.bill}', '222.00', 'cash', '2026-10-29T19:00:00Z')`);
     // It is 01:30 on 30 October in India (20:00 UTC on the 29th).
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-29T20:00:00Z'));
@@ -68,7 +70,7 @@ describe('the dashboard uses the hotel\'s day, not the server\'s', () => {
 
   const todayRevenue = async () => { loginAs('ownerA'); return (await call(dashboard.GET, 'GET', '/api/dashboard/stats')).json.todayRevenue; };
 
-  it('India: only the order placed after local midnight counts as today', async () => {
+  it('India: only the payment received after local midnight counts as today', async () => {
     expect(await todayRevenue()).toBe(222);
   });
 

@@ -1,189 +1,80 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { and, count, eq, gte, inArray, lt, ne, sql, sum } from 'drizzle-orm';
 import { db } from '@/db';
-import { properties, rooms, bookings, orders, outlets } from '@/db/schema';
-import { eq, and, gte, lte, inArray } from 'drizzle-orm';
+import { bookings, orders, payments, properties, rooms } from '@/db/schema';
 import { requireTenant } from '@/lib/auth';
+import { handleError } from '@/lib/http';
+import { buildPeriod } from '@/lib/periods';
 import { startOfDayInZone, startOfNextDayInZone } from '@/lib/tz';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function GET(request: NextRequest) {
+/**
+ * The owner's overview. All figures are for the business's own day (its time zone), computed in the database.
+ *
+ * - "Today / this week revenue" is money actually COLLECTED (payments received), so cancelled or unpaid
+ *   orders cannot inflate it. (It used to add up every booking and order, including cancelled ones.)
+ * - "This week" is the last 7 days including today.
+ * - Arrivals and departures ignore cancelled bookings.
+ */
+export async function GET() {
   try {
-    // Get tenant context from user's Clerk metadata
-    const context = await requireTenant();
-    const { tenantId } = context;
+    const { tenantId, timezone } = await requireTenant();
 
-    // Get all properties for this tenant
-    // If tenantId is empty (e.g. Platform Admin bypassing), return empty/403
-    if (!tenantId) {
+    const [{ n: propertyCount }] = await db.select({ n: count() }).from(properties).where(eq(properties.tenantId, tenantId));
+    if (propertyCount === 0) {
       return NextResponse.json({
-        error: 'No tenant found for this user',
-        hasProperties: false,
-      }, { status: 403 });
-    }
-
-    const tenantProperties = await db.query.properties.findMany({
-      where: eq(properties.tenantId, tenantId),
-    });
-
-    if (tenantProperties.length === 0) {
-      // No properties yet - return empty stats
-      return NextResponse.json({
-        occupancyRate: 0,
-        totalRooms: 0,
-        occupiedRooms: 0,
-        todayCheckIns: 0,
-        todayCheckOuts: 0,
-        activeOrders: 0,
-        todayRevenue: 0,
-        weekRevenue: 0,
-        arrivals: [],
-        recentOrders: [],
-        hasProperties: false,
+        occupancyRate: 0, totalRooms: 0, occupiedRooms: 0, todayCheckIns: 0, todayCheckOuts: 0,
+        activeOrders: 0, todayRevenue: 0, weekRevenue: 0, arrivals: [], recentOrders: [], hasProperties: false,
       });
     }
 
-    const propertyIds = tenantProperties.map(p => p.id);
+    const today = startOfDayInZone(timezone);
+    const tomorrow = startOfNextDayInZone(timezone);
+    const weekStart = buildPeriod('week', timezone).start;
+    const dayAgo = new Date(Date.now() - 24 * 3_600_000);
+    const notCancelled = ne(bookings.status, 'cancelled');
+    const collected = (from: Date) => db.select({ total: sum(payments.amount) }).from(payments)
+      .where(and(eq(payments.tenantId, tenantId), gte(payments.createdAt, from), lt(payments.createdAt, tomorrow)));
 
-    // "Today" is the hotel's day, not the server's.
-    const today = startOfDayInZone(context.timezone);
-    const tomorrow = startOfNextDayInZone(context.timezone);
-
-    // Get all rooms for occupancy calculation
-    const allRooms = await db.query.rooms.findMany({
-      where: inArray(rooms.propertyId, propertyIds),
-    });
-
-    const occupiedRooms = allRooms.filter(r => r.status === 'occupied').length;
-    const totalRooms = allRooms.length;
-    const occupancyRate = totalRooms > 0 ? ((occupiedRooms / totalRooms) * 100).toFixed(1) : '0';
-
-    // Get today's check-ins
-    const todayCheckIns = await db.query.bookings.findMany({
-      where: and(
-        inArray(bookings.propertyId, propertyIds),
-        gte(bookings.checkInDate, today),
-        lte(bookings.checkInDate, tomorrow)
-      ),
-      with: {
-        guest: true,
-        room: {
-          with: {
-            roomType: true,
-          },
-        },
-      },
-    });
-
-    // Get today's check-outs
-    const todayCheckOuts = await db.query.bookings.findMany({
-      where: and(
-        inArray(bookings.propertyId, propertyIds),
-        gte(bookings.checkOutDate, today),
-        lte(bookings.checkOutDate, tomorrow)
-      ),
-    });
-
-    // Get all outlets for this tenant's properties
-    const tenantOutlets = await db.query.outlets.findMany({
-      where: inArray(outlets.propertyId, propertyIds),
-    });
-
-    const outletIds = tenantOutlets.map(o => o.id);
-
-    // Get active orders
-    let activeOrders: any[] = [];
-    let recentOrdersList: any[] = [];
-    if (outletIds.length > 0) {
-      const twentyFourHoursAgo = new Date();
-      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
-
-      activeOrders = await db.query.orders.findMany({
-        where: and(
-          inArray(orders.outletId, outletIds),
-          inArray(orders.status, ['new', 'acknowledged', 'preparing', 'ready', 'served'])
-        ),
-      });
-      recentOrdersList = await db.query.orders.findMany({
-        where: and(
-          inArray(orders.outletId, outletIds),
-          gte(orders.createdAt, twentyFourHoursAgo)
-        ),
-        orderBy: (orders, { desc }) => [desc(orders.createdAt)],
+    const [[roomStats], [checkIns], [checkOuts], [active], [todayPaid], [weekPaid], arrivals, recentOrders] = await Promise.all([
+      db.select({ total: count(), occupied: sql<number>`count(*) filter (where ${rooms.status} = 'occupied')`.mapWith(Number) }).from(rooms).where(eq(rooms.tenantId, tenantId)),
+      db.select({ n: count() }).from(bookings).where(and(eq(bookings.tenantId, tenantId), notCancelled, gte(bookings.checkInDate, today), lt(bookings.checkInDate, tomorrow))),
+      db.select({ n: count() }).from(bookings).where(and(eq(bookings.tenantId, tenantId), notCancelled, gte(bookings.checkOutDate, today), lt(bookings.checkOutDate, tomorrow))),
+      db.select({ n: count() }).from(orders).where(and(eq(orders.tenantId, tenantId), inArray(orders.status, ['new', 'acknowledged', 'preparing', 'ready', 'served']))),
+      collected(today),
+      collected(weekStart),
+      db.query.bookings.findMany({
+        where: and(eq(bookings.tenantId, tenantId), notCancelled, gte(bookings.checkInDate, today), lt(bookings.checkInDate, tomorrow)),
+        with: { guest: true, room: { with: { roomType: true } } },
+        orderBy: (b, { asc }) => [asc(b.checkInDate)],
         limit: 5,
-        with: {
-          table: true,
-          orderItems: { with: { menuItem: true } }
-        }
-      });
-    }
+      }),
+      db.query.orders.findMany({
+        where: and(eq(orders.tenantId, tenantId), gte(orders.createdAt, dayAgo)),
+        orderBy: (o, { desc }) => [desc(o.createdAt)],
+        limit: 5,
+        with: { table: true, orderItems: { with: { menuItem: true } } },
+      }),
+    ]);
 
-    // Calculate today's revenue
-    const todayBookings = await db.query.bookings.findMany({
-      where: and(
-        inArray(bookings.propertyId, propertyIds),
-        gte(bookings.createdAt, today)
-      ),
-    });
-
-    let todayOrders: any[] = [];
-    if (outletIds.length > 0) {
-      todayOrders = await db.query.orders.findMany({
-        where: and(
-          inArray(orders.outletId, outletIds),
-          gte(orders.createdAt, today)
-        ),
-      });
-    }
-
-    const todayRevenue =
-      todayBookings.reduce((sum, b) => sum + Number(b.totalAmount), 0) +
-      todayOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
-
-    // Calculate week revenue (last 7 days)
-    const weekAgo = new Date(today);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-
-    const weekBookings = await db.query.bookings.findMany({
-      where: and(
-        inArray(bookings.propertyId, propertyIds),
-        gte(bookings.createdAt, weekAgo)
-      ),
-    });
-
-    let weekOrders: any[] = [];
-    if (outletIds.length > 0) {
-      weekOrders = await db.query.orders.findMany({
-        where: and(
-          inArray(orders.outletId, outletIds),
-          gte(orders.createdAt, weekAgo)
-        ),
-      });
-    }
-
-    const weekRevenue =
-      weekBookings.reduce((sum, b) => sum + Number(b.totalAmount), 0) +
-      weekOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
+    const totalRooms = roomStats.total, occupied = roomStats.occupied;
 
     return NextResponse.json({
-      occupancyRate: Number(occupancyRate),
+      occupancyRate: totalRooms ? Number(((occupied / totalRooms) * 100).toFixed(1)) : 0,
       totalRooms,
-      occupiedRooms,
-      todayCheckIns: todayCheckIns.length,
-      todayCheckOuts: todayCheckOuts.length,
-      activeOrders: activeOrders.length,
-      todayRevenue,
-      weekRevenue,
-      arrivals: todayCheckIns.slice(0, 5), // First 5 for preview
-      recentOrders: recentOrdersList,
+      occupiedRooms: occupied,
+      todayCheckIns: checkIns.n,
+      todayCheckOuts: checkOuts.n,
+      activeOrders: active.n,
+      todayRevenue: Number(todayPaid.total ?? 0),
+      weekRevenue: Number(weekPaid.total ?? 0),
+      arrivals,
+      recentOrders,
       hasProperties: true,
     });
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleError(error, 'Failed to load the dashboard');
   }
 }
