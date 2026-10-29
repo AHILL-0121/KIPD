@@ -110,16 +110,23 @@ export default function BookingsPage() {
 
   const updateBookingAction = async (bookingId: string, action: string) => {
     try {
-      await fetch(`/api/bookings/${bookingId}`, {
+      const res = await fetch(`/api/bookings/${bookingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
       });
+      if (!res.ok) {
+        // Show the server's reason (for example "Only a pending booking can be confirmed").
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to ${action}`);
+      }
       fetchBookings();
       fetchRooms();
-      showToast(`Booking ${action.replace('-', ' ')} successfully`, 'success');
-    } catch {
-      showToast(`Failed to ${action}`, 'error');
+      const done: Record<string, string> = { confirm: 'confirmed', 'check-in': 'checked in', 'check-out': 'checked out', cancel: 'cancelled' };
+      showToast(`Booking ${done[action] ?? action}`, 'success');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : `Failed to ${action}`, 'error');
+      fetchBookings();
     }
   };
 
@@ -183,6 +190,7 @@ export default function BookingsPage() {
             { value: 'confirmed', label: 'Confirmed' },
             { value: 'checked_in', label: 'Checked In' },
             { value: 'checked_out', label: 'Checked Out' },
+            { value: 'cancelled', label: 'Cancelled' },
           ]}
         />
       </div>
@@ -215,6 +223,9 @@ export default function BookingsPage() {
                       <Badge variant={config.badge as any} dot>
                         {config.label}
                       </Badge>
+                      {booking.source === 'online' && booking.status === 'pending' && (
+                        <Badge variant={'stone' as any}>Online request</Badge>
+                      )}
                     </div>
                     
                     <div className="grid grid-cols-4 gap-4 text-sm">
@@ -245,6 +256,11 @@ export default function BookingsPage() {
                   </div>
                   
                   <div className="flex gap-2 ml-6">
+                    {booking.status === 'pending' && (
+                      <Button size="sm" variant="sage" onClick={() => updateBookingAction(booking.id, 'confirm')}>
+                        Confirm
+                      </Button>
+                    )}
                     {booking.status === 'confirmed' && (
                       <Button size="sm" variant="sage" onClick={() => updateBookingAction(booking.id, 'check-in')}>
                         Check In
