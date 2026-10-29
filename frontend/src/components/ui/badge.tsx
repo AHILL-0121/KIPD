@@ -23,12 +23,11 @@ export function Badge({ children, variant = 'amber', dot = false, className = ''
         inline-flex items-center gap-1.5 
         px-3 py-1 rounded-full
         text-xs font-medium uppercase tracking-wide
-        transition-transform hover:scale-105
         ${variantClasses[variant]}
         ${className}
       `}
     >
-      {dot && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
+      {dot && <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-current" />}
       {children}
     </span>
   );
