@@ -21,6 +21,10 @@ import { relations, sql } from 'drizzle-orm';
  *    (tenants.timezone), never the server's.
  *
  * 5. MONEY is numeric(10,2).
+ *
+ * 6. NO DOUBLE-BOOKING is enforced by the database, not just the code: bookings has an EXCLUDE constraint
+ *    (bookings_no_overlap, in migration 0002) so two active bookings for one room can never overlap, even when
+ *    two guests book the last room at the same instant. Drizzle cannot express it, so it lives in SQL.
  */
 
 const tstz = (name: string) => timestamp(name, { withTimezone: true });
@@ -230,6 +234,7 @@ export const orders = pgTable('orders', {
   guestId: uuid('guest_id'),
   billId: uuid('bill_id'), // set when the table is settled
   type: text('type').notNull().default('dine_in'), // dine_in, room_service
+  source: text('source').notNull().default('staff'), // staff (entered by the team) or guest (QR menu)
   // new -> acknowledged -> preparing -> ready -> served -> closed (billed). cancelled at any point.
   status: text('status').notNull().default('new'),
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
@@ -249,6 +254,7 @@ export const orders = pgTable('orders', {
   index('idx_orders_bill').on(t.billId),
   check('orders_status_check', sql`${t.status} in ('new','acknowledged','preparing','ready','served','cancelled','closed')`),
   check('orders_type_check', sql`${t.type} in ('dine_in','room_service')`),
+  check('orders_source_check', sql`${t.source} in ('staff','guest')`),
   check('orders_total_check', sql`${t.totalAmount} >= 0`),
 ]);
 

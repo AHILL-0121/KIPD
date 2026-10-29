@@ -19,6 +19,13 @@ export async function POST(request: NextRequest) {
     const { tenantId } = await requireTenant(ROLES.manage);
     const { name, email, role, password } = await parseJson(request, schema);
 
+    // 0. A login with this email may already exist (an earlier staff account, or someone who signed up
+    //    themselves). Do NOT attach it to this team on a typed email: a typo would hand a stranger access.
+    //    The invitation flow is the safe route, because the person accepts it themselves.
+    const EXISTS = 'That email already has a login. Use "Send invite" instead: they sign in with their own account and accept it. (To start over with that address, delete the old login in the Clerk dashboard first.)';
+    const found = await clerkClient.users.getUserList({ emailAddress: [email] });
+    if ((Array.isArray(found) ? found : (found as { data: unknown[] }).data).length > 0) throw new HttpError(409, EXISTS);
+
     // 1. Create the login in Clerk. Password strength checks stay ON.
     let clerkUserId: string;
     try {
@@ -30,7 +37,8 @@ export async function POST(request: NextRequest) {
       });
       clerkUserId = user.id;
     } catch (error) {
-      const first = (error as { errors?: { longMessage?: string; message?: string }[] }).errors?.[0];
+      const first = (error as { errors?: { code?: string; longMessage?: string; message?: string }[] }).errors?.[0];
+      if (first?.code === 'form_identifier_exists') throw new HttpError(409, EXISTS); // lost a race with the check above
       throw new HttpError(422, first?.longMessage || first?.message || 'Could not create the account');
     }
 

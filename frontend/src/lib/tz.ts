@@ -36,3 +36,21 @@ export function startOfNextDayInZone(timeZone: string, at: Date = new Date()): D
 export function isValidTimeZone(timeZone: string): boolean {
   try { new Intl.DateTimeFormat('en-US', { timeZone }); return true; } catch { return false; }
 }
+
+/**
+ * The instant at which the wall clock in `timeZone` reads `date` (YYYY-MM-DD) at `hour:minute`.
+ * Used for check-in (14:00) and check-out (11:00), which are hotel-local times.
+ */
+export function zonedDateTimeToInstant(timeZone: string, date: string, hour = 0, minute = 0): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!m) throw new Error(`Invalid date: ${date}`);
+  const wallAsUtc = Date.UTC(+m[1], +m[2] - 1, +m[3], hour, minute);
+  let guess = wallAsUtc - zoneOffsetMs(timeZone, new Date(wallAsUtc));
+  guess = wallAsUtc - zoneOffsetMs(timeZone, new Date(guess));
+  return new Date(guess);
+}
+
+/** Today's date in `timeZone` as YYYY-MM-DD. */
+export function todayInZone(timeZone: string, at: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+}

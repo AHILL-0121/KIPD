@@ -27,7 +27,12 @@ export interface ExpectedTable {
   uniques: string[];
   /** FOREIGN KEY names. Tenant isolation in the database depends on these. */
   foreignKeys: string[];
+  /** EXCLUDE constraint names (hand-written SQL migrations; Drizzle does not model them). */
+  exclusions: string[];
 }
+
+/** Constraints that exist only in custom SQL migrations. Keep in step with drizzle/*.sql. */
+const MANUAL_EXCLUSIONS: Record<string, string[]> = { bookings: ['bookings_no_overlap'] };
 
 /** The latest schema, straight from src/db/schema.ts. */
 export function expectedFromSchema(): ExpectedTable[] {
@@ -44,6 +49,7 @@ export function expectedFromSchema(): ExpectedTable[] {
         ...cfg.columns.filter((c) => c.isUnique).map((c) => c.uniqueName), // column-level .unique()
       ].filter((n): n is string => !!n),
       foreignKeys: cfg.foreignKeys.map((f) => f.getName()),
+      exclusions: MANUAL_EXCLUSIONS[cfg.name] ?? [],
     };
   });
 }
@@ -71,6 +77,7 @@ export function expectedFromSnapshot(index = 0): ExpectedTable[] {
     checks: Object.values(t.checkConstraints ?? {}).map((c) => c.name),
     uniques: Object.values(t.uniqueConstraints ?? {}).map((u) => u.name),
     foreignKeys: Object.values(t.foreignKeys ?? {}).map((f) => f.name),
+    exclusions: [], // snapshots do not record hand-written constraints
   }));
 }
 
@@ -103,6 +110,7 @@ export async function checkDrift(query: Query, expected: ExpectedTable[] = expec
   const liveChecks = named('c');
   const liveUniques = named('u');
   const liveFks = named('f');
+  const liveExclusions = named('x');
   const liveTables = new Set(liveCols.map((r) => String(r.table_name)));
   const expectedNames = new Set(expected.map((t) => t.name));
 
@@ -150,6 +158,9 @@ export async function checkDrift(query: Query, expected: ExpectedTable[] = expec
     }
     for (const name of table.uniques) {
       if (!liveUniques.has(name)) report.errors.push(`unique constraint "${name}" is missing`);
+    }
+    for (const name of table.exclusions) {
+      if (!liveExclusions.has(name)) report.errors.push(`exclusion constraint "${name}" is missing`);
     }
     for (const name of table.foreignKeys) {
       if (!liveFks.has(name)) report.errors.push(`foreign key "${name}" is missing`);

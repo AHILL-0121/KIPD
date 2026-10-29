@@ -1,5 +1,6 @@
 import path from 'path';
 import { PGlite } from '@electric-sql/pglite';
+import { btree_gist } from '@electric-sql/pglite/contrib/btree_gist';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import * as schema from '@/db/schema';
@@ -11,7 +12,7 @@ import * as schema from '@/db/schema';
  */
 export const MIGRATIONS = path.resolve(__dirname, '..', '..', 'drizzle');
 
-const client = new PGlite();
+const client = new PGlite({ extensions: { btree_gist } });
 export const testDb = drizzle(client, { schema });
 
 // The app uses the Neon HTTP driver, which has db.batch(). PGlite's driver does not, so provide
@@ -26,6 +27,6 @@ export const ready = migrate(testDb, { migrationsFolder: MIGRATIONS });
 
 /** A second, empty database, for tests that need to control exactly which migrations are applied. */
 export function freshDb() {
-  const c = new PGlite();
+  const c = new PGlite({ extensions: { btree_gist } });
   return { client: c, db: drizzle(c, { schema }) };
 }

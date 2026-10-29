@@ -19,6 +19,9 @@ export default authMiddleware({
     '/onboarding',
     // Stripe calls this without a Clerk session. The route verifies Stripe's signature itself.
     '/api/webhooks/stripe',
+    // Guest-facing: the QR menu, ordering and hotel booking. These routes resolve the tenant from the
+    // slug in the link, are rate limited, and expose nothing except the public menu / room types.
+    '/api/public/(.*)',
   ],
 
   async afterAuth(auth, req) {

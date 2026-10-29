@@ -5,6 +5,9 @@ import * as bookings from '@/app/api/bookings/route';
 import * as settle from '@/app/api/orders/settle-tab/route';
 import * as orderStatus from '@/app/api/orders/[id]/status/route';
 import * as notification from '@/app/api/payments/notification-match/route';
+import fs from 'fs';
+import path from 'path';
+import { MIGRATIONS } from './helpers/db';
 import { call, ids, loginAs, q, resetAndSeed } from './helpers/harness';
 
 const A = ids.A, B = ids.B;
@@ -155,7 +158,7 @@ describe('the database refuses cross-tenant references', () => {
     ['a payment against tenant B\'s bill', `insert into payments (tenant_id, bill_id, amount, method) values ('${A.tenant}', '${B.bill}', '5', 'cash')`],
     ['a table in tenant A\'s name inside tenant B\'s outlet', `insert into tables (tenant_id, outlet_id, table_number) values ('${A.tenant}', '${B.outlet}', 'sneaky')`],
     ['moving an existing order to tenant B\'s bill', `update orders set bill_id = '${B.bill}' where id = '${A.order}'`],
-    ['moving a booking to tenant B\'s room', `update bookings set room_id = '${B.room}' where id = '${A.booking}'`],
+    ['moving a booking to tenant B\'s room', `update bookings set room_id = '${B.room}', check_in_date = '2031-01-01', check_out_date = '2031-01-02' where id = '${A.booking}'`],
     ['re-parenting an existing outlet to tenant B\'s property', `update outlets set property_id = '${B.property}' where id = '${A.outlet}'`],
   ];
   it.each(cases)('rejects %s', async (_name, statement) => {
@@ -184,5 +187,71 @@ describe('the database refuses cross-tenant references', () => {
       select table_name, column_name from information_schema.columns
       where table_schema = 'public' and data_type = 'timestamp without time zone'`);
     expect(naive).toEqual([]);
+  });
+});
+
+/**
+ * The no-double-booking rule lives in the database (migration 0002), so it holds for every code path:
+ * the staff screen, the public booking page, scripts, and anything written in future.
+ */
+describe('a room can never have two overlapping active bookings', () => {
+  const room = A.room;
+  const insert = (id: number, from: string, to: string, status = 'confirmed') =>
+    `insert into bookings (id, tenant_id, property_id, room_id, guest_id, check_in_date, check_out_date, status, total_amount)
+     values ('${uuid(id)}', '${A.tenant}', '${A.property}', '${room}', '${A.guest}', '${from}', '${to}', '${status}', '1')`;
+  // the seed already has 10 Jan 2030 12:00 to 12 Jan 2030 10:00 for this room
+
+  it('refuses an overlap, however it is attempted', async () => {
+    expect(await rejected(insert(900, '2030-01-11T00:00:00Z', '2030-01-13T00:00:00Z'))).toMatch(/bookings_no_overlap|exclusion/i);
+    expect(await rejected(insert(901, '2030-01-10T13:00:00Z', '2030-01-10T14:00:00Z'))).toMatch(/bookings_no_overlap|exclusion/i); // fully inside
+    expect(await rejected(insert(902, '2030-01-01T00:00:00Z', '2030-01-20T00:00:00Z', 'pending'))).toMatch(/bookings_no_overlap|exclusion/i); // fully around, pending counts too
+  });
+
+  it('allows back-to-back stays, other rooms, and anything that is not active', async () => {
+    await q(insert(903, '2030-01-12T10:00:00Z', '2030-01-13T10:00:00Z'));                // arrives the moment the previous guest leaves
+    await q(insert(904, '2030-01-09T00:00:00Z', '2030-01-10T12:00:00Z'));                // leaves the moment the next guest arrives
+    await q(insert(905, '2030-01-11T00:00:00Z', '2030-01-13T00:00:00Z', 'cancelled'));   // cancelled: no longer blocks
+    await q(insert(906, '2030-01-11T00:00:00Z', '2030-01-13T00:00:00Z', 'checked_out')); // finished: no longer blocks
+    await q(`insert into rooms (id, tenant_id, property_id, room_type_id, room_number) values ('${uuid(910)}', '${A.tenant}', '${A.property}', '${A.roomType}', '555')`);
+    await q(`insert into bookings (tenant_id, property_id, room_id, guest_id, check_in_date, check_out_date, total_amount)
+             values ('${A.tenant}', '${A.property}', '${uuid(910)}', '${A.guest}', '2030-01-10T12:00:00Z', '2030-01-12T10:00:00Z', '1')`); // same dates, different room
+  });
+
+  it('a cancelled booking cannot be brought back if the room has since been taken', async () => {
+    await q(insert(907, '2030-01-11T00:00:00Z', '2030-01-13T00:00:00Z', 'cancelled'));
+    expect(await rejected(`update bookings set status = 'confirmed' where id = '${uuid(907)}'`)).toMatch(/bookings_no_overlap|exclusion/i);
+  });
+
+  it('the staff screen also gets a clear 409, including when two staff book the last room at once', async () => {
+    await q(`update bookings set status = 'cancelled' where id = '${A.booking}'`);
+    loginAs('frontA');
+    const attempt = (email: string) => call(bookings.POST, 'POST', '/api/bookings', {
+      body: { roomId: A.room, guestName: 'Walk In', guestEmail: email, checkInDate: '2032-05-01', checkOutDate: '2032-05-03' },
+    });
+    const [one, two] = await Promise.all([attempt('one@x.test'), attempt('two@x.test')]);
+    expect([one.status, two.status].sort()).toEqual([200, 409]);
+    expect(await q(`select id from bookings where room_id = '${A.room}' and check_in_date = '2032-05-01T00:00:00Z' or (room_id = '${A.room}' and check_in_date > '2032-01-01')`)).toHaveLength(1);
+  });
+
+  it('migration 0002 refuses to apply, with a clear message and no change, if overlaps already exist', async () => {
+    const [, preflight, addConstraint] = fs.readFileSync(path.join(MIGRATIONS, '0002_booking_no_overlap.sql'), 'utf-8').split('--> statement-breakpoint').map((x) => x.trim());
+    await q(`alter table bookings drop constraint bookings_no_overlap`);
+    try {
+      await q(insert(908, '2030-01-11T00:00:00Z', '2030-01-13T00:00:00Z')); // an overlap the old schema would have allowed
+      const msg = await rejected(preflight);
+      expect(msg).toMatch(/Migration 0002 stopped/);
+      expect(msg).toMatch(/Nothing was changed/);
+      expect((await q(`select 1 from pg_constraint where conname = 'bookings_no_overlap'`))).toHaveLength(0);
+
+    } finally {
+      await q(`delete from bookings where id = '${uuid(908)}'`);
+      await q(preflight);          // ...and now the pre-flight passes
+      await q(addConstraint);      // ...and the constraint goes on (also restores the schema for later tests)
+    }
+    expect(await q(`select 1 from pg_constraint where conname = 'bookings_no_overlap'`)).toHaveLength(1);
+  });
+
+  it('exists in the database (so the drift checker can verify it)', async () => {
+    expect(await q(`select contype from pg_constraint where conname = 'bookings_no_overlap'`)).toEqual([{ contype: 'x' }]);
   });
 });

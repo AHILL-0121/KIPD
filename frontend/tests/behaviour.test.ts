@@ -242,6 +242,34 @@ describe('removing staff', () => {
     expect((await call(staffById.DELETE, 'DELETE', '/api/staff/x', { params: { id: staffIds.waiterA } })).status).toBe(200);
   });
 
+  it('refuses to create a login for an email that already has one, and points to "Send invite"', async () => {
+    (globalThis as unknown as { __existingEmails: Set<string> }).__existingEmails.add('kitchen+old@a.test');
+    g.__clerkCreateUser.mockClear();
+    loginAs('managerA');
+    const r = await call(staffDirect.POST, 'POST', '/api/staff/direct', { body: { name: 'Old Login', email: 'Kitchen+Old@A.test', role: 'kitchen', password: 'a-long-password-1' } });
+    expect(r.status).toBe(409);
+    expect(r.json.error).toMatch(/already has a login/i);
+    expect(r.json.error).toMatch(/Send invite/);
+    expect(g.__clerkCreateUser).not.toHaveBeenCalled(); // nothing was created or changed in Clerk
+    expect(await q(`select id from staff where email = 'kitchen+old@a.test'`)).toHaveLength(0);
+  });
+
+  it('gives the same answer if Clerk itself reports the email as taken (a race)', async () => {
+    g.__clerkCreateUser.mockRejectedValueOnce({ errors: [{ code: 'form_identifier_exists', message: 'That email address is taken.' }] });
+    loginAs('managerA');
+    const r = await call(staffDirect.POST, 'POST', '/api/staff/direct', { body: { name: 'Raced', email: 'raced@a.test', role: 'waiter', password: 'a-long-password-1' } });
+    expect(r.status).toBe(409);
+    expect(r.json.error).toMatch(/Send invite/);
+  });
+
+  it('passes the reason Clerk gives through for other failures (for example a leaked password)', async () => {
+    g.__clerkCreateUser.mockRejectedValueOnce({ errors: [{ code: 'form_password_pwned', longMessage: 'Password has been found in an online data breach.' }] });
+    loginAs('managerA');
+    const r = await call(staffDirect.POST, 'POST', '/api/staff/direct', { body: { name: 'Weak', email: 'weak@a.test', role: 'waiter', password: 'password1234' } });
+    expect(r.status).toBe(422);
+    expect(r.json.error).toMatch(/data breach/);
+  });
+
   it('does not leave an orphan login when saving the staff record fails', async () => {
     loginAs('managerA');
     g.__clerkCreateUser.mockResolvedValueOnce({ id: personas.waiterA }); // clerk_id is unique, so the insert will fail

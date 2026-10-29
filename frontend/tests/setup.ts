@@ -8,9 +8,11 @@ type G = {
   __user?: string | null;
   __clerk?: Record<string, unknown>;
   __clerkCreateUser?: ReturnType<typeof vi.fn>;
+  __existingEmails?: Set<string>;
 };
 const g = globalThis as unknown as G;
 g.__clerk = {};
+g.__existingEmails = new Set();
 g.__clerkCreateUser = vi.fn(async () => ({ id: 'user_created_by_test' }));
 
 // The app's database import becomes the in-memory Postgres.
@@ -41,6 +43,9 @@ vi.mock('@clerk/nextjs', () => ({
       createUser: (args: unknown) => g.__clerkCreateUser!(args),
       deleteUser: vi.fn(async () => ({})),
       getUser: async (id: string) => (g.__clerk as Record<string, unknown>)[id] ?? { emailAddresses: [] },
+      // Clerk v4 returns an array. Tests list the emails that "already have a login" in g.__existingEmails.
+      getUserList: async ({ emailAddress }: { emailAddress: string[] }) =>
+        emailAddress.filter((e) => g.__existingEmails?.has(e.toLowerCase())).map((e) => ({ id: 'user_existing', emailAddress: e })),
     },
   },
 }));
