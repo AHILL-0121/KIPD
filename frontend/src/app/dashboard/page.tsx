@@ -147,7 +147,7 @@ export default function DashboardPage() {
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="mb-8 flex flex-row items-start md:items-center justify-between gap-3">
         <div>
-          <h1 className="section-title">Dashboard</h1>
+          <h1 className="section-title">Home</h1>
           <p className="section-sub">Today&apos;s operations at a glance</p>
         </div>
         <div className="flex flex-col items-end gap-1 md:flex-row md:items-center md:gap-3 flex-shrink-0">
