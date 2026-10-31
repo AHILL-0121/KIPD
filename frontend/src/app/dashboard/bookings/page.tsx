@@ -10,6 +10,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { FilterTabs } from '@/components/ui/filter-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { LoadingState } from '@/components/ui/loading-state';
+import Link from 'next/link';
 import { Plus, X } from 'lucide-react';
 import { differenceInCalendarDays, format, isToday } from 'date-fns';
 import { formatCurrency } from '@/lib/currency';
@@ -28,6 +29,8 @@ interface Booking {
   totalAmount: string;
   source: string;
   specialRequests?: string;
+  /** The stay's live bill, if it has one (a pending request has none until it is confirmed). */
+  bill?: { id: string; status: 'open' | 'partial' | 'paid'; totalAmount: number; paidAmount: number } | null;
 }
 
 interface AvailableRoom {
@@ -68,9 +71,9 @@ export default function BookingsPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [form, setForm] = useState(emptyForm());
 
-  const showToast = (message: string, type: 'success' | 'error') => {
+  const showToast = (message: string, type: 'success' | 'error', ms = 4000) => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    setTimeout(() => setToast(null), ms);
   };
 
   const fetchBookings = () => {
@@ -166,11 +169,15 @@ export default function BookingsPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || `Could not ${action.replace('-', ' ')} this booking.`);
       }
+      const data = await res.json().catch(() => ({}));
       setSelectedId(null);
       setCancelling(null);
       fetchBookings();
       fetchRooms();
-      showToast(`${booking.guest?.name || 'Booking'} ${ACTION_DONE[action] ?? action}`, 'success');
+      const who = booking.guest?.name || 'Booking';
+      // Money already taken on a cancelled booking is not refunded automatically: say so, and for longer.
+      if (action === 'cancel' && data.refundDue > 0) showToast(`${who} cancelled. ${formatCurrency(data.refundDue)} was already paid and needs refunding by hand.`, 'success', 10000);
+      else showToast(`${who} ${ACTION_DONE[action] ?? action}`, 'success');
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Something went wrong. Please try again.', 'error');
       fetchBookings();
@@ -314,6 +321,9 @@ export default function BookingsPage() {
             ['Check-out', format(new Date(selected.checkOutDate), 'EEE d MMM yyyy, h:mm a')],
             ['Guests', String(selected.numGuests)],
             ['Total', formatCurrency(Number(selected.totalAmount))],
+            ['Payment', selected.bill
+              ? selected.bill.status === 'paid' ? `Paid in full (${formatCurrency(selected.bill.totalAmount)})` : `${formatCurrency(selected.bill.paidAmount)} paid, ${formatCurrency(selected.bill.totalAmount - selected.bill.paidAmount)} owed`
+              : selected.status === 'pending' ? 'No bill until the request is confirmed' : selected.status === 'cancelled' ? 'Bill cancelled' : 'No bill yet'],
             ['Booked via', SOURCE_LABEL[selected.source] ?? selected.source],
             ...(selected.specialRequests ? [['Requests', selected.specialRequests] as [string, string]] : []),
           ];
@@ -331,8 +341,13 @@ export default function BookingsPage() {
                   {rows.map(([k, v]) => (<div key={k} className="contents"><dt className="text-ink-muted">{k}</dt><dd className="font-medium text-ink break-words">{v}</dd></div>))}
                 </dl>
               </div>
-              {(next || selected.status === 'pending' || selected.status === 'confirmed') && (
+              {(next || selected.bill || selected.status === 'pending' || selected.status === 'confirmed') && (
                 <footer className="grid gap-2.5 px-6 py-4 border-t border-stone-200">
+                  {selected.bill && selected.bill.status !== 'paid' && (
+                    <Link href="/dashboard/billing/hotel" className="inline-flex items-center justify-center h-[46px] rounded-lg border border-stone-200 text-ink-soft font-medium hover:bg-stone-100 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber">
+                      Record a payment in Billing
+                    </Link>
+                  )}
                   {next && <Button className="w-full h-[46px]" disabled={saving} onClick={() => updateBookingAction(selected, next.action)}>{next.label}</Button>}
                   {(selected.status === 'pending' || selected.status === 'confirmed') && (
                     <Button variant="ghost" className="w-full h-[46px] text-terra hover:bg-terra-pale" onClick={() => { setSelectedId(null); setCancelling(selected); }}>

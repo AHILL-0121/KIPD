@@ -8,21 +8,21 @@ describe('sidebar groups', () => {
   it('an owner of a hotel and restaurant sees Home, Hotel, Restaurant and Manage', () => {
     expect(labels('both', 'owner')).toEqual([
       'Home: Home',
-      'Hotel: Rooms, Bookings',
-      'Restaurant: Menu, Orders, Kitchen Display',
-      'Manage: Billing, Staff, Analytics, Settings',
+      'Hotel: Rooms, Bookings, Billing',
+      'Restaurant: Menu, Orders, Kitchen Display, Billing',
+      'Manage: Staff, Analytics, Settings',
     ]);
   });
 
   it('a business only sees the area it runs', () => {
     expect(labels('hotel', 'owner').join(' | ')).not.toMatch(/Restaurant/);
     expect(labels('restaurant', 'owner').join(' | ')).not.toMatch(/Hotel/);
-    expect(labels('hotel', 'owner')).toContain('Hotel: Rooms, Bookings');
-    expect(labels('restaurant', 'owner')).toContain('Restaurant: Menu, Orders, Kitchen Display');
+    expect(labels('hotel', 'owner')).toContain('Hotel: Rooms, Bookings, Billing');
+    expect(labels('restaurant', 'owner')).toContain('Restaurant: Menu, Orders, Kitchen Display, Billing');
   });
 
   it('each role sees only its own pages', () => {
-    expect(labels('both', 'front_desk')).toEqual(['Home: Home', 'Hotel: Rooms, Bookings', 'Manage: Billing']);
+    expect(labels('both', 'front_desk')).toEqual(['Home: Home', 'Hotel: Rooms, Bookings, Billing', 'Restaurant: Billing']); // the cashier for both
     expect(labels('both', 'waiter')).toEqual(['Restaurant: Orders']);
     expect(labels('both', 'kitchen')).toEqual(['Restaurant: Kitchen Display']);
     expect(labels('both', 'manager')).toEqual(labels('both', 'owner'));
@@ -59,10 +59,25 @@ describe('breadcrumbs', () => {
     expect(trail('/dashboard/restaurant')).toBe('Home > Restaurant > Menu');
   });
 
+  it('billing sits under its own area', () => {
+    expect(trail('/dashboard/billing/hotel')).toBe('Home > Hotel > Billing');
+    expect(trail('/dashboard/billing/restaurant')).toBe('Home > Restaurant > Billing');
+    expect(crumbsFor('/dashboard/billing/hotel', 'both', 'front_desk')[2]).toEqual({ label: 'Billing', href: '/dashboard/billing/hotel' });
+  });
+
+  it('a restaurant-only business bills only under Restaurant, and a hotel-only one only under Hotel', () => {
+    expect(labels('restaurant', 'front_desk')).toEqual(['Home: Home', 'Restaurant: Billing']);
+    expect(labels('hotel', 'front_desk')).toEqual(['Home: Home', 'Hotel: Rooms, Bookings, Billing']);
+    expect(canOpen('/dashboard/billing/hotel', 'restaurant', 'owner')).toBe(false);
+    expect(canOpen('/dashboard/billing/restaurant', 'hotel', 'owner')).toBe(false);
+    expect(canOpen('/dashboard/billing/hotel', 'both', 'waiter')).toBe(false);
+    expect(canOpen('/dashboard/billing', 'both', 'waiter')).toBe(true); // the old address only redirects
+  });
+
   it('shared pages and Home have no area', () => {
     expect(trail('/dashboard')).toBe('Home');
     expect(trail('/dashboard/staff')).toBe('Home > Staff');
-    expect(trail('/dashboard/billing')).toBe('Home > Billing');
+    expect(trail('/dashboard/billing')).toBe('Home > Billing'); // the old address, which just redirects
     expect(trail('/dashboard/settings')).toBe('Home > Settings');
   });
 

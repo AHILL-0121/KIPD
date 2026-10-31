@@ -152,3 +152,43 @@ describe('guest email', () => {
     expect(screen.getAllByText('No email on file').length).toBeGreaterThan(0);
   });
 });
+
+describe('payment on a booking', () => {
+  const partial = { id: 'bill1', status: 'partial', totalAmount: 10000, paidAmount: 2000 };
+
+  it('the drawer says how much is paid, and links to Hotel billing while money is owed', async () => {
+    serve([booking('b', 'Bala Iyer', 'confirmed', { bill: partial })]);
+    render(<BookingsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /Bala Iyer, room 101, Confirmed/ }));
+    const drawer = await screen.findByRole('dialog');
+    expect(within(drawer).getByText('₹2,000 paid, ₹8,000 owed')).toBeTruthy();
+    expect(within(drawer).getByRole('link', { name: 'Record a payment in Billing' }).getAttribute('href')).toBe('/dashboard/billing/hotel');
+  });
+
+  it('a paid-up stay has no payment link, and a pending request explains why it has no bill', async () => {
+    serve([
+      booking('b', 'Bala Iyer', 'confirmed', { bill: { id: 'bill1', status: 'paid', totalAmount: 6000, paidAmount: 6000 } }),
+      booking('p', 'Pema Dorji', 'pending'),
+    ]);
+    render(<BookingsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /Bala Iyer, room 101, Confirmed/ }));
+    let drawer = await screen.findByRole('dialog');
+    expect(within(drawer).getByText('Paid in full (₹6,000)')).toBeTruthy();
+    expect(within(drawer).queryByRole('link', { name: /Record a payment/ })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: /Pema Dorji, room 101, Pending/ }));
+    drawer = await screen.findByRole('dialog');
+    expect(within(drawer).getByText('No bill until the request is confirmed')).toBeTruthy();
+  });
+
+  it('cancelling a booking that was paid for says how much to refund by hand', async () => {
+    serve([booking('b', 'Bala Iyer', 'confirmed', { bill: partial })], { write: () => new Response(JSON.stringify({ success: true, refundDue: 2000 })) });
+    render(<BookingsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /Bala Iyer, room 101, Confirmed/ }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel booking' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Cancel this booking?' });
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel booking' }));
+    expect((await screen.findByRole('status')).textContent).toMatch(/cancelled\. ₹2,000 was already paid and needs refunding by hand/);
+  });
+});

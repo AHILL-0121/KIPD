@@ -24,7 +24,7 @@ describe('dashboard layout', () => {
     render(<DashboardLayout><p>page</p></DashboardLayout>);
     await within(await screen.findByRole('navigation', { name: 'Main' })).findByRole('group', { name: 'Hotel' });
     expect(within(sidebar()).getAllByRole('group').map(g => g.getAttribute('aria-label'))).toEqual(['Home', 'Hotel', 'Restaurant', 'Manage']);
-    expect(within(within(sidebar()).getByRole('group', { name: 'Hotel' })).getAllByRole('link').map(l => l.textContent)).toEqual(['Rooms', 'Bookings']);
+    expect(within(within(sidebar()).getByRole('group', { name: 'Hotel' })).getAllByRole('link').map(l => l.textContent)).toEqual(['Rooms', 'Bookings', 'Billing']);
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
     expect(within(crumbs).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Home', 'Hotel', 'Rooms']);
     expect(within(crumbs).getByText('Rooms').getAttribute('aria-current')).toBe('page');

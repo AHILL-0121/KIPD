@@ -5,6 +5,7 @@ export const BILL_STATUS: Record<string, { label: string; tone: StatusTone }> = 
   open: { label: 'Unpaid', tone: 'amber' },
   partial: { label: 'Part paid', tone: 'amber' },
   paid: { label: 'Paid', tone: 'sage' },
+  void: { label: 'Cancelled', tone: 'stone' }, // the bill of a cancelled booking; not listed, but named if one ever shows
 };
 
 export function billStatus(status: string) {

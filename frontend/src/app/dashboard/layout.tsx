@@ -137,9 +137,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
                 return (
                   <Link
-                    key={item.name}
+                    key={item.href}
                     href={item.href}
-                    title={isCollapsed ? item.name : undefined}
+                    title={isCollapsed ? `${group.label}: ${item.name}` : undefined}
                     aria-current={isActive ? 'page' : undefined}
                     aria-label={isCollapsed ? `${group.area === 'home' ? '' : `${group.label}: `}${item.name}` : undefined}
                     className={`flex items-center gap-3 h-11 rounded-lg px-3 font-medium whitespace-nowrap transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
@@ -250,7 +250,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
           return (
             <Link
-              key={item.name}
+              key={item.href}
               href={item.href}
               aria-current={isActive ? 'page' : undefined}
               className={`
@@ -260,7 +260,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               `}
             >
               <Icon className={`w-[22px] h-[22px] ${isActive ? 'scale-110' : ''} transition-transform`} />
-              <span className="text-[10px] whitespace-nowrap">{item.name}</span>
+              <span className="text-[10px] whitespace-nowrap">{item.short ?? item.name}</span>
             </Link>
           );
         })}
