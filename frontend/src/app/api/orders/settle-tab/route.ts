@@ -67,10 +67,10 @@ export async function POST(request: NextRequest) {
         id: billId,
         tenantId,
         guestId: walkIn.id,
+        kind: 'restaurant',
         totalAmount: total.toString(),
         status: 'open',
         itemsBreakdown: receipt,
-        settledAt: new Date(),
       }),
       db.update(orders)
         .set({ status: 'closed', billId, updatedAt: new Date() })

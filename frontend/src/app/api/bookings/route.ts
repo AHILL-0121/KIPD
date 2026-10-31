@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, gt, inArray, lt, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db';
-import { bookings, guests, roomTypes, rooms } from '@/db/schema';
+import { bills, bookings, guests, roomTypes, rooms } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { HttpError, handleError, parseJson } from '@/lib/http';
 import { ownedRoom } from '@/lib/tenant-scope';
 import { placeholderEmail } from '@/lib/guest-email';
+import { nightsBetween, stayBillValues } from '@/lib/stay-bill';
 
 const createSchema = z.object({
   roomId: z.string().uuid(),
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     if (clash[0]) throw new HttpError(409, 'This room is already booked for those dates.');
 
     const [roomType] = await db.select().from(roomTypes).where(and(eq(roomTypes.id, room.roomTypeId), eq(roomTypes.tenantId, tenantId))).limit(1);
-    const nights = Math.max(1, Math.ceil((body.checkOutDate.getTime() - body.checkInDate.getTime()) / 86_400_000));
+    const nights = nightsBetween(body.checkInDate, body.checkOutDate);
     const totalAmount = (Number(roomType.basePrice) * nights).toFixed(2);
 
     // Find or create the guest. The unique index on (tenant, lower(email)) makes this safe even if
@@ -70,6 +71,11 @@ export async function POST(request: NextRequest) {
         source: body.source,
       }).returning(),
       db.update(rooms).set({ status: 'occupied' }).where(and(eq(rooms.id, room.id), eq(rooms.tenantId, tenantId))),
+      // A booking made by staff starts confirmed, so its bill opens with it.
+      db.insert(bills).values(stayBillValues({
+        tenantId, bookingId, guestId: guest.id, roomNumber: room.roomNumber, roomTypeName: roomType.name,
+        checkIn: body.checkInDate, checkOut: body.checkOutDate, total: totalAmount,
+      })),
     ]);
 
     return NextResponse.json({ success: true, booking });
@@ -83,10 +89,14 @@ export async function GET() {
     const { tenantId } = await requireTenant(ROLES.frontDesk);
     const all = await db.query.bookings.findMany({
       where: eq(bookings.tenantId, tenantId),
-      with: { guest: true, room: { with: { roomType: true } } },
+      with: { guest: true, room: { with: { roomType: true } }, bills: true },
       orderBy: (b, { desc }) => [desc(b.createdAt)],
     });
-    return NextResponse.json(all);
+    // Each booking carries a short summary of its live stay bill (not the voided ones), for the details drawer.
+    return NextResponse.json(all.map(({ bills: billRows, ...booking }) => {
+      const bill = billRows.find((b) => b.kind === 'stay' && b.status !== 'void');
+      return { ...booking, bill: bill ? { id: bill.id, status: bill.status, totalAmount: Number(bill.totalAmount), paidAmount: Number(bill.paidAmount ?? 0) } : null };
+    }));
   } catch (error) {
     return handleError(error, 'Failed to fetch bookings');
   }

@@ -35,7 +35,10 @@ describe('the database refuses invalid values, whatever the code does', () => {
     ['an unknown payment method', `insert into payments (tenant_id, bill_id, amount, method) values ('${A.tenant}', '${A.bill}', '5', 'bitcoin')`, 'payments_method_check'],
     ['an unknown staff role', `update staff set role = 'admin' where id = '${A.staff}'`, 'staff_role_check'],
     ['an unknown bill status', `update bills set status = 'refunded' where id = '${A.bill}'`, 'bills_status_check'],
-    ['a negative bill total', `update bills set total_amount = -5 where id = '${A.bill}'`, 'bills_total_check'],
+    ['a negative bill total', `update bills set total_amount = -5 where id = '${A.bill}'`, 'bills_paid_check'], // the paid rule (paid <= total) trips before the total rule
+    ['a bill paid more than its total', `update bills set paid_amount = 999999 where id = '${A.bill}'`, 'bills_paid_check'],
+    ['an unknown bill kind', `update bills set kind = 'room' where id = '${A.bill}'`, 'bills_kind_check'],
+    ['a stay bill that points at no booking', `update bills set kind = 'stay' where id = '${A.bill}'`, 'bills_stay_booking_check'],
   ];
   it.each(cases)('rejects %s', async (_name, statement, constraint) => {
     expect(await rejected(statement)).toContain(constraint);
