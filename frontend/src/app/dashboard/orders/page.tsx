@@ -13,6 +13,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { formatCurrency } from '@/lib/currency';
 import { orderStatus } from '@/lib/order-status';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Dialog } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
 
 interface OrderItem {
@@ -114,17 +115,6 @@ export default function OrdersPage() {
   }, [fetchOrders]);
 
   useLive(fetchOrders, channel);
-
-  useEffect(() => {
-    if (!showCreate && !checkoutTable) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      setShowCreate(false);
-      if (!saving) setCheckoutTable(null);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showCreate, checkoutTable, saving]);
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
@@ -359,11 +349,8 @@ export default function OrdersPage() {
       )}
 
       {/* Fire Ticket (Create Order) Sheet/Modal */}
-      <AnimatePresence>
-        {showCreate && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 flex items-end md:items-center justify-center z-[100] md:p-4" onClick={() => setShowCreate(false)}>
-            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              role="dialog" aria-modal="true" aria-labelledby="send-title" className="bg-white rounded-t-3xl md:rounded-2xl p-6 md:p-8 w-full max-w-2xl h-[90vh] md:h-auto md:max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <Dialog open={showCreate} onClose={() => setShowCreate(false)} labelledBy="send-title" variant="sheet" dismissible={!saving}
+        className="p-6 md:p-8 w-full max-w-2xl h-[90vh] md:h-auto md:max-h-[85vh] flex flex-col">
 
               <div className="flex justify-between items-center mb-6 shrink-0">
                 <div>
@@ -373,7 +360,7 @@ export default function OrdersPage() {
                 <button onClick={() => setShowCreate(false)} aria-label="Close" className="bg-stone-100 p-2 rounded-full hover:bg-stone-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"><X className="w-5 h-5" aria-hidden="true" /></button>
               </div>
 
-              <div className="flex-1 overflow-y-auto min-h-0 space-y-6 pb-20 md:pb-0">
+              <div className="flex-1 overflow-y-auto min-h-0 space-y-6 px-1 -mx-1 pb-20 md:pb-1">
                 {/* Table Assignment Component */}
                 <div className="bg-stone-50 p-4 rounded-xl border border-stone-200">
                   <label className="block text-sm font-semibold text-ink mb-2">Table</label>
@@ -448,16 +435,12 @@ export default function OrdersPage() {
                 </Button>
               </div>
 
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </Dialog>
 
       {/* Checkout / Settle Modal */}
-      <AnimatePresence>
+      <Dialog open={!!checkoutTable} onClose={() => setCheckoutTable(null)} labelledBy="settle-title" dismissible={!saving} className="p-8 max-w-md w-full">
         {checkoutTable && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 flex items-center justify-center z-[110] p-4" onClick={() => setCheckoutTable(null)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} role="dialog" aria-modal="true" aria-labelledby="settle-title" className="bg-white rounded-2xl p-8 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+          <>
               <div className="text-center mb-6">
                 <div aria-hidden="true" className="h-16 w-16 bg-amber-pale text-amber-deep rounded-full flex items-center justify-center font-bold text-3xl mx-auto mb-3">
                   {checkoutTable.table.tableNumber}
@@ -475,10 +458,9 @@ export default function OrdersPage() {
                   Cancel
                 </Button>
               </div>
-            </motion.div>
-          </motion.div>
+          </>
         )}
-      </AnimatePresence>
+      </Dialog>
 
       {/* Toast Overlay */}
       <AnimatePresence>
