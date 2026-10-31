@@ -11,8 +11,8 @@ interface DialogProps {
   onClose: () => void;
   /** id of the element inside that holds the dialog's title */
   labelledBy: string;
-  /** 'center' is a modal card; 'sheet' rises from the bottom on phones */
-  variant?: 'center' | 'sheet';
+  /** 'center' is a modal card; 'sheet' rises from the bottom on phones; 'drawer' slides in from the right */
+  variant?: 'center' | 'sheet' | 'drawer';
   /** false while something is being saved: Escape and a click outside do nothing */
   dismissible?: boolean;
   className?: string;
@@ -69,22 +69,23 @@ export function Dialog({ open, onClose, labelledBy, variant = 'center', dismissi
   if (typeof document === 'undefined') return null;
 
   const sheet = variant === 'sheet';
+  const drawer = variant === 'drawer';
   return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className={`fixed inset-0 z-[100] bg-black/60 flex justify-center ${sheet ? 'items-end md:items-center md:p-4' : 'items-center p-4'}`}
+          className={`fixed inset-0 z-[100] bg-black/60 flex justify-center ${drawer ? 'items-stretch justify-end' : sheet ? 'items-end md:items-center md:p-4' : 'items-center p-4'}`}
           onClick={() => { if (dismissible) onClose(); }}
         >
           <motion.div
             ref={panelRef}
             role="dialog" aria-modal="true" aria-labelledby={labelledBy} tabIndex={-1}
-            initial={sheet ? { y: '100%' } : { scale: 0.95, opacity: 0 }}
-            animate={sheet ? { y: 0 } : { scale: 1, opacity: 1 }}
-            exit={sheet ? { y: '100%' } : { scale: 0.95, opacity: 0 }}
-            transition={sheet ? { type: 'spring', damping: 25, stiffness: 200 } : { duration: 0.15 }}
-            className={`bg-white outline-none ${sheet ? 'rounded-t-3xl md:rounded-2xl' : 'rounded-2xl'} ${className}`}
+            initial={drawer ? { x: '100%' } : sheet ? { y: '100%' } : { scale: 0.95, opacity: 0 }}
+            animate={drawer ? { x: 0 } : sheet ? { y: 0 } : { scale: 1, opacity: 1 }}
+            exit={drawer ? { x: '100%' } : sheet ? { y: '100%' } : { scale: 0.95, opacity: 0 }}
+            transition={drawer ? { duration: 0.25, ease: 'easeOut' } : sheet ? { type: 'spring', damping: 25, stiffness: 200 } : { duration: 0.15 }}
+            className={`bg-white outline-none ${drawer ? 'h-full w-full max-w-[420px] flex flex-col shadow-2xl' : sheet ? 'rounded-t-3xl md:rounded-2xl' : 'rounded-2xl'} ${className}`}
             onClick={(e) => e.stopPropagation()}
           >
             {children}

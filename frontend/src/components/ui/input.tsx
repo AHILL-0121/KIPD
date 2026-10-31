@@ -1,6 +1,6 @@
 'use client';
 
-import { InputHTMLAttributes, forwardRef } from 'react';
+import { InputHTMLAttributes, forwardRef, useId } from 'react';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -8,17 +8,22 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, className = '', ...props }, ref) => {
+  ({ label, error, className = '', id, ...props }, ref) => {
+    const autoId = useId();
+    const fieldId = id ?? autoId;
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
-          <label className="text-sm font-medium text-ink-soft transition-colors">
+          <label htmlFor={fieldId} className="text-sm font-medium text-ink-soft transition-colors">
             {label}
           </label>
         )}
         <div className="relative">
           <input
             ref={ref}
+            id={fieldId}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? `${fieldId}-error` : undefined}
             className={`
               w-full px-4 py-3 
               bg-white border-2 border-stone-200 rounded-xl
@@ -33,7 +38,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             {...props}
           />
           {error && (
-            <p className="text-sm text-terra mt-1">{error}</p>
+            <p id={`${fieldId}-error`} role="alert" className="text-sm text-terra mt-1">{error}</p>
           )}
         </div>
       </div>
