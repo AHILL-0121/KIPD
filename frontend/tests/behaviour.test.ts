@@ -94,6 +94,18 @@ describe('bookings', () => {
     expect(guest).toMatchObject({ email: 'new@guest.test', tenant_id: A.tenant });
   });
 
+  it('needs a guest name but not an email: each email-less booking gets its own hidden stand-in guest', async () => {
+    loginAs('ownerA');
+    const none = { roomId: A.room, checkInDate: '2031-03-01', checkOutDate: '2031-03-02' };
+    expect((await call(bookings.POST, 'POST', '/api/bookings', { body: { ...none, guestName: '' } })).status).toBe(400);
+    expect((await call(bookings.POST, 'POST', '/api/bookings', { body: { ...none, guestName: 'No Mail One', guestEmail: '' } })).status).toBe(200);
+    expect((await call(bookings.POST, 'POST', '/api/bookings', { body: { ...none, guestName: 'No Mail Two', checkInDate: '2031-04-01', checkOutDate: '2031-04-02' } })).status).toBe(200);
+    const rows = await q<{ name: string; email: string }>(`select name, email from guests where name like 'No Mail %' order by name`);
+    expect(rows.map(r => r.name)).toEqual(['No Mail One', 'No Mail Two']);
+    expect(rows.every(r => r.email.endsWith('@no-email.kipd.local'))).toBe(true);
+    expect(new Set(rows.map(r => r.email)).size).toBe(2); // never merged into one guest
+  });
+
   it('refuses to double-book overlapping dates', async () => {
     loginAs('ownerA');
     const r = await call(bookings.POST, 'POST', '/api/bookings', { body: body('2030-01-11', '2030-01-13') });

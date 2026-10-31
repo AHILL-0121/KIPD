@@ -5,6 +5,7 @@ import { addDays, format } from 'date-fns';
 import { Check, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DatePicker, parseYmd } from '@/components/ui/date-picker';
 import { Card } from '@/components/ui/card';
 import { KipdMascot } from '@/components/mascot/KipdMascot';
 import { formatCurrency } from '@/lib/currency';
@@ -98,8 +99,8 @@ export default function BookingPage({ params }: { params: { hotelSlug: string } 
           <>
             <Card hover={false} className="mb-8 p-5">
               <div className="grid gap-4 sm:grid-cols-3">
-                <Input type="date" label="Check-in" min={ymd(new Date())} value={checkIn} onChange={(e) => setCheckIn(e.target.value)} />
-                <Input type="date" label="Check-out" min={checkIn} value={checkOut} onChange={(e) => setCheckOut(e.target.value)} />
+                <DatePicker label="Check-in" required min={ymd(new Date())} value={checkIn} onChange={(v) => { setCheckIn(v); if (checkOut <= v) setCheckOut(ymd(addDays(parseYmd(v) ?? new Date(), 1))); }} />
+                <DatePicker label="Check-out" required min={ymd(addDays(parseYmd(checkIn) ?? new Date(), 1))} value={checkOut} onChange={setCheckOut} />
                 <Input type="number" label="Guests" min={1} max={20} value={guests} onChange={(e) => setGuests(Math.max(1, Number(e.target.value) || 1))} />
               </div>
               {!datesOk && <p className="text-sm text-terra mt-3" role="alert">Check-out must be after check-in.</p>}
