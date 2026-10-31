@@ -62,7 +62,7 @@ describe('orders page', () => {
     const dialog = await screen.findByRole('dialog', { name: /send to kitchen/i });
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 

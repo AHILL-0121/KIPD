@@ -441,3 +441,8 @@
     max-width: 100%;
   }
 }
+/* Edge adds its own reveal-password eye to password fields; Clerk already provides one. */
+.kipd-right input[type="password"]::-ms-reveal,
+.kipd-right input[type="password"]::-ms-clear {
+  display: none;
+}

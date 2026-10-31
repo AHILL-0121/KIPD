@@ -48,6 +48,7 @@ export async function GET() {
       paidAmount: Number(bill.paidAmount) || 0,
       status: bill.status,
       createdAt: bill.createdAt,
+      settledAt: bill.settledAt,
       receipt: bill.itemsBreakdown || null,
       items: [],
     })));
