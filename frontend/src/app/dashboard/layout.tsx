@@ -5,16 +5,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { UserButton, useClerk } from '@clerk/nextjs';
 import {
-  LayoutDashboard,
-  Hotel,
-  Calendar,
-  UtensilsCrossed,
-  Receipt,
-  Users,
-  BarChart3,
-  Settings,
-  QrCode,
-  ChefHat,
   ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
@@ -23,32 +13,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { LoadingState } from '@/components/ui/loading-state';
-
-type TenantType = 'hotel' | 'restaurant' | 'both';
-type StaffRole = 'owner' | 'manager' | 'front_desk' | 'waiter' | 'kitchen';
-
-const ALL_ROLES: StaffRole[] = ['owner', 'manager', 'front_desk', 'waiter', 'kitchen'];
-
-interface NavItem {
-  name: string;
-  href: string;
-  icon: any;
-  types: TenantType[];  // which tenant types see this nav item
-  roles: StaffRole[];   // which roles see this nav item
-}
-
-const navigation: NavItem[] = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, types: ['hotel', 'restaurant', 'both'], roles: ['owner', 'manager', 'front_desk'] },
-  { name: 'Rooms', href: '/dashboard/rooms', icon: Hotel, types: ['hotel', 'both'], roles: ['owner', 'manager', 'front_desk'] },
-  { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar, types: ['hotel', 'both'], roles: ['owner', 'manager', 'front_desk'] },
-  { name: 'Restaurant', href: '/dashboard/restaurant', icon: UtensilsCrossed, types: ['restaurant', 'both'], roles: ['owner', 'manager'] },
-  { name: 'Orders', href: '/dashboard/orders', icon: QrCode, types: ['restaurant', 'both'], roles: ['owner', 'manager', 'waiter'] },
-  { name: 'Kitchen Display', href: '/dashboard/kds', icon: ChefHat, types: ['restaurant', 'both'], roles: ['owner', 'manager', 'kitchen'] },
-  { name: 'Billing', href: '/dashboard/billing', icon: Receipt, types: ['hotel', 'restaurant', 'both'], roles: ['owner', 'manager', 'front_desk'] },
-  { name: 'Staff', href: '/dashboard/staff', icon: Users, types: ['hotel', 'restaurant', 'both'], roles: ['owner', 'manager'] },
-  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, types: ['hotel', 'restaurant', 'both'], roles: ['owner', 'manager'] },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings, types: ['hotel', 'restaurant', 'both'], roles: ['owner', 'manager'] },
-];
+import { canOpen, crumbsFor, landingFor, navGroups, visibleNav, type StaffRole, type TenantType } from '@/lib/dashboard-nav';
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Owner',
@@ -57,21 +22,6 @@ const ROLE_LABELS: Record<string, string> = {
   waiter: 'Waiter',
   kitchen: 'Kitchen Staff',
 };
-
-/** "/dashboard/restaurant/qr" becomes Dashboard > Restaurant > Table QR codes. IDs in the path are skipped. */
-const CRUMB_LABELS: Record<string, string> = { kds: 'Kitchen Display', qr: 'Table QR codes' };
-function crumbsFor(pathname: string | null) {
-  const parts = (pathname ?? '').split('/').filter(Boolean).slice(1); // drop "dashboard"
-  const out = [{ label: 'Dashboard', href: '/dashboard' }];
-  let href = '/dashboard';
-  for (const part of parts) {
-    href += `/${part}`;
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(part)) continue;
-    const label = CRUMB_LABELS[part] ?? navigation.find((n) => n.href === href)?.name ?? part.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase());
-    out.push({ label, href });
-  }
-  return out;
-}
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -142,13 +92,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       .finally(() => setIsNavReady(true));
   }, [router]);
 
+  // The server refuses these requests anyway; this just stops someone landing on a page that is not theirs.
+  const allowed = canOpen(pathname ?? '', tenantType, userRole);
+  const start = landingFor(tenantType, userRole);
+  useEffect(() => {
+    if (isNavReady && !allowed && pathname !== start) router.replace(start);
+  }, [isNavReady, allowed, pathname, start, router]);
+
   if (!isNavReady) {
     return <LoadingState message="Verifying your dashboard permissions..." />;
   }
 
-  const filteredNav = navigation.filter(
-    item => item.types.includes(tenantType) && item.roles.includes(userRole)
-  );
+  const filteredNav = visibleNav(tenantType, userRole);
+  const groups = navGroups(filteredNav);
 
   return (
     <div className="min-h-screen bg-cream pb-20 md:pb-0">
@@ -166,29 +122,37 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           )}
         </Link>
 
-        <nav aria-label="Main" className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden">
-          {filteredNav.map((item) => {
-            const Icon = item.icon;
-            const isActive = item.href === '/dashboard'
-              ? pathname === '/dashboard'
-              : pathname?.startsWith(item.href);
+        <nav aria-label="Main" className="flex-1 overflow-y-auto overflow-x-hidden">
+          {groups.map((group, gi) => (
+            <div key={group.area} role="group" aria-label={group.label} className="space-y-1">
+              {/* Home has no heading; the other areas are labelled, or just separated when the sidebar is collapsed */}
+              {group.area !== 'home' && (isCollapsed
+                ? <div aria-hidden="true" className="mx-3 my-3 border-t border-stone-200" />
+                : <p aria-hidden="true" className={`px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-muted ${gi > 0 ? 'pt-4' : ''}`}>{group.label}</p>)}
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = item.href === '/dashboard'
+                  ? pathname === '/dashboard'
+                  : pathname?.startsWith(item.href);
 
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                title={isCollapsed ? item.name : undefined}
-                aria-current={isActive ? 'page' : undefined}
-                aria-label={isCollapsed ? item.name : undefined}
-                className={`flex items-center gap-3 h-11 rounded-lg px-3 font-medium whitespace-nowrap transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
-                  isActive ? 'bg-amber-pale text-amber-deep font-semibold' : 'text-ink-soft hover:bg-stone-100 hover:text-ink'
-                }`}
-              >
-                <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
-                {!isCollapsed && <span className="overflow-hidden">{item.name}</span>}
-              </Link>
-            );
-          })}
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    title={isCollapsed ? item.name : undefined}
+                    aria-current={isActive ? 'page' : undefined}
+                    aria-label={isCollapsed ? `${group.area === 'home' ? '' : `${group.label}: `}${item.name}` : undefined}
+                    className={`flex items-center gap-3 h-11 rounded-lg px-3 font-medium whitespace-nowrap transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
+                      isActive ? 'bg-amber-pale text-amber-deep font-semibold' : 'text-ink-soft hover:bg-stone-100 hover:text-ink'
+                    }`}
+                  >
+                    <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
+                    {!isCollapsed && <span className="overflow-hidden">{item.name}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="border-t border-stone-200 pt-3 space-y-1.5">
@@ -251,10 +215,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div style={pullY > 0 ? { transform: `translateY(${pullY * 0.5}px)` } : undefined}>
           <nav aria-label="Breadcrumb" className="hidden md:block sticky top-0 z-30 bg-cream/95 backdrop-blur border-b border-stone-200 px-8 py-2.5">
             <ol className="flex items-center flex-wrap text-sm">
-              {crumbsFor(pathname).map((c, i, all) => {
+              {crumbsFor(pathname, tenantType, userRole).map((c, i, all) => {
                 const last = i === all.length - 1;
                 return (
-                  <li key={c.href} className="flex items-center">
+                  <li key={`${c.href}-${i}`} className="flex items-center">
                     {i > 0 && <ChevronRight className="w-4 h-4 mx-1 text-stone-400" aria-hidden="true" />}
                     {last
                       ? <span aria-current="page" className="px-1.5 font-semibold text-ink">{c.label}</span>

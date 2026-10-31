@@ -278,7 +278,7 @@ export default function RestaurantPage() {
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="section-title">Restaurant & Menu</h1>
+          <h1 className="section-title">Menu</h1>
           <p className="section-sub">Manage menu items, categories, and tables</p>
         </div>
 
