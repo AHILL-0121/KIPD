@@ -6,11 +6,12 @@ import { bookings, guests, roomTypes, rooms } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { HttpError, handleError, parseJson } from '@/lib/http';
 import { ownedRoom } from '@/lib/tenant-scope';
+import { placeholderEmail } from '@/lib/guest-email';
 
 const createSchema = z.object({
   roomId: z.string().uuid(),
   guestName: z.string().trim().min(1).max(120),
-  guestEmail: z.string().trim().toLowerCase().email().max(200),
+  guestEmail: z.union([z.literal(''), z.string().trim().toLowerCase().email().max(200)]).optional(), // optional: see lib/guest-email
   guestPhone: z.string().trim().max(20).optional().default(''),
   checkInDate: z.coerce.date(),
   checkOutDate: z.coerce.date(),
@@ -43,11 +44,12 @@ export async function POST(request: NextRequest) {
 
     // Find or create the guest. The unique index on (tenant, lower(email)) makes this safe even if
     // two requests for the same new guest arrive together: the loser's insert is ignored, then it re-reads.
+    const guestEmail = body.guestEmail || placeholderEmail();
     await db.insert(guests)
-      .values({ email: body.guestEmail, name: body.guestName, phone: body.guestPhone, tenantId })
+      .values({ email: guestEmail, name: body.guestName, phone: body.guestPhone, tenantId })
       .onConflictDoNothing();
     const guest = await db.query.guests.findFirst({
-      where: and(eq(guests.tenantId, tenantId), eq(sql`lower(${guests.email})`, body.guestEmail)),
+      where: and(eq(guests.tenantId, tenantId), eq(sql`lower(${guests.email})`, guestEmail)),
     });
     if (!guest) throw new HttpError(500, 'Could not save the guest');
 
