@@ -280,10 +280,11 @@ export const bills = pgTable('bills', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
   bookingId: uuid('booking_id'),
+  kind: text('kind').notNull().default('restaurant'), // stay (a hotel booking), restaurant (a table or walk-in)
   guestId: uuid('guest_id').notNull(),
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
   paidAmount: decimal('paid_amount', { precision: 10, scale: 2 }).default('0'),
-  status: text('status').notNull().default('open'), // open, paid, partial
+  status: text('status').notNull().default('open'), // open, partial, paid, void (a cancelled booking's bill)
   itemsBreakdown: jsonb('items_breakdown'),
   createdAt: tstz('created_at').defaultNow().notNull(),
   settledAt: tstz('settled_at'),
@@ -293,8 +294,13 @@ export const bills = pgTable('bills', {
   foreignKey({ name: 'fk_bills_booking', columns: [t.tenantId, t.bookingId], foreignColumns: [bookings.tenantId, bookings.id] }),
   index('idx_bills_tenant_status').on(t.tenantId, t.status),
   index('idx_bills_guest').on(t.guestId),
-  check('bills_status_check', sql`${t.status} in ('open','paid','partial')`),
+  // A booking has at most one live stay bill, so confirming twice (or two staff at once) cannot bill a stay twice.
+  uniqueIndex('bills_live_stay_uq').on(t.tenantId, t.bookingId).where(sql`${t.kind} = 'stay' and ${t.status} <> 'void'`),
+  check('bills_status_check', sql`${t.status} in ('open','paid','partial','void')`),
+  check('bills_kind_check', sql`${t.kind} in ('stay','restaurant')`),
+  check('bills_stay_booking_check', sql`${t.kind} <> 'stay' or ${t.bookingId} is not null`),
   check('bills_total_check', sql`${t.totalAmount} >= 0`),
+  check('bills_paid_check', sql`${t.paidAmount} >= 0 and ${t.paidAmount} <= ${t.totalAmount}`),
 ]);
 
 export const payments = pgTable('payments', {
@@ -302,7 +308,11 @@ export const payments = pgTable('payments', {
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
   billId: uuid('bill_id').notNull(),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
-  method: text('method').notNull(), // cash, upi, card, stripe
+  method: text('method').notNull(), // cash, upi, card, bank_transfer (all recorded by staff), stripe (gateway)
+  reference: text('reference'), // UPI transaction id, last 4 digits of a card, bank reference
+  receivedBy: text('received_by'), // who took it, as named at the time
+  receivedByUserId: text('received_by_user_id'),
+  note: text('note'),
   stripePaymentIntentId: text('stripe_payment_intent_id'),
   createdAt: tstz('created_at').defaultNow().notNull(),
 }, (t) => [
@@ -310,7 +320,7 @@ export const payments = pgTable('payments', {
   index('idx_payments_bill').on(t.billId),
   // A Stripe payment intent can back at most one payment row (webhook retries must not double-count).
   uniqueIndex('payments_stripe_intent_uq').on(t.stripePaymentIntentId).where(sql`${t.stripePaymentIntentId} is not null`),
-  check('payments_method_check', sql`${t.method} in ('cash','upi','card','stripe')`),
+  check('payments_method_check', sql`${t.method} in ('cash','upi','card','bank_transfer','stripe')`),
   check('payments_amount_check', sql`${t.amount} > 0`),
 ]);
 
