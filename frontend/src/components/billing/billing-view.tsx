@@ -8,10 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { Receipt, IndianRupee, CheckCircle2, Printer } from 'lucide-react';
+import { Receipt, IndianRupee, CheckCircle2, Printer, Link2, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 import { formatCurrency } from '@/lib/currency';
 import { billStatus } from '@/lib/bill-status';
+import { suggestedDeposit } from '@/lib/deposit';
 
 type BillKind = 'stay' | 'restaurant';
 
@@ -51,7 +52,12 @@ const METHODS = [
   { value: 'card', label: 'Card (machine)' },
   { value: 'bank_transfer', label: 'Bank transfer' },
 ];
-const METHOD_LABEL = Object.fromEntries(METHODS.map(m => [m.value, m.label]));
+const ONLINE = { value: 'razorpay', label: 'Online payment link (Razorpay)' };
+const METHOD_LABEL: Record<string, string> = { ...Object.fromEntries(METHODS.map(m => [m.value, m.label])), razorpay: 'Online payment', stripe: 'Card (online)' };
+
+/** What Settings > Payments allows. Until it loads, every manual way is offered and online payment is not. */
+interface PaySettings { manualMethods: string[]; onlinePayments: boolean; depositPercent: number; razorpayConfigured: boolean }
+const DEFAULT_PAY: PaySettings = { manualMethods: METHODS.map(m => m.value), onlinePayments: false, depositPercent: 0, razorpayConfigured: false };
 const REFERENCE_LABEL: Record<string, string> = { upi: 'UPI transaction ID', card: 'Last 4 digits or slip number', bank_transfer: 'Bank reference' };
 
 const COPY: Record<BillKind, { title: string; sub: string; empty: string; chooseHint: string }> = {
@@ -84,6 +90,9 @@ export function BillingView({ kind }: { kind: BillKind }) {
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState('');
   const [form, setForm] = useState({ amount: '', method: 'cash', reference: '', note: '' });
+  const [paySettings, setPaySettings] = useState<PaySettings>(DEFAULT_PAY);
+  const [link, setLink] = useState<{ url: string; amount: number } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchBills();
@@ -92,6 +101,11 @@ export function BillingView({ kind }: { kind: BillKind }) {
       const savedConfig = localStorage.getItem('kipd-receipt-config');
       if (savedConfig) setReceiptConfig(JSON.parse(savedConfig));
     } catch { /* storage blocked or not JSON: keep the default receipt */ }
+
+    fetch('/api/settings/payments')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data && Array.isArray(data.manualMethods)) setPaySettings({ ...DEFAULT_PAY, ...data }); })
+      .catch(() => { }); // keep the defaults: staff can still record every manual way
 
     fetch('/api/tenant/info')
       .then(res => res.ok ? res.json() : null)
@@ -112,13 +126,30 @@ export function BillingView({ kind }: { kind: BillKind }) {
   const selected = bills.find(b => b.id === selectedId) ?? null;
   const owed = selected ? Math.round((selected.totalAmount - selected.paidAmount) * 100) / 100 : 0;
 
+  // The ways offered in the dialog: the manual ones Settings allows, plus an online link for hotel stays when it is on.
+  const methodOptions = [
+    ...METHODS.filter(m => paySettings.manualMethods.includes(m.value)),
+    ...(kind === 'stay' && paySettings.onlinePayments && paySettings.razorpayConfigured ? [ONLINE] : []),
+  ];
+
+  // A first payment on a hotel stay starts at the suggested deposit, when the property has one. Anything else starts at what is owed.
+  const depositFor = (b: Bill) => (kind === 'stay' && b.paidAmount === 0 ? suggestedDeposit(b.totalAmount, paySettings.depositPercent) : 0);
+
   const openPay = () => {
     if (!selected) return;
-    setForm({ amount: plain(owed), method: 'cash', reference: '', note: '' });
+    const deposit = depositFor(selected);
+    setForm({ amount: plain(deposit > 0 ? deposit : owed), method: methodOptions[0]?.value ?? 'cash', reference: '', note: '' });
     setPayError('');
+    setLink(null);
+    setCopied(false);
     setShowPay(true);
   };
-  const closePay = () => { setShowPay(false); setPayError(''); };
+  const closePay = () => { setShowPay(false); setPayError(''); setLink(null); };
+
+  const copyLink = async () => {
+    if (!link) return;
+    try { await navigator.clipboard.writeText(link.url); setCopied(true); } catch { setCopied(false); }
+  };
 
   const handleRecordPayment = async () => {
     if (!selected || paying) return;
@@ -135,7 +166,7 @@ export function BillingView({ kind }: { kind: BillKind }) {
           billId: selected.id,
           paymentMethod: form.method,
           amount,
-          reference: form.method === 'cash' ? undefined : form.reference.trim() || undefined,
+          reference: form.method === 'cash' || form.method === 'razorpay' ? undefined : form.reference.trim() || undefined,
           note: form.note.trim() || undefined,
         }),
       });
@@ -143,6 +174,12 @@ export function BillingView({ kind }: { kind: BillKind }) {
         const data = await res.json().catch(() => ({}));
         setPayError(res.status < 500 && typeof data.error === 'string' ? data.error : 'Could not record the payment. Nothing was changed, please try again.');
         return;
+      }
+      if (form.method === 'razorpay') {
+        const data = await res.json().catch(() => ({}));
+        if (!data?.paymentLink?.url) { setPayError('Razorpay did not return a payment link. Nothing was changed, please try again.'); return; }
+        setLink({ url: data.paymentLink.url, amount: data.paymentLink.amount });
+        return; // nothing is recorded until the guest pays; the bill updates by itself then
       }
       const left = Math.round((owed - amount) * 100) / 100;
       setNotice(left > 0
@@ -479,10 +516,30 @@ export function BillingView({ kind }: { kind: BillKind }) {
               {selected.guestName}: total {formatCurrency(selected.totalAmount)}, paid {formatCurrency(selected.paidAmount)}, <span className="font-semibold text-ink">still owed {formatCurrency(owed)}</span>.
             </p>
 
+            {link ? (
+              <div className="mt-5 space-y-4">
+                <p role="status" className="rounded-lg bg-sage-pale px-4 py-3 text-sm text-sage font-medium">
+                  Payment link for {formatCurrency(link.amount)} is ready. Send it to the guest. The payment is added to this bill by itself once they pay.
+                </p>
+                <Input label="Payment link" readOnly value={link.url} onFocus={(e) => e.currentTarget.select()} />
+                <div className="flex gap-3">
+                  <Button variant="ghost" className="flex-1" onClick={copyLink}>
+                    <Copy className="w-4 h-4" aria-hidden="true" />
+                    {copied ? 'Copied' : 'Copy link'}
+                  </Button>
+                  <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-stone-200 px-4 py-2 text-sm font-semibold text-ink hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber">
+                    <Link2 className="w-4 h-4" aria-hidden="true" />
+                    Open link
+                  </a>
+                </div>
+                <Button className="w-full" onClick={() => { closePay(); fetchBills(); }}>Done</Button>
+              </div>
+            ) : (
+            <>
             <div className="mt-5 space-y-4">
               <div>
                 <Input
-                  label="Amount received (₹)"
+                  label={form.method === 'razorpay' ? 'Amount to collect (₹)' : 'Amount received (₹)'}
                   type="number"
                   inputMode="decimal"
                   min={0}
@@ -490,14 +547,17 @@ export function BillingView({ kind }: { kind: BillKind }) {
                   value={form.amount}
                   onChange={(e) => setForm({ ...form, amount: e.target.value })}
                 />
+                {selected && depositFor(selected) > 0 && Number(form.amount) === depositFor(selected) && depositFor(selected) !== owed && (
+                  <p className="mt-1.5 text-sm text-ink-muted">Suggested deposit ({paySettings.depositPercent}% of the stay). Change it if the guest pays a different amount.</p>
+                )}
                 {Number(form.amount) !== owed && (
                   <button type="button" onClick={() => setForm({ ...form, amount: plain(owed) })} className="mt-1.5 text-sm font-medium text-amber-deep hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber rounded">
                     Use the full {formatCurrency(owed)}
                   </button>
                 )}
               </div>
-              <Select label="Paid by" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} options={METHODS} />
-              {form.method !== 'cash' && (
+              <Select label="Paid by" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} options={methodOptions} />
+              {form.method !== 'cash' && form.method !== 'razorpay' && (
                 <Input label={`${REFERENCE_LABEL[form.method]} (optional)`} value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
               )}
               <Input label="Note (optional)" placeholder="For example: advance for the stay" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
@@ -506,12 +566,14 @@ export function BillingView({ kind }: { kind: BillKind }) {
             {payError && <p role="alert" className="mt-4 rounded-lg bg-terra-pale px-4 py-3 text-sm text-terra">{payError}</p>}
             <div className="mt-6 space-y-3">
               <Button className="w-full" onClick={handleRecordPayment} isLoading={paying}>
-                {paying ? 'Saving…' : 'Save payment'}
+                {paying ? 'Saving…' : form.method === 'razorpay' ? 'Create payment link' : 'Save payment'}
               </Button>
               <Button variant="ghost" className="w-full" onClick={closePay} disabled={paying}>
                 Cancel
               </Button>
             </div>
+            </>
+            )}
           </>
         )}
       </Dialog>

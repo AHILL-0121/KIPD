@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import Stripe from 'stripe';
 import { z } from 'zod';
 import { db } from '@/db';
-import { bills, payments } from '@/db/schema';
+import { bills, guests } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { HttpError, badRequest, handleError, parseJson } from '@/lib/http';
 import { ownedBill, ownedBooking } from '@/lib/tenant-scope';
 import { nightsBetween } from '@/lib/stay-bill';
+import { MANUAL_METHODS, getPaymentSettings } from '@/lib/payment-settings';
+import { createPaymentLink, razorpayConfigured } from '@/lib/razorpay';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-function stripeClient() {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) throw new HttpError(503, 'Card payments are not configured');
-  return new Stripe(key, { apiVersion: '2023-10-16' });
-}
 
 const createSchema = z.object({
   bookingId: z.string().uuid(),
@@ -29,11 +24,11 @@ const createSchema = z.object({
 /** Money in rupees with at most two decimals, as whole paise (so 0.1 + 0.2 style rounding can never leak in). */
 const paise = z.coerce.number().positive().max(10_000_000).refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6, 'Use at most two decimal places');
 
-// 'stripe' starts a gateway payment (kept until Razorpay replaces it). Every other method is money a person received
-// and is recording here: cash, UPI, a card machine, or a bank transfer.
+// 'razorpay' creates an online payment link; the money is recorded only when Razorpay's webhook confirms it was paid.
+// Every other method is money a person received and is recording here: cash, UPI, a card machine, or a bank transfer.
 const paySchema = z.object({
   billId: z.string().uuid(),
-  paymentMethod: z.enum(['cash', 'upi', 'card', 'bank_transfer', 'stripe']).optional().default('cash'),
+  paymentMethod: z.enum([...MANUAL_METHODS, 'razorpay']).optional().default('cash'),
   /** Defaults to everything still owed. Less than that is a part payment (a deposit, for example). */
   amount: paise.optional(),
   reference: z.string().trim().max(60).optional(),
@@ -119,29 +114,35 @@ export async function PATCH(request: NextRequest) {
     if (bill.status === 'paid') throw new HttpError(409, 'This bill is already paid');
     if (bill.status === 'void') throw new HttpError(409, 'This bill was cancelled with its booking');
 
-    // Card via Stripe. Note: currency is still 'usd' (checklist 7a: Razorpay replaces this).
-    if (paymentMethod === 'stripe') {
-      const stripe = stripeClient();
-      const intent = await stripe.paymentIntents.create({
-        amount: Math.round(Number(bill.totalAmount) * 100),
-        currency: 'usd',
-        metadata: { billId: bill.id, tenantId },
-      });
-      await db.insert(payments).values({
-        tenantId,
+    // The property decides which ways staff may record a payment, and whether online links are on.
+    const settings = await getPaymentSettings(tenantId);
+    const owedPaise = Math.round((Number(bill.totalAmount) - Number(bill.paidAmount ?? 0)) * 100);
+
+    // Online payment: make a Razorpay link for the amount (part payments included) and hand it back to share.
+    // Nothing is recorded yet. The payment is added when Razorpay's webhook says it was paid.
+    if (paymentMethod === 'razorpay') {
+      if (!settings.onlinePayments) throw new HttpError(409, 'Online payments are switched off in Settings.');
+      if (!razorpayConfigured()) throw new HttpError(503, 'Online payments are not set up yet.');
+      const wantPaise = amount === undefined ? owedPaise : Math.round(amount * 100);
+      if (wantPaise > owedPaise) throw new HttpError(409, `Only ${rupees(owedPaise / 100)} is still owed on this bill.`);
+      const [guest] = bill.guestId ? await db.select().from(guests).where(and(eq(guests.id, bill.guestId), eq(guests.tenantId, tenantId))).limit(1) : [];
+      const link = await createPaymentLink({
+        amountPaise: wantPaise,
+        description: note || 'Payment for your stay',
         billId: bill.id,
-        amount: bill.totalAmount,
-        method: 'stripe',
-        stripePaymentIntentId: intent.id,
+        tenantId,
+        customer: { name: guest?.name, email: guest?.email, phone: guest?.phone },
       });
-      if (!intent.client_secret) throw badRequest('Could not start the card payment');
-      return NextResponse.json({ success: true, clientSecret: intent.client_secret });
+      return NextResponse.json({ success: true, paymentLink: link });
+    }
+
+    if (!(settings.manualMethods as string[]).includes(paymentMethod ?? 'cash')) {
+      throw new HttpError(409, 'This way of paying is switched off in Settings.');
     }
 
     // Money someone received. One statement adds the payment AND moves the bill (paid amount, status, settled time),
     // and only when the amount still fits within what is owed, so two people recording at once cannot overpay a bill.
-    const owed = Math.round((Number(bill.totalAmount) - Number(bill.paidAmount ?? 0)) * 100);
-    const cents = amount === undefined ? owed : Math.round(amount * 100);
+    const cents = amount === undefined ? owedPaise : Math.round(amount * 100);
     const pay = (cents / 100).toFixed(2);
     const result = await db.execute(sql`
       with moved as (

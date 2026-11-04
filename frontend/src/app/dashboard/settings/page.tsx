@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { PaymentSettingsCard } from '@/components/settings/payment-settings-card';
 import {
   Settings as SettingsIcon,
   Building2,
@@ -168,6 +169,9 @@ export default function SettingsPage() {
             </Button>
           </div>
         </Card>
+
+        {/* Payments */}
+        <PaymentSettingsCard />
 
         {/* Outlets */}
         <Card hover={false}>

@@ -40,6 +40,9 @@ export const tenants = pgTable('tenants', {
   plan: text('plan').notNull().default('basic'), // basic, pro, enterprise
   status: text('status').notNull().default('active'), // active, suspended, pending
   timezone: text('timezone').notNull().default('Asia/Kolkata'), // IANA name; decides what "today" means
+  // Settings > Payments: which ways staff may record a payment, whether online payment links are on, and the
+  // suggested deposit. Parsed with defaults in src/lib/payment-settings.ts, so an empty object means "all defaults".
+  paymentSettings: jsonb('payment_settings').notNull().default(sql`'{}'::jsonb`),
   deletedAt: tstz('deleted_at'), // soft delete: set instead of removing the row
   createdAt: tstz('created_at').defaultNow().notNull(),
   updatedAt: tstz('updated_at').defaultNow().notNull(),
@@ -308,19 +311,22 @@ export const payments = pgTable('payments', {
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
   billId: uuid('bill_id').notNull(),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
-  method: text('method').notNull(), // cash, upi, card, bank_transfer (all recorded by staff), stripe (gateway)
+  method: text('method').notNull(), // cash, upi, card, bank_transfer (all recorded by staff), razorpay (online payment link), stripe (retired, old rows only)
   reference: text('reference'), // UPI transaction id, last 4 digits of a card, bank reference
   receivedBy: text('received_by'), // who took it, as named at the time
   receivedByUserId: text('received_by_user_id'),
   note: text('note'),
-  stripePaymentIntentId: text('stripe_payment_intent_id'),
+  stripePaymentIntentId: text('stripe_payment_intent_id'), // retired with Stripe; kept so old rows stay readable
+  razorpayPaymentId: text('razorpay_payment_id'),
   createdAt: tstz('created_at').defaultNow().notNull(),
 }, (t) => [
   foreignKey({ name: 'fk_payments_bill', columns: [t.tenantId, t.billId], foreignColumns: [bills.tenantId, bills.id] }),
   index('idx_payments_bill').on(t.billId),
   // A Stripe payment intent can back at most one payment row (webhook retries must not double-count).
   uniqueIndex('payments_stripe_intent_uq').on(t.stripePaymentIntentId).where(sql`${t.stripePaymentIntentId} is not null`),
-  check('payments_method_check', sql`${t.method} in ('cash','upi','card','bank_transfer','stripe')`),
+  // A Razorpay payment id can back at most one payment row (webhook retries must not double-count).
+  uniqueIndex('payments_razorpay_payment_uq').on(t.razorpayPaymentId).where(sql`${t.razorpayPaymentId} is not null`),
+  check('payments_method_check', sql`${t.method} in ('cash','upi','card','bank_transfer','razorpay','stripe')`),
   check('payments_amount_check', sql`${t.amount} > 0`),
 ]);
 
