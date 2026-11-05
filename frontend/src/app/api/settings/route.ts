@@ -1,42 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireTenantContext } from '@/lib/auth';
+import { z } from 'zod';
+import { eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { tenants } from '@/db/schema';
+import { ROLES, requireTenant } from '@/lib/auth';
+import { handleError, parseJson } from '@/lib/http';
+import { getSettings, propertySettingsSchema, receiptSettingsSchema } from '@/lib/property-settings';
 
-export async function GET(request: NextRequest) {
-    try {
-        const context = await requireTenantContext();
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-        // In a full production DB, you would pull global property settings from a Settings table.
-        // Here we gracefully return empty objects to prevent the frontend from throwing a 404 console error!
-        return NextResponse.json({
-            propertySettings: null,
-            outlets: [],
-            webhooks: []
-        });
-    } catch (error) {
-        return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
-    }
+/** Billing roles print receipts, so they may read. Outlets and webhooks have no tables yet. */
+export async function GET() {
+  try {
+    const { tenantId } = await requireTenant(ROLES.billing);
+    return NextResponse.json({ ...(await getSettings(tenantId)), outlets: [], webhooks: [] });
+  } catch (error) {
+    return handleError(error, 'Failed to fetch settings');
+  }
 }
 
+/** Property settings: name, currency, check-in/out times, timezone. Owners and managers only. */
 export async function POST(request: NextRequest) {
-    try {
-        const context = await requireTenantContext();
-        const body = await request.json();
-
-        // Mock save logic
-        return NextResponse.json({ success: true, message: "Settings securely updated." });
-    } catch (error) {
-        return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
-    }
+  try {
+    const { tenantId } = await requireTenant(ROLES.manage);
+    const body = await parseJson(request, z.object({ propertySettings: propertySettingsSchema }));
+    const { name, timezone, ...rest } = body.propertySettings;
+    await db.update(tenants)
+      .set({ name, timezone, propertySettings: rest, updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId));
+    return NextResponse.json(await getSettings(tenantId));
+  } catch (error) {
+    return handleError(error, 'Failed to save settings');
+  }
 }
 
+/** Receipt layout. Owners and managers only. */
 export async function PATCH(request: NextRequest) {
-    try {
-        const context = await requireTenantContext();
-        const body = await request.json();
-
-        // Mock patch logic
-        return NextResponse.json({ success: true, message: "Settings partially updated." });
-    } catch (error) {
-        return NextResponse.json({ error: 'Failed to patch settings' }, { status: 500 });
-    }
+  try {
+    const { tenantId } = await requireTenant(ROLES.manage);
+    const body = await parseJson(request, z.object({ receiptSettings: receiptSettingsSchema }));
+    await db.update(tenants).set({ receiptSettings: body.receiptSettings, updatedAt: new Date() }).where(eq(tenants.id, tenantId));
+    return NextResponse.json(await getSettings(tenantId));
+  } catch (error) {
+    return handleError(error, 'Failed to save receipt settings');
+  }
 }

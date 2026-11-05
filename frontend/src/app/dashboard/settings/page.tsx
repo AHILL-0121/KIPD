@@ -25,8 +25,8 @@ export default function SettingsPage() {
     name: '',
     checkInTime: '14:00',
     checkOutTime: '11:00',
-    currency: 'USD',
-    timezone: 'America/New_York',
+    currency: 'INR',
+    timezone: 'Asia/Kolkata',
   });
 
   const [receiptSettings, setReceiptSettings] = useState({
@@ -35,27 +35,17 @@ export default function SettingsPage() {
     footer: 'We Are Happy To Serve You'
   });
 
-  useEffect(() => {
-    const saved = localStorage.getItem('kipd-receipt-config');
-    if (saved) {
-      setReceiptSettings(JSON.parse(saved));
-    }
-  }, []);
-
   const saveReceiptSettings = async () => {
-    // Save locally for immediate offline support
-    localStorage.setItem('kipd-receipt-config', JSON.stringify(receiptSettings));
-
-    // Send PATCH request to API
     try {
-      await fetch('/api/settings', {
+      const res = await fetch('/api/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ receiptSettings }),
       });
+      if (!res.ok) throw new Error(String(res.status));
       alert('Receipt Layout successfully saved!');
-    } catch (error) {
-      alert('Failed to save layout to server, but saved locally.');
+    } catch {
+      alert('Could not save the receipt layout. Please try again.');
     }
   };
 
@@ -82,6 +72,7 @@ export default function SettingsPage() {
       })
       .then(data => {
         if (data.propertySettings) setPropertySettings(data.propertySettings);
+        if (data.receiptSettings) setReceiptSettings(data.receiptSettings);
         if (data.outlets) setOutlets(data.outlets);
         if (data.webhooks) setWebhooks(data.webhooks);
       })
@@ -91,12 +82,17 @@ export default function SettingsPage() {
   }, []);
 
   const saveSettings = async () => {
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ propertySettings }),
-    });
-    // Show success toast
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertySettings }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      alert('Property settings saved!');
+    } catch {
+      alert('Could not save property settings. Check the values and try again.');
+    }
   };
 
   return (
@@ -131,6 +127,7 @@ export default function SettingsPage() {
               value={propertySettings.currency}
               onChange={(e) => setPropertySettings({ ...propertySettings, currency: e.target.value })}
               options={[
+                { value: 'INR', label: 'INR - Indian Rupee' },
                 { value: 'USD', label: 'USD - US Dollar' },
                 { value: 'EUR', label: 'EUR - Euro' },
                 { value: 'GBP', label: 'GBP - British Pound' },
@@ -156,6 +153,8 @@ export default function SettingsPage() {
               value={propertySettings.timezone}
               onChange={(e) => setPropertySettings({ ...propertySettings, timezone: e.target.value })}
               options={[
+                { value: 'Asia/Kolkata', label: 'India (IST)' },
+                { value: 'Europe/London', label: 'London' },
                 { value: 'America/New_York', label: 'Eastern Time' },
                 { value: 'America/Chicago', label: 'Central Time' },
                 { value: 'America/Los_Angeles', label: 'Pacific Time' },
