@@ -50,6 +50,13 @@
       "when": 1793889825581,
       "tag": "0006_post_to_room_and_credit_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793904489825,
+      "tag": "0007_property_and_receipt_settings",
+      "breakpoints": true
     }
   ]
 }

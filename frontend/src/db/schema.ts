@@ -46,6 +46,11 @@ export const tenants = pgTable('tenants', {
   // Settings > Tax & invoices: GSTIN, address, state, how room GST is charged, invoice number prefix, footer text.
   // Parsed with defaults in src/lib/gst.ts, so an empty object means "no GST, nothing printed".
   taxSettings: jsonb('tax_settings').notNull().default(sql`'{}'::jsonb`),
+  // Settings > Property: currency, check-in and check-out time (name and timezone have their own columns above).
+  // Parsed with defaults in src/lib/property-settings.ts, so an empty object means "all defaults".
+  propertySettings: jsonb('property_settings').notNull().default(sql`'{}'::jsonb`),
+  // Settings > Receipt layout: header, subtext and footer printed on bills. {} = defaults.
+  receiptSettings: jsonb('receipt_settings').notNull().default(sql`'{}'::jsonb`),
   deletedAt: tstz('deleted_at'), // soft delete: set instead of removing the row
   createdAt: tstz('created_at').defaultNow().notNull(),
   updatedAt: tstz('updated_at').defaultNow().notNull(),

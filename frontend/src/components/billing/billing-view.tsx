@@ -118,10 +118,10 @@ export function BillingView({ kind }: { kind: BillKind }) {
   useEffect(() => {
     fetchBills();
 
-    try {
-      const savedConfig = localStorage.getItem('kipd-receipt-config');
-      if (savedConfig) setReceiptConfig(JSON.parse(savedConfig));
-    } catch { /* storage blocked or not JSON: keep the default receipt */ }
+    fetch('/api/settings')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data?.receiptSettings) setReceiptConfig(data.receiptSettings); })
+      .catch(() => { }); // keep the default receipt
 
     fetch('/api/settings/payments')
       .then(res => res.ok ? res.json() : null)
