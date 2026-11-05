@@ -57,6 +57,8 @@ export default function RestaurantPage() {
   // Forms
   const [itemForm, setItemForm] = useState({ name: '', description: '', price: '', categoryId: '', tags: '' });
   const [categoryName, setCategoryName] = useState('');
+  const [lastCategoryId, setLastCategoryId] = useState('');
+  const LAST_CATEGORY_KEY = 'kipd.menu.lastCategoryId';
 
   // Table management state
   const [tablesList, setTablesList] = useState<Table[]>([]);
@@ -96,7 +98,22 @@ export default function RestaurantPage() {
     fetchItems();
     fetchCategories();
     fetchTables();
+    try {
+      setLastCategoryId(localStorage.getItem(LAST_CATEGORY_KEY) || '');
+    } catch { /* storage can be blocked; the form then just starts on the first category */ }
   }, []);
+
+  // New items start on the category used last time (if it still exists), else the first category.
+  const rememberCategory = (id: string) => {
+    setLastCategoryId(id);
+    try { localStorage.setItem(LAST_CATEGORY_KEY, id); } catch { /* ignore */ }
+  };
+
+  const startAddItem = () => {
+    const categoryId = categories.some(c => c.id === lastCategoryId) ? lastCategoryId : categories[0]?.id || '';
+    setItemForm({ name: '', description: '', price: '', categoryId, tags: '' });
+    setShowAddItem(true);
+  };
 
   const handleCreateItem = async () => {
     if (!itemForm.name || !itemForm.price || !itemForm.categoryId) {
@@ -117,8 +134,9 @@ export default function RestaurantPage() {
         }),
       });
       if (!res.ok) throw new Error('Failed');
+      rememberCategory(itemForm.categoryId);
       setShowAddItem(false);
-      setItemForm({ name: '', description: '', price: '', categoryId: '', tags: '' });
+      setItemForm({ name: '', description: '', price: '', categoryId: itemForm.categoryId, tags: '' });
       fetchItems();
       showToast('Menu item created', 'success');
     } catch {
@@ -193,7 +211,22 @@ export default function RestaurantPage() {
   const handleDeleteItem = async (itemId: string) => {
     if (!confirm('Delete this menu item?')) return;
     try {
-      await fetch(`/api/menu?id=${itemId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/menu?id=${itemId}`, { method: 'DELETE' });
+      if (res.status === 409) {
+        // Past orders and bills refer to this item, so it can't be erased. Hiding it keeps the history intact.
+        if (confirm('This item is on past orders, so it can\'t be deleted. Hide it from the menu instead?')) {
+          const patch = await fetch('/api/menu', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ menuItemId: itemId, isAvailable: false }),
+          });
+          if (!patch.ok) throw new Error('hide failed');
+          fetchItems();
+          showToast('Item hidden from the menu', 'success');
+        }
+        return;
+      }
+      if (!res.ok) throw new Error('delete failed');
       fetchItems();
       showToast('Item deleted', 'success');
     } catch {
@@ -295,8 +328,7 @@ export default function RestaurantPage() {
                   setShowAddCategory(true);
                   return;
                 }
-                setItemForm({ name: '', description: '', price: '', categoryId: categories[0]?.id || '', tags: '' });
-                setShowAddItem(true);
+                startAddItem();
               }}>
                 <Plus className="w-4 h-4" />
                 Add Menu Item
@@ -370,7 +402,7 @@ export default function RestaurantPage() {
             actionLabel={!search && categoryFilter === 'all' ? "Add First Item" : undefined}
             onAction={!search && categoryFilter === 'all' ? () => {
               if (categories.length === 0) setShowAddCategory(true);
-              else { setItemForm({ name: '', description: '', price: '', categoryId: categories[0]?.id || '', tags: '' }); setShowAddItem(true); }
+              else startAddItem();
             } : undefined}
           />
         ) : (

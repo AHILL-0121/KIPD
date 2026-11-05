@@ -33,7 +33,7 @@ const openDialog = async (guest: RegExp) => {
   fireEvent.click(await screen.findByRole('button', { name: 'Record payment' }));
   return screen.findByRole('dialog', { name: 'Record payment' });
 };
-const optionsOf = (dialog: HTMLElement) => within(within(dialog).getByLabelText('Paid by')).getAllByRole('option').map((o) => o.textContent);
+const optionsOf = (dialog: HTMLElement) => within(within(dialog).getByLabelText('Paid by')).getAllByRole('option', { hidden: true }).map((o) => o.textContent);
 
 beforeEach(() => {
   vi.stubGlobal('EventSource', class { onmessage = null; onerror = null; onopen = null; close() {} });
