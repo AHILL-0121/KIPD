@@ -14,7 +14,7 @@ export async function GET() {
     const { tenantId } = await requireTenant();
     const categories = await db.query.menuCategories.findMany({
       where: eq(menuCategories.tenantId, tenantId),
-      orderBy: (c, { asc }) => [asc(c.sortOrder)],
+      orderBy: (c, { asc }) => [asc(c.sortOrder), asc(c.createdAt)], // newest last, so the order is the order they were created in
     });
     return NextResponse.json(categories);
   } catch (error) {

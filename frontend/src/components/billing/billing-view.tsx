@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { Receipt, IndianRupee, CheckCircle2, Printer, Link2, Copy } from 'lucide-react';
+import { Receipt, IndianRupee, CheckCircle2, Printer, Link2, Copy, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { formatCurrency } from '@/lib/currency';
 import { billStatus } from '@/lib/bill-status';
@@ -390,7 +390,17 @@ export function BillingView({ kind }: { kind: BillKind }) {
                   <h2 className="font-serif text-2xl font-bold text-ink">{selected.guestName}</h2>
                   {selected.stay && <p className="text-ink-muted">{stayLine(selected)}</p>}
                 </div>
-                <Badge variant={billStatus(selected.status).tone}>{billStatus(selected.status).label}</Badge>
+                <div className="flex items-center gap-3">
+                  <Badge variant={billStatus(selected.status).tone}>{billStatus(selected.status).label}</Badge>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(null)}
+                    aria-label="Close bill"
+                    className="p-2 rounded-full bg-stone-100 text-ink-soft hover:bg-stone-200 hover:text-ink transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber"
+                  >
+                    <X className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </div>
               </div>
 
               {selected.receipt ? (

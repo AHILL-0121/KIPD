@@ -72,6 +72,15 @@ export default function OrdersPage() {
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [menuSearch, setMenuSearch] = useState('');
+  const [menuCategory, setMenuCategory] = useState('all');
+  // Category chips follow the order the categories were created in (same as the Menu page),
+  // and only list categories that have something orderable.
+  const [categoryOrder, setCategoryOrder] = useState<string[]>([]);
+  const inMenu = new Set(menuItems.map(i => i.category?.name).filter((n): n is string => !!n));
+  const menuCategoryNames = [
+    ...categoryOrder.filter(n => inMenu.has(n)),
+    ...Array.from(inMenu).filter(n => !categoryOrder.includes(n)),
+  ];
   const [saving, setSaving] = useState(false);
 
   // Billing Modal State
@@ -93,6 +102,13 @@ export default function OrdersPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const fetchCategoryOrder = () => {
+    fetch('/api/menu-categories')
+      .then(res => res.json())
+      .then(data => setCategoryOrder(Array.isArray(data) ? data.map((c: { name: string }) => c.name) : []))
+      .catch(console.error);
+  };
+
   const fetchMenuItems = () => {
     fetch('/api/menu')
       .then(res => res.json())
@@ -103,6 +119,7 @@ export default function OrdersPage() {
   useEffect(() => {
     fetchOrders();
     fetchMenuItems();
+    fetchCategoryOrder();
     fetch('/api/tables')
       .then(res => res.json())
       .then(data => setTableOptions(Array.isArray(data) ? data : []))
@@ -165,6 +182,7 @@ export default function OrdersPage() {
     setCart([]);
     setSpecialInstructions('');
     setMenuSearch('');
+    setMenuCategory('all');
     setShowCreate(true);
   };
 
@@ -380,28 +398,46 @@ export default function OrdersPage() {
                 {/* Point of Sale Item Picker */}
                 <div>
                   <Input placeholder="Search menu..." value={menuSearch} onChange={(e) => setMenuSearch(e.target.value)} className="mb-3" />
-                  <div className="max-h-64 overflow-y-auto space-y-2 border border-stone-200 rounded-xl p-3 bg-stone-50/50">
-                    {menuItems.filter(i => i.name.toLowerCase().includes(menuSearch.toLowerCase())).map(item => {
+                  {menuCategoryNames.length > 1 && (
+                    <div role="tablist" aria-label="Menu categories" className="flex gap-2 overflow-x-auto pb-2 mb-2 -mx-1 px-1">
+                      {['all', ...menuCategoryNames].map(name => {
+                        const active = menuCategory === name;
+                        return (
+                          <button
+                            key={name}
+                            role="tab"
+                            aria-selected={active}
+                            onClick={() => setMenuCategory(name)}
+                            className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-full border text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber ${
+                              active ? 'bg-amber text-white border-amber' : 'bg-white text-ink-soft border-stone-200 hover:bg-stone-50'
+                            }`}
+                          >
+                            {name === 'all' ? 'All' : name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="max-h-64 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 gap-2 border border-stone-200 rounded-xl p-3 bg-stone-50/50">
+                    {menuItems.filter(i => (menuCategory === 'all' || i.category?.name === menuCategory) && i.name.toLowerCase().includes(menuSearch.toLowerCase())).map(item => {
                       const inCart = cart.find(c => c.menuItemId === item.id);
                       return (
-                        <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-white border border-stone-200 shadow-sm">
-                          <div>
-                            <span className="font-semibold text-ink block">{item.name}</span>
-                            <span className="text-sm text-ink-muted">{formatCurrency(Number(item.price))}</span>
+                        <div key={item.id} className="aspect-square flex flex-col justify-between p-2 rounded-lg bg-white border border-stone-200 shadow-sm">
+                          <div className="min-w-0">
+                            <span className="font-semibold text-ink text-sm leading-tight block line-clamp-2">{item.name}</span>
+                            <span className="text-xs text-ink-muted">{formatCurrency(Number(item.price))}</span>
                           </div>
-                          <div className="flex items-center gap-3">
-                            {inCart ? (
-                              <div className="flex items-center bg-stone-100 rounded-lg p-1">
-                                <button onClick={() => removeFromCart(item.id)} aria-label={`Remove one ${item.name}`} className="p-2 rounded bg-white shadow-sm text-ink-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"><Minus className="w-4 h-4" aria-hidden="true" /></button>
-                                <span className="font-bold text-lg w-10 text-center" aria-live="polite">{inCart.quantity}</span>
-                                <button onClick={() => addToCart(item)} aria-label={`Add one more ${item.name}`} className="p-2 rounded bg-amber shadow-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber"><Plus className="w-4 h-4" aria-hidden="true" /></button>
-                              </div>
-                            ) : (
-                              <Button size="sm" variant="ghost" onClick={() => addToCart(item)} className="font-bold">
-                                <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add<span className="sr-only"> {item.name}</span>
-                              </Button>
-                            )}
-                          </div>
+                          {inCart ? (
+                            <div className="flex items-center justify-between bg-stone-100 rounded-lg p-1">
+                              <button onClick={() => removeFromCart(item.id)} aria-label={`Remove one ${item.name}`} className="p-1 rounded bg-white shadow-sm text-ink-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"><Minus className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                              <span className="font-bold text-sm text-center" aria-live="polite">{inCart.quantity}</span>
+                              <button onClick={() => addToCart(item)} aria-label={`Add one more ${item.name}`} className="p-1 rounded bg-amber shadow-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber"><Plus className="w-3.5 h-3.5" aria-hidden="true" /></button>
+                            </div>
+                          ) : (
+                            <Button size="sm" variant="ghost" onClick={() => addToCart(item)} className="font-bold w-full">
+                              <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add<span className="sr-only"> {item.name}</span>
+                            </Button>
+                          )}
                         </div>
                       );
                     })}
