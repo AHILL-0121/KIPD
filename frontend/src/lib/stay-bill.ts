@@ -1,4 +1,5 @@
 import { bills } from '@/db/schema';
+import { DEFAULT_TAX_SETTINGS, ROOM_SAC, roomTax, splitGst, taxGroups, type TaxGroup, type TaxSettings } from '@/lib/gst';
 
 /** Nights between two instants: at least one, and a part-day counts as a night (the same rule the booking price uses). */
 export const nightsBetween = (checkIn: Date, checkOut: Date) => Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / 86_400_000));
@@ -13,31 +14,104 @@ interface StayBillInput {
   checkOut: Date;
   /** The booking's price: nights x the room type's rate. */
   total: string;
+  /** The hotel's tax profile. Left out (or "No GST"), the bill is just the booking price, as before. */
+  tax?: TaxSettings;
 }
 
+const rupees = (paise: number) => paise / 100;
+
 /**
- * The bill for a hotel stay, as one line (room, type, nights). No tax is added yet: the booking price is
- * what the guest owes until the tax profile exists (checklist 7a, "Room GST"). Insert it with
- * onConflictDoNothing(): a booking can only have one live stay bill, so confirming twice is harmless.
+ * The bill for a hotel stay: one line (room, type, nights) and, when the hotel charges room GST, the tax split.
+ * With "No GST" nothing is added and the bill equals the booking price. Otherwise the booking price is either the
+ * taxable value (GST is added on top) or already includes GST (it is taken out), per the hotel's setting, and the
+ * tax is shown as CGST + SGST. IGST, for a guest in another state, is decided when the invoice is issued.
+ * Insert it with onConflictDoNothing(): a booking can only have one live stay bill, so confirming twice is harmless.
  */
 export function stayBillValues(i: StayBillInput): typeof bills.$inferInsert {
   const nights = nightsBetween(i.checkIn, i.checkOut);
-  const total = Number(i.total);
+  const settings = i.tax ?? DEFAULT_TAX_SETTINGS;
+  const description = `Room ${i.roomNumber} (${i.roomTypeName}), ${nights} ${nights === 1 ? 'night' : 'nights'}`;
+
+  if (settings.roomGst === 'none') {
+    const total = Number(i.total);
+    return {
+      tenantId: i.tenantId,
+      bookingId: i.bookingId,
+      kind: 'stay',
+      guestId: i.guestId,
+      totalAmount: i.total,
+      status: 'open',
+      itemsBreakdown: {
+        items: [{ name: description, qty: nights, rate: Math.round((total / nights) * 100) / 100, amt: total }],
+        subtotal: total, cgst: 0, sgst: 0, total,
+      },
+    };
+  }
+
+  const t = roomTax({ pricePaise: Math.round(Number(i.total) * 100), nights, settings });
+  const { cgstPaise, sgstPaise } = splitGst(t.taxPaise, false);
   return {
     tenantId: i.tenantId,
     bookingId: i.bookingId,
     kind: 'stay',
     guestId: i.guestId,
-    totalAmount: i.total,
+    totalAmount: rupees(t.totalPaise).toFixed(2),
     status: 'open',
     itemsBreakdown: {
-      items: [{
-        name: `Room ${i.roomNumber} (${i.roomTypeName}), ${nights} ${nights === 1 ? 'night' : 'nights'}`,
-        qty: nights,
-        rate: Math.round((total / nights) * 100) / 100,
-        amt: total,
-      }],
-      subtotal: total, cgst: 0, sgst: 0, total,
+      items: [{ name: description, qty: nights, rate: Math.round(t.taxablePaise / nights) / 100, amt: rupees(t.taxablePaise), sac: ROOM_SAC, gstRate: t.rate }],
+      subtotal: rupees(t.taxablePaise), cgst: rupees(cgstPaise), sgst: rupees(sgstPaise), igst: 0, gstRate: t.rate, total: rupees(t.totalPaise),
+      taxSummary: [{ rate: t.rate, taxable: rupees(t.taxablePaise), tax: rupees(t.taxPaise) }],
     },
   };
+}
+
+/** Restaurant service (SAC 996331): the code for food and drink lines posted onto a stay bill. */
+export const RESTAURANT_SAC = '996331';
+
+export interface BillLine { name: string; qty: number; rate: number; amt: number; sac?: string; gstRate?: number }
+export interface StayBreakdown {
+  items: BillLine[];
+  subtotal: number; cgst: number; sgst: number; igst?: number; gstRate?: number; total: number;
+  taxSummary?: TaxGroup[];
+  /** Restaurant bills charged to this room, kept so the front desk can see where the lines came from. */
+  postings?: { billId: string; at: string; by: string; amount: number }[];
+}
+
+const toPaise = (n: number | undefined) => Math.round((n ?? 0) * 100);
+
+/** The GST rate a restaurant bill was charged at, from its own tax lines (5 for 2.5% + 2.5%). */
+export function restaurantRate(b: { subtotal?: number; cgst?: number; sgst?: number } | null | undefined): number {
+  const subtotal = b?.subtotal ?? 0;
+  if (!(subtotal > 0)) return 0;
+  return Math.round((((b?.cgst ?? 0) + (b?.sgst ?? 0)) / subtotal) * 10000) / 100;
+}
+
+/**
+ * Adds a restaurant bill's lines to a stay bill. Each line keeps its own GST rate, so the invoice can show room GST and
+ * food GST separately. Works in whole paise: the food is charged at its own rate on its own value, so the stay's total
+ * can differ by a few paise from the restaurant bill's whole-rupee total, which is replaced by this.
+ */
+export function postCharges(existing: Partial<StayBreakdown> | null, add: { items: { name: string; qty: number; rate: number; amt: number }[]; ratePercent: number; billId: string; by: string; at: Date }): { breakdown: StayBreakdown; totalPaise: number } {
+  const groups: TaxGroup[] = taxGroups(existing).map((g) => ({ ...g }));
+  const lines: BillLine[] = add.items.map((i) => ({ name: `Restaurant: ${i.name}`, qty: i.qty, rate: i.rate, amt: i.amt, sac: RESTAURANT_SAC, gstRate: add.ratePercent }));
+  const addTaxable = lines.reduce((s, l) => s + toPaise(l.amt), 0);
+  const addTax = Math.round((addTaxable * add.ratePercent) / 100);
+
+  const hit = groups.find((g) => g.rate === add.ratePercent);
+  if (hit) { hit.taxable = (toPaise(hit.taxable) + addTaxable) / 100; hit.tax = (toPaise(hit.tax) + addTax) / 100; }
+  else groups.push({ rate: add.ratePercent, taxable: addTaxable / 100, tax: addTax / 100 });
+
+  // A stay with no tax lines at all (rate 0, nothing taxed) has an empty first group; drop it once real tax exists.
+  const kept = groups.filter((g, _i, all) => !(g.rate === 0 && g.tax === 0 && g.taxable === 0 && all.length > 1));
+  const taxablePaise = kept.reduce((s, g) => s + toPaise(g.taxable), 0);
+  const taxPaise = kept.reduce((s, g) => s + toPaise(g.tax), 0);
+  const { cgstPaise, sgstPaise } = splitGst(taxPaise, false);
+  const totalPaise = taxablePaise + taxPaise;
+  const breakdown: StayBreakdown = {
+    items: [...(existing?.items ?? []), ...lines],
+    subtotal: taxablePaise / 100, cgst: cgstPaise / 100, sgst: sgstPaise / 100, igst: 0, total: totalPaise / 100,
+    taxSummary: kept,
+    postings: [...(existing?.postings ?? []), { billId: add.billId, at: add.at.toISOString(), by: add.by, amount: (addTaxable + addTax) / 100 }],
+  };
+  return { breakdown, totalPaise };
 }

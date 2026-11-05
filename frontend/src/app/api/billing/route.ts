@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
       createdAt: bill.createdAt,
       settledAt: bill.settledAt,
       receipt: bill.itemsBreakdown || null,
+      invoiceNumber: bill.invoiceNumber ?? null,
       stay: bill.booking ? {
         roomNumber: bill.booking.room?.roomNumber ?? null,
         checkIn: bill.booking.checkInDate,
