@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PaymentSettingsCard } from '@/components/settings/payment-settings-card';
+import { TaxSettingsCard } from '@/components/settings/tax-settings-card';
 import {
   Settings as SettingsIcon,
   Building2,
@@ -172,6 +173,9 @@ export default function SettingsPage() {
 
         {/* Payments */}
         <PaymentSettingsCard />
+
+        {/* Tax & invoices */}
+        <TaxSettingsCard />
 
         {/* Outlets */}
         <Card hover={false}>

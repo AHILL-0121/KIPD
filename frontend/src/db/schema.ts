@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, decimal, jsonb, index, uniqueIndex, unique, check, foreignKey } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, boolean, integer, decimal, jsonb, index, uniqueIndex, unique, check, foreignKey, primaryKey } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
 /**
@@ -43,6 +43,9 @@ export const tenants = pgTable('tenants', {
   // Settings > Payments: which ways staff may record a payment, whether online payment links are on, and the
   // suggested deposit. Parsed with defaults in src/lib/payment-settings.ts, so an empty object means "all defaults".
   paymentSettings: jsonb('payment_settings').notNull().default(sql`'{}'::jsonb`),
+  // Settings > Tax & invoices: GSTIN, address, state, how room GST is charged, invoice number prefix, footer text.
+  // Parsed with defaults in src/lib/gst.ts, so an empty object means "no GST, nothing printed".
+  taxSettings: jsonb('tax_settings').notNull().default(sql`'{}'::jsonb`),
   deletedAt: tstz('deleted_at'), // soft delete: set instead of removing the row
   createdAt: tstz('created_at').defaultNow().notNull(),
   updatedAt: tstz('updated_at').defaultNow().notNull(),
@@ -287,23 +290,73 @@ export const bills = pgTable('bills', {
   guestId: uuid('guest_id').notNull(),
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
   paidAmount: decimal('paid_amount', { precision: 10, scale: 2 }).default('0'),
-  status: text('status').notNull().default('open'), // open, partial, paid, void (a cancelled booking's bill)
+  status: text('status').notNull().default('open'), // open, partial, paid, void (a cancelled booking's bill), posted (charged to a room)
   itemsBreakdown: jsonb('items_breakdown'),
+  // The tax invoice for a stay bill, once issued. The number, date and a frozen copy of who billed whom (data) are set
+  // together in one statement and never change, so a later edit to Settings cannot rewrite an invoice already given out.
+  invoiceNumber: text('invoice_number'),
+  invoiceSeq: integer('invoice_seq'),
+  invoiceIssuedAt: tstz('invoice_issued_at'),
+  invoiceData: jsonb('invoice_data'),
+  // A restaurant bill charged to a guest's room: it is closed as 'posted' and its lines live on that stay bill.
+  postedToBillId: uuid('posted_to_bill_id'),
   createdAt: tstz('created_at').defaultNow().notNull(),
   settledAt: tstz('settled_at'),
 }, (t) => [
   unique('bills_tenant_id_uq').on(t.tenantId, t.id),
+  uniqueIndex('bills_invoice_number_uq').on(t.tenantId, t.invoiceNumber).where(sql`${t.invoiceNumber} is not null`),
+  check('bills_invoice_complete_check', sql`(${t.invoiceNumber} is null) = (${t.invoiceData} is null) and (${t.invoiceNumber} is null) = (${t.invoiceIssuedAt} is null)`),
   foreignKey({ name: 'fk_bills_guest', columns: [t.tenantId, t.guestId], foreignColumns: [guests.tenantId, guests.id] }),
   foreignKey({ name: 'fk_bills_booking', columns: [t.tenantId, t.bookingId], foreignColumns: [bookings.tenantId, bookings.id] }),
+  foreignKey({ name: 'fk_bills_posted_to', columns: [t.tenantId, t.postedToBillId], foreignColumns: [t.tenantId, t.id] }),
   index('idx_bills_tenant_status').on(t.tenantId, t.status),
   index('idx_bills_guest').on(t.guestId),
   // A booking has at most one live stay bill, so confirming twice (or two staff at once) cannot bill a stay twice.
   uniqueIndex('bills_live_stay_uq').on(t.tenantId, t.bookingId).where(sql`${t.kind} = 'stay' and ${t.status} <> 'void'`),
-  check('bills_status_check', sql`${t.status} in ('open','paid','partial','void')`),
+  check('bills_status_check', sql`${t.status} in ('open','paid','partial','void','posted')`),
+  check('bills_posted_check', sql`(${t.status} = 'posted') = (${t.postedToBillId} is not null)`),
   check('bills_kind_check', sql`${t.kind} in ('stay','restaurant')`),
   check('bills_stay_booking_check', sql`${t.kind} <> 'stay' or ${t.bookingId} is not null`),
   check('bills_total_check', sql`${t.totalAmount} >= 0`),
   check('bills_paid_check', sql`${t.paidAmount} >= 0 and ${t.paidAmount} <= ${t.totalAmount}`),
+]);
+
+/**
+ * The last invoice number given out, per hotel and Indian financial year ("26-27"). Numbers must run 1, 2, 3 with no
+ * gaps and no repeats, so a number is only ever taken by the single statement that also stamps it on the bill.
+ */
+export const invoiceCounters = pgTable('invoice_counters', {
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  fy: text('fy').notNull(),
+  series: text('series').notNull().default('invoice'), // invoice, credit_note: each has its own 1, 2, 3
+  last: integer('last').notNull().default(0),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.fy, t.series] }),
+  check('invoice_counters_series_check', sql`${t.series} in ('invoice','credit_note')`),
+  check('invoice_counters_last_check', sql`${t.last} >= 0`),
+]);
+
+/**
+ * A credit note: reduces an issued invoice (a discount, a correction, a cancelled stay). Like an invoice it is numbered
+ * with no gaps (its own series, CN/26-27/0001) and frozen when issued. `amount` is the whole credit, tax included.
+ */
+export const creditNotes = pgTable('credit_notes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  billId: uuid('bill_id').notNull(),
+  number: text('number').notNull(),
+  seq: integer('seq').notNull(),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  reason: text('reason').notNull(),
+  data: jsonb('data').notNull(), // seller, buyer, the invoice it corrects, and the tax split, frozen at issue
+  issuedBy: text('issued_by'),
+  issuedAt: tstz('issued_at').defaultNow().notNull(),
+}, (t) => [
+  unique('credit_notes_tenant_id_uq').on(t.tenantId, t.id),
+  uniqueIndex('credit_notes_number_uq').on(t.tenantId, t.number),
+  foreignKey({ name: 'fk_credit_notes_bill', columns: [t.tenantId, t.billId], foreignColumns: [bills.tenantId, bills.id] }),
+  index('idx_credit_notes_bill').on(t.billId),
+  check('credit_notes_amount_check', sql`${t.amount} > 0`),
 ]);
 
 export const payments = pgTable('payments', {
@@ -526,6 +579,11 @@ export const billsRelations = relations(bills, ({ one, many }) => ({
   guest: one(guests, { fields: [bills.guestId], references: [guests.id] }),
   payments: many(payments),
   orders: many(orders),
+  creditNotes: many(creditNotes),
+}));
+
+export const creditNotesRelations = relations(creditNotes, ({ one }) => ({
+  bill: one(bills, { fields: [creditNotes.billId], references: [bills.id] }),
 }));
 
 export const paymentsRelations = relations(payments, ({ one }) => ({

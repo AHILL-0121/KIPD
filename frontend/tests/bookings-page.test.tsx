@@ -192,3 +192,40 @@ describe('payment on a booking', () => {
     expect((await screen.findByRole('status')).textContent).toMatch(/cancelled\. ₹2,000 was already paid and needs refunding by hand/);
   });
 });
+
+describe('bookings calendar view', () => {
+  const openCalendar = async () => {
+    render(<BookingsPage />);
+    const toggle = await screen.findByRole('button', { name: /Calendar/ });
+    await waitFor(() => expect(screen.queryByText('Loading bookings...')).toBeNull());
+    fireEvent.click(toggle);
+  };
+
+  it('shows every room as a row and each live booking as a bar, leaving out cancelled ones', async () => {
+    serve([booking('a', 'Asha Rao', 'confirmed'), booking('c', 'Gone Guest', 'cancelled')]);
+    await openCalendar();
+    const grid = within(screen.getByRole('region', { name: 'Booking calendar' }));
+    expect(grid.getByText('101')).toBeTruthy();
+    expect(grid.getByText('102')).toBeTruthy(); // a room with no booking still has its row
+    expect(grid.getByRole('button', { name: /Asha Rao, room 101/ })).toBeTruthy();
+    expect(grid.queryByText('Gone Guest')).toBeNull();
+  });
+
+  it('opens the same booking details when a bar is clicked', async () => {
+    serve([booking('a', 'Asha Rao', 'pending')]);
+    await openCalendar();
+    fireEvent.click(screen.getByRole('button', { name: /Asha Rao, room 101/ }));
+    expect(await screen.findByRole('button', { name: 'Confirm' })).toBeTruthy();
+  });
+
+  it('moves the window a week at a time and back to today', async () => {
+    serve([booking('a', 'Asha Rao', 'confirmed')]);
+    await openCalendar();
+    const heading = () => screen.getByRole('region', { name: 'Booking calendar' }).querySelector('h2')!.textContent;
+    const first = heading();
+    fireEvent.click(screen.getByRole('button', { name: 'Next week' }));
+    expect(heading()).not.toBe(first);
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }));
+    expect(heading()).toBe(first);
+  });
+});

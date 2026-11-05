@@ -8,11 +8,13 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { Receipt, IndianRupee, CheckCircle2, Printer, Link2, Copy, X } from 'lucide-react';
+import Link from 'next/link';
+import { Receipt, IndianRupee, CheckCircle2, Printer, Link2, Copy, FileText, BedDouble, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { formatCurrency } from '@/lib/currency';
 import { billStatus } from '@/lib/bill-status';
 import { suggestedDeposit } from '@/lib/deposit';
+import { GST_STATES, splitGst } from '@/lib/gst';
 
 type BillKind = 'stay' | 'restaurant';
 
@@ -39,9 +41,15 @@ interface Bill {
     subtotal: number;
     cgst: number;
     sgst: number;
+    igst?: number;
+    gstRate?: number;
+    /** One entry per GST rate on the bill (a stay with food charged to the room has two). */
+    taxSummary?: Array<{ rate: number; taxable: number; tax: number }>;
     total: number;
     items: Array<{ name: string; qty: number; rate: number; amt: number }>;
   } | null;
+  /** Set once the stay's invoice has been issued. */
+  invoiceNumber?: string | null;
   stay?: { roomNumber: string | null; checkIn: string; checkOut: string; nights: number; bookingStatus: string } | null;
   payments: Payment[];
 }
@@ -94,6 +102,19 @@ export function BillingView({ kind }: { kind: BillKind }) {
   const [link, setLink] = useState<{ url: string; amount: number } | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Charge a restaurant bill to a guest's room
+  const [showRoom, setShowRoom] = useState(false);
+  const [inHouse, setInHouse] = useState<Bill[] | null>(null);
+  const [roomBillId, setRoomBillId] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [roomError, setRoomError] = useState('');
+
+  // The invoice dialog (hotel stays): who the invoice is made out to
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [issuing, setIssuing] = useState(false);
+  const [invoiceError, setInvoiceError] = useState('');
+  const [buyer, setBuyer] = useState({ name: '', gstin: '', stateCode: '', address: '' });
+
   useEffect(() => {
     fetchBills();
 
@@ -144,6 +165,81 @@ export function BillingView({ kind }: { kind: BillKind }) {
     setCopied(false);
     setShowPay(true);
   };
+  const openRoom = () => {
+    setRoomError('');
+    setRoomBillId('');
+    setInHouse(null);
+    setShowRoom(true);
+    // Guests who are checked in and whose stay is not yet invoiced: an issued invoice can no longer take new charges.
+    fetch('/api/billing?kind=stay')
+      .then(res => { if (!res.ok) throw new Error(String(res.status)); return res.json(); })
+      .then((rows: Bill[]) => {
+        const open = rows.filter(b => b.stay?.bookingStatus === 'checked_in' && !b.invoiceNumber);
+        setInHouse(open);
+        if (open.length === 1) setRoomBillId(open[0].id);
+      })
+      .catch(() => { setInHouse([]); setRoomError('Could not load the guests who are staying. Close this and try again.'); });
+  };
+
+  const postToRoom = async () => {
+    if (!selected || !roomBillId || posting) return;
+    setPosting(true);
+    setRoomError('');
+    try {
+      const res = await fetch(`/api/billing/${selected.id}/post-to-room`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stayBillId: roomBillId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRoomError(res.status < 500 && typeof data.error === 'string' ? data.error : 'Could not charge this to the room. Nothing was changed, please try again.');
+        return;
+      }
+      const room = inHouse?.find(b => b.id === roomBillId)?.stay?.roomNumber;
+      setShowRoom(false);
+      setSelectedId(null);
+      setNotice(`${formatCurrency(data.posted)} charged to Room ${room ?? ''}. It will be on that guest's bill.`);
+      fetchBills();
+    } catch {
+      setRoomError('Could not reach the server. Nothing was changed, please try again.');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const openInvoice = () => {
+    if (!selected) return;
+    setBuyer({ name: selected.guestName, gstin: '', stateCode: '', address: '' });
+    setInvoiceError('');
+    setShowInvoice(true);
+  };
+
+  const issueInvoice = async () => {
+    if (!selected || issuing) return;
+    setIssuing(true);
+    setInvoiceError('');
+    try {
+      const res = await fetch(`/api/billing/${selected.id}/invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: buyer.name.trim() || undefined, gstin: buyer.gstin.trim() || undefined, stateCode: buyer.stateCode || undefined, address: buyer.address.trim() || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setInvoiceError(res.status < 500 && typeof data.error === 'string' ? data.error : 'Could not issue the invoice. Nothing was changed, please try again.');
+        return;
+      }
+      setShowInvoice(false);
+      setNotice(`Invoice ${data.number} issued.`);
+      fetchBills();
+    } catch {
+      setInvoiceError('Could not reach the server. Nothing was changed, please try again.');
+    } finally {
+      setIssuing(false);
+    }
+  };
+
   const closePay = () => { setShowPay(false); setPayError(''); setLink(null); };
 
   const copyLink = async () => {
@@ -432,21 +528,22 @@ export function BillingView({ kind }: { kind: BillKind }) {
                       </tbody>
                     </table>
 
-                    {/* Tax lines only when the bill has tax (stay bills carry none until the tax profile exists) */}
+                    {/* Tax lines only when the bill has tax (a stay bill has it when the hotel charges room GST in Settings) */}
                     {(selected.receipt.sgst > 0 || selected.receipt.cgst > 0) && (
                       <div className="space-y-1 mb-4 pt-2 border-t border-dashed border-stone-300 w-3/4 ml-auto">
                         <div className="flex justify-between text-[11px] text-stone-600">
                           <span>Sub Total:</span>
                           <span>Rs {selected.receipt.subtotal.toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between text-[11px] text-stone-600">
-                          <span>SGST (2.5%):</span>
-                          <span>Rs {selected.receipt.sgst.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] text-stone-600 pb-2">
-                          <span>CGST (2.5%):</span>
-                          <span>Rs {selected.receipt.cgst.toFixed(2)}</span>
-                        </div>
+                        {(selected.receipt.taxSummary?.filter(g => g.tax > 0) ?? [{ rate: selected.receipt.gstRate ?? 5, tax: selected.receipt.cgst + selected.receipt.sgst }]).map(g => {
+                          const half = splitGst(Math.round(g.tax * 100), false);
+                          return (
+                            <div key={g.rate} className="pb-1">
+                              <div className="flex justify-between text-[11px] text-stone-600"><span>SGST ({g.rate / 2}%):</span><span>Rs {(half.sgstPaise / 100).toFixed(2)}</span></div>
+                              <div className="flex justify-between text-[11px] text-stone-600"><span>CGST ({g.rate / 2}%):</span><span>Rs {(half.cgstPaise / 100).toFixed(2)}</span></div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
 
@@ -503,6 +600,28 @@ export function BillingView({ kind }: { kind: BillKind }) {
                     Record payment
                   </Button>
                 )}
+
+                {kind === 'restaurant' && selected.status === 'open' && selected.payments.length === 0 && (
+                  <Button variant="ghost" className="w-full" onClick={openRoom}>
+                    <BedDouble className="w-4 h-4" aria-hidden="true" />
+                    Charge to room
+                  </Button>
+                )}
+
+                {selected.stay && (selected.invoiceNumber ? (
+                  <Link
+                    href={`/dashboard/billing/hotel/invoice/${selected.id}`}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-stone-200 px-4 py-2 text-base font-medium text-ink-soft hover:bg-stone-100 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber"
+                  >
+                    <FileText className="w-4 h-4" aria-hidden="true" />
+                    Open invoice {selected.invoiceNumber}
+                  </Link>
+                ) : (
+                  <Button variant="ghost" className="w-full" onClick={openInvoice}>
+                    <FileText className="w-4 h-4" aria-hidden="true" />
+                    Issue A4 invoice
+                  </Button>
+                ))}
 
                 <Button variant="ghost" className="w-full" onClick={() => window.print()}>
                   <Printer className="w-4 h-4" aria-hidden="true" />
@@ -584,6 +703,66 @@ export function BillingView({ kind }: { kind: BillKind }) {
             </div>
             </>
             )}
+          </>
+        )}
+      </Dialog>
+
+      {/* Charge to room */}
+      <Dialog open={showRoom && !!selected} onClose={() => setShowRoom(false)} labelledBy="room-title" dismissible={!posting} className="p-8 max-w-md w-full">
+        {selected && (
+          <>
+            <h2 id="room-title" className="text-2xl font-bold text-ink">Charge to room</h2>
+            <p className="text-ink-muted mt-2">
+              Moves this bill ({formatCurrency(selected.totalAmount)}) onto a guest&apos;s stay, so they pay for it at check-out and it appears on their invoice. It can&apos;t be undone.
+            </p>
+            <div className="mt-5">
+              {inHouse === null ? (
+                <p className="text-sm text-ink-muted">Loading guests…</p>
+              ) : inHouse.length === 0 ? (
+                <p className="rounded-lg bg-amber-pale px-4 py-3 text-sm text-amber-deep">No guest is checked in with an open bill. Charges can only go to a guest who is staying and hasn&apos;t been invoiced yet.</p>
+              ) : (
+                <Select
+                  label="Guest"
+                  value={roomBillId}
+                  onChange={(e) => setRoomBillId(e.target.value)}
+                  placeholder="Choose a room"
+                  options={inHouse.map(b => ({ value: b.id, label: `Room ${b.stay?.roomNumber ?? '?'} · ${b.guestName}` }))}
+                />
+              )}
+            </div>
+            {roomError && <p role="alert" className="mt-4 rounded-lg bg-terra-pale px-4 py-3 text-sm text-terra">{roomError}</p>}
+            <div className="mt-6 space-y-3">
+              <Button className="w-full" onClick={postToRoom} isLoading={posting} disabled={!roomBillId}>{posting ? 'Charging…' : 'Charge to room'}</Button>
+              <Button variant="ghost" className="w-full" onClick={() => setShowRoom(false)} disabled={posting}>Cancel</Button>
+            </div>
+          </>
+        )}
+      </Dialog>
+
+      {/* Issue invoice */}
+      <Dialog open={showInvoice && !!selected} onClose={() => setShowInvoice(false)} labelledBy="invoice-title" dismissible={!issuing} className="p-8 max-w-md w-full max-h-[90vh] overflow-y-auto">
+        {selected && (
+          <>
+            <h2 id="invoice-title" className="text-2xl font-bold text-ink">Issue invoice</h2>
+            <p className="text-ink-muted mt-2">
+              For {formatCurrency(selected.totalAmount)}. Once issued the invoice gets its number and can&apos;t be changed, so check who it is made out to. For a business guest, add their GSTIN.
+            </p>
+            <div className="mt-5 space-y-4">
+              <Input label="Billed to" value={buyer.name} onChange={(e) => setBuyer({ ...buyer, name: e.target.value })} />
+              <Input label="Guest or company GSTIN (optional)" placeholder="29ABCDE1234F1Z5" value={buyer.gstin} onChange={(e) => setBuyer({ ...buyer, gstin: e.target.value.toUpperCase() })} />
+              <Select
+                label="Guest's state (optional)"
+                value={buyer.stateCode}
+                onChange={(e) => setBuyer({ ...buyer, stateCode: e.target.value })}
+                options={[{ value: '', label: 'Same as the hotel, or from the GSTIN' }, ...GST_STATES.map(st => ({ value: st.code, label: `${st.name} (${st.code})` }))]}
+              />
+              <Input label="Address (optional)" value={buyer.address} onChange={(e) => setBuyer({ ...buyer, address: e.target.value })} />
+            </div>
+            {invoiceError && <p role="alert" className="mt-4 rounded-lg bg-terra-pale px-4 py-3 text-sm text-terra">{invoiceError}</p>}
+            <div className="mt-6 space-y-3">
+              <Button className="w-full" onClick={issueInvoice} isLoading={issuing}>{issuing ? 'Issuing…' : 'Issue invoice'}</Button>
+              <Button variant="ghost" className="w-full" onClick={() => setShowInvoice(false)} disabled={issuing}>Cancel</Button>
+            </div>
           </>
         )}
       </Dialog>

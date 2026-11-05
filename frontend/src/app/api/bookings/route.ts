@@ -8,6 +8,7 @@ import { HttpError, handleError, parseJson } from '@/lib/http';
 import { ownedRoom } from '@/lib/tenant-scope';
 import { placeholderEmail } from '@/lib/guest-email';
 import { nightsBetween, stayBillValues } from '@/lib/stay-bill';
+import { getTaxSettings } from '@/lib/tax-settings';
 
 const createSchema = z.object({
   roomId: z.string().uuid(),
@@ -55,6 +56,7 @@ export async function POST(request: NextRequest) {
     if (!guest) throw new HttpError(500, 'Could not save the guest');
 
     const bookingId = crypto.randomUUID();
+    const tax = await getTaxSettings(tenantId);
     const [[booking]] = await db.batch([
       db.insert(bookings).values({
         id: bookingId,
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest) {
       // A booking made by staff starts confirmed, so its bill opens with it.
       db.insert(bills).values(stayBillValues({
         tenantId, bookingId, guestId: guest.id, roomNumber: room.roomNumber, roomTypeName: roomType.name,
-        checkIn: body.checkInDate, checkOut: body.checkOutDate, total: totalAmount,
+        checkIn: body.checkInDate, checkOut: body.checkOutDate, total: totalAmount, tax,
       })),
     ]);
 
@@ -95,7 +97,13 @@ export async function GET() {
     // Each booking carries a short summary of its live stay bill (not the voided ones), for the details drawer.
     return NextResponse.json(all.map(({ bills: billRows, ...booking }) => {
       const bill = billRows.find((b) => b.kind === 'stay' && b.status !== 'void');
-      return { ...booking, bill: bill ? { id: bill.id, status: bill.status, totalAmount: Number(bill.totalAmount), paidAmount: Number(bill.paidAmount ?? 0) } : null };
+      // An issued invoice stays reachable after the booking is cancelled (its bill is void then), so it can be credited.
+      const invoiced = billRows.find((b) => b.kind === 'stay' && b.invoiceNumber);
+      return {
+        ...booking,
+        bill: bill ? { id: bill.id, status: bill.status, totalAmount: Number(bill.totalAmount), paidAmount: Number(bill.paidAmount ?? 0) } : null,
+        invoice: invoiced ? { billId: invoiced.id, number: invoiced.invoiceNumber } : null,
+      };
     }));
   } catch (error) {
     return handleError(error, 'Failed to fetch bookings');

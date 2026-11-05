@@ -11,7 +11,8 @@ import { FilterTabs } from '@/components/ui/filter-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { LoadingState } from '@/components/ui/loading-state';
 import Link from 'next/link';
-import { Plus, X } from 'lucide-react';
+import { BookingCalendar } from '@/components/bookings/booking-calendar';
+import { CalendarDays, List, Plus, X } from 'lucide-react';
 import { differenceInCalendarDays, format, isToday } from 'date-fns';
 import { formatCurrency } from '@/lib/currency';
 import { realEmail } from '@/lib/guest-email';
@@ -31,6 +32,8 @@ interface Booking {
   specialRequests?: string;
   /** The stay's live bill, if it has one (a pending request has none until it is confirmed). */
   bill?: { id: string; status: 'open' | 'partial' | 'paid'; totalAmount: number; paidAmount: number } | null;
+  /** The stay's issued invoice, if any. It outlives the bill, which is void once the booking is cancelled. */
+  invoice?: { billId: string; number: string } | null;
 }
 
 interface AvailableRoom {
@@ -60,6 +63,7 @@ export default function BookingsPage() {
   const [rooms, setRooms] = useState<AvailableRoom[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [view, setView] = useState<'list' | 'calendar'>('list');
   const [loading, setLoading] = useState(true);
   const [stale, setStale] = useState(false);
 
@@ -243,7 +247,22 @@ export default function BookingsPage() {
       )}
 
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-        <FilterTabs label="Show bookings that are" tabs={tabs} value={statusFilter} onChange={setStatusFilter} />
+        <div className="flex flex-wrap items-center gap-3">
+          <div role="group" aria-label="Bookings view" className="inline-flex gap-1 p-1 rounded-xl bg-stone-100">
+            {([['list', 'List', List], ['calendar', 'Calendar', CalendarDays]] as const).map(([v, label, Icon]) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={view === v}
+                onClick={() => setView(v)}
+                className={`h-10 px-3.5 rounded-lg inline-flex items-center gap-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${view === v ? 'bg-white text-ink font-semibold shadow-sm' : 'text-ink-soft font-medium hover:text-ink'}`}
+              >
+                <Icon className="w-4 h-4" aria-hidden="true" />{label}
+              </button>
+            ))}
+          </div>
+          {view === 'list' && <FilterTabs label="Show bookings that are" tabs={tabs} value={statusFilter} onChange={setStatusFilter} />}
+        </div>
         <Input
           aria-label="Search bookings"
           placeholder="Search by guest, email or room…"
@@ -255,6 +274,12 @@ export default function BookingsPage() {
 
       {loading ? (
         <LoadingState message="Loading bookings..." />
+      ) : view === 'calendar' ? (
+        <BookingCalendar
+          bookings={bookings.filter(b => !q || b.guest?.name?.toLowerCase().includes(q) || b.guest?.email?.toLowerCase().includes(q) || b.room?.roomNumber?.includes(search))}
+          rooms={rooms}
+          onSelect={setSelectedId}
+        />
       ) : filteredBookings.length === 0 ? (
         <EmptyState
           title={filtering ? 'No bookings match' : 'No bookings yet'}
@@ -320,7 +345,8 @@ export default function BookingsPage() {
             ['Check-in', format(new Date(selected.checkInDate), 'EEE d MMM yyyy, h:mm a')],
             ['Check-out', format(new Date(selected.checkOutDate), 'EEE d MMM yyyy, h:mm a')],
             ['Guests', String(selected.numGuests)],
-            ['Total', formatCurrency(Number(selected.totalAmount))],
+            // The bill's total is what the guest pays, GST included when the hotel charges it; the booking's own price is before tax.
+            ['Total', formatCurrency(selected.bill ? selected.bill.totalAmount : Number(selected.totalAmount))],
             ['Payment', selected.bill
               ? selected.bill.status === 'paid' ? `Paid in full (${formatCurrency(selected.bill.totalAmount)})` : `${formatCurrency(selected.bill.paidAmount)} paid, ${formatCurrency(selected.bill.totalAmount - selected.bill.paidAmount)} owed`
               : selected.status === 'pending' ? 'No bill until the request is confirmed' : selected.status === 'cancelled' ? 'Bill cancelled' : 'No bill yet'],
@@ -341,8 +367,13 @@ export default function BookingsPage() {
                   {rows.map(([k, v]) => (<div key={k} className="contents"><dt className="text-ink-muted">{k}</dt><dd className="font-medium text-ink break-words">{v}</dd></div>))}
                 </dl>
               </div>
-              {(next || selected.bill || selected.status === 'pending' || selected.status === 'confirmed') && (
+              {(next || selected.bill || selected.invoice || selected.status === 'pending' || selected.status === 'confirmed') && (
                 <footer className="grid gap-2.5 px-6 py-4 border-t border-stone-200">
+                  {selected.invoice && (
+                    <Link href={`/dashboard/billing/hotel/invoice/${selected.invoice.billId}`} className="inline-flex items-center justify-center h-[46px] rounded-lg border border-stone-200 text-ink-soft font-medium hover:bg-stone-100 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber">
+                      Open invoice {selected.invoice.number}
+                    </Link>
+                  )}
                   {selected.bill && selected.bill.status !== 'paid' && (
                     <Link href="/dashboard/billing/hotel" className="inline-flex items-center justify-center h-[46px] rounded-lg border border-stone-200 text-ink-soft font-medium hover:bg-stone-100 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber">
                       Record a payment in Billing

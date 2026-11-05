@@ -7,6 +7,7 @@ import { ROLES, requireTenant } from '@/lib/auth';
 import { HttpError, handleError, parseJson } from '@/lib/http';
 import { ownedBooking } from '@/lib/tenant-scope';
 import { stayBillValues } from '@/lib/stay-bill';
+import { getTaxSettings } from '@/lib/tax-settings';
 
 const schema = z.object({ action: z.enum(['confirm', 'check-in', 'check-out', 'cancel']) });
 
@@ -46,7 +47,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if (!full?.room) throw new HttpError(409, 'This booking\'s room no longer exists.');
       writes.push(db.insert(bills).values(stayBillValues({
         tenantId, bookingId: booking.id, guestId: booking.guestId, roomNumber: full.room.roomNumber,
-        roomTypeName: full.room.roomType.name, checkIn: booking.checkInDate, checkOut: booking.checkOutDate, total: booking.totalAmount,
+        roomTypeName: full.room.roomType.name, checkIn: booking.checkInDate, checkOut: booking.checkOutDate, total: booking.totalAmount, tax: await getTaxSettings(tenantId),
       })).onConflictDoNothing());
     }
 

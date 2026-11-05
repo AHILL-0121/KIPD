@@ -36,6 +36,20 @@
       "when": 1793793668087,
       "tag": "0004_payment_settings_and_razorpay",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793888797340,
+      "tag": "0005_tax_profile_and_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793889825581,
+      "tag": "0006_post_to_room_and_credit_notes",
+      "breakpoints": true
     }
   ]
 }
