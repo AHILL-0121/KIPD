@@ -147,10 +147,10 @@ export function BillingView({ kind }: { kind: BillKind }) {
   const selected = bills.find(b => b.id === selectedId) ?? null;
   const owed = selected ? Math.round((selected.totalAmount - selected.paidAmount) * 100) / 100 : 0;
 
-  // The ways offered in the dialog: the manual ones Settings allows, plus an online link for hotel stays when it is on.
+  // The ways offered in the dialog: the manual ones Settings allows, plus an online link (hotel or restaurant) when it is on.
   const methodOptions = [
     ...METHODS.filter(m => paySettings.manualMethods.includes(m.value)),
-    ...(kind === 'stay' && paySettings.onlinePayments && paySettings.razorpayConfigured ? [ONLINE] : []),
+    ...(paySettings.onlinePayments && paySettings.razorpayConfigured ? [ONLINE] : []),
   ];
 
   // A first payment on a hotel stay starts at the suggested deposit, when the property has one. Anything else starts at what is owed.
