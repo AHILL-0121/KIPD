@@ -119,7 +119,8 @@ describe('room drawer', () => {
     fireEvent.change(screen.getByLabelText('Room number'), { target: { value: '103' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Room number already exists');
-    expect(screen.getByRole('dialog')).toBeTruthy();
+    // By name: the room drawer can still be sliding out behind it, so a bare "dialog" query may match two.
+    expect(screen.getByRole('dialog', { name: 'Edit room 102' })).toBeTruthy();
   });
 
   it('asks before deleting, and shows why a delete was refused', async () => {
