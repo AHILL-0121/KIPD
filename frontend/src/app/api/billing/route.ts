@@ -129,7 +129,7 @@ export async function PATCH(request: NextRequest) {
       const [guest] = bill.guestId ? await db.select().from(guests).where(and(eq(guests.id, bill.guestId), eq(guests.tenantId, tenantId))).limit(1) : [];
       const link = await createPaymentLink({
         amountPaise: wantPaise,
-        description: note || 'Payment for your stay',
+        description: note || (bill.kind === 'restaurant' ? 'Payment for your restaurant bill' : 'Payment for your stay'),
         billId: bill.id,
         tenantId,
         customer: { name: guest?.name, email: guest?.email, phone: guest?.phone },

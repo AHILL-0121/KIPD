@@ -68,6 +68,13 @@ describe('Record payment follows Settings', () => {
     render(<BillingView kind="stay" />);
     await waitFor(async () => expect(optionsOf(await openDialog(/Guest a/))).toContain('Online payment link (Razorpay)'));
   });
+
+  it('restaurant bills get the online option too, but no suggested deposit', async () => {
+    serve([stay('r', 0, { kind: 'restaurant', stay: null })], { manualMethods: ALL, onlinePayments: true, depositPercent: 30, razorpayConfigured: true });
+    render(<BillingView kind="restaurant" />);
+    await waitFor(async () => expect(optionsOf(await openDialog(/Guest r/))).toContain('Online payment link (Razorpay)'));
+    expect(screen.queryByText(/Suggested deposit/)).toBeNull();
+  });
 });
 
 describe('the suggested deposit', () => {
