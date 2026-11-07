@@ -60,8 +60,10 @@ const METHODS = [
   { value: 'card', label: 'Card (machine)' },
   { value: 'bank_transfer', label: 'Bank transfer' },
 ];
+const ONLINE_QR = { value: 'razorpay_qr', label: 'Online payment QR (Razorpay)' };
 const ONLINE = { value: 'razorpay', label: 'Online payment link (Razorpay)' };
-const METHOD_LABEL: Record<string, string> = { ...Object.fromEntries(METHODS.map(m => [m.value, m.label])), razorpay: 'Online payment', stripe: 'Card (online)' };
+const isOnline = (method: string) => method === 'razorpay' || method === 'razorpay_qr';
+const METHOD_LABEL: Record<string, string> = { ...Object.fromEntries(METHODS.map(m => [m.value, m.label])), razorpay: 'Online payment', razorpay_qr: 'Online payment', stripe: 'Card (online)' };
 
 /** What Settings > Payments allows. Until it loads, every manual way is offered and online payment is not. */
 interface PaySettings { manualMethods: string[]; onlinePayments: boolean; depositPercent: number; razorpayConfigured: boolean }
@@ -101,6 +103,9 @@ export function BillingView({ kind }: { kind: BillKind }) {
   const [paySettings, setPaySettings] = useState<PaySettings>(DEFAULT_PAY);
   const [link, setLink] = useState<{ url: string; amount: number } | null>(null);
   const [copied, setCopied] = useState(false);
+  // A QR on screen, waiting for the guest to scan it. paidBefore is what the bill had received when it was made.
+  const [qr, setQr] = useState<{ id: string; imageUrl: string; amount: number; expiresAt: number; paidBefore: number } | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   // Charge a restaurant bill to a guest's room
   const [showRoom, setShowRoom] = useState(false);
@@ -150,7 +155,7 @@ export function BillingView({ kind }: { kind: BillKind }) {
   // The ways offered in the dialog: the manual ones Settings allows, plus an online link (hotel or restaurant) when it is on.
   const methodOptions = [
     ...METHODS.filter(m => paySettings.manualMethods.includes(m.value)),
-    ...(paySettings.onlinePayments && paySettings.razorpayConfigured ? [ONLINE] : []),
+    ...(paySettings.onlinePayments && paySettings.razorpayConfigured ? [ONLINE_QR, ONLINE] : []),
   ];
 
   // A first payment on a hotel stay starts at the suggested deposit, when the property has one. Anything else starts at what is owed.
@@ -240,7 +245,24 @@ export function BillingView({ kind }: { kind: BillKind }) {
     }
   };
 
-  const closePay = () => { setShowPay(false); setPayError(''); setLink(null); };
+  // While a QR is showing: tick the countdown, and re-read the bill every few seconds to see the payment arrive.
+  useEffect(() => {
+    if (!qr) return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    const poll = setInterval(fetchBills, 3000);
+    return () => { clearInterval(tick); clearInterval(poll); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qr?.id]);
+
+  const qrPaid = !!qr && !!selected && selected.paidAmount >= qr.paidBefore + qr.amount - 0.005;
+  const qrExpired = !!qr && !qrPaid && now >= qr.expiresAt;
+  const secondsLeft = qr ? Math.max(0, Math.ceil((qr.expiresAt - now) / 1000)) : 0;
+
+  const closePay = () => {
+    // Leaving an unpaid QR open would let a guest pay after staff took cash instead, so stop it (best effort).
+    if (qr && !qrPaid) fetch(`/api/billing?qr=${encodeURIComponent(qr.id)}`, { method: 'DELETE' }).catch(() => { });
+    setShowPay(false); setPayError(''); setLink(null); setQr(null);
+  };
 
   const copyLink = async () => {
     if (!link) return;
@@ -262,7 +284,7 @@ export function BillingView({ kind }: { kind: BillKind }) {
           billId: selected.id,
           paymentMethod: form.method,
           amount,
-          reference: form.method === 'cash' || form.method === 'razorpay' ? undefined : form.reference.trim() || undefined,
+          reference: form.method === 'cash' || isOnline(form.method) ? undefined : form.reference.trim() || undefined,
           note: form.note.trim() || undefined,
         }),
       });
@@ -270,6 +292,13 @@ export function BillingView({ kind }: { kind: BillKind }) {
         const data = await res.json().catch(() => ({}));
         setPayError(res.status < 500 && typeof data.error === 'string' ? data.error : 'Could not record the payment. Nothing was changed, please try again.');
         return;
+      }
+      if (form.method === 'razorpay_qr') {
+        const data = await res.json().catch(() => ({}));
+        if (!data?.paymentQr?.imageUrl) { setPayError('Razorpay did not return a QR code. Nothing was changed, please try again.'); return; }
+        setNow(Date.now());
+        setQr({ id: data.paymentQr.id, imageUrl: data.paymentQr.imageUrl, amount: data.paymentQr.amount, expiresAt: new Date(data.paymentQr.expiresAt).getTime(), paidBefore: selected.paidAmount });
+        return; // nothing is recorded until the guest pays; the bill updates by itself then
       }
       if (form.method === 'razorpay') {
         const data = await res.json().catch(() => ({}));
@@ -645,7 +674,26 @@ export function BillingView({ kind }: { kind: BillKind }) {
               {selected.guestName}: total {formatCurrency(selected.totalAmount)}, paid {formatCurrency(selected.paidAmount)}, <span className="font-semibold text-ink">still owed {formatCurrency(owed)}</span>.
             </p>
 
-            {link ? (
+            {qr ? (
+              <div className="mt-5 space-y-4 text-center">
+                {qrPaid ? (
+                  <p role="status" className="rounded-lg bg-sage-pale px-4 py-6 text-sage font-semibold flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-5 h-5" aria-hidden="true" />
+                    {formatCurrency(qr.amount)} received.{owed > 0 ? ` ${formatCurrency(owed)} is still owed.` : ' The bill is paid in full.'}
+                  </p>
+                ) : qrExpired ? (
+                  <p role="alert" className="rounded-lg bg-terra-pale px-4 py-6 text-sm text-terra">This QR code has expired. Close this and make a new one.</p>
+                ) : (
+                  <>
+                    <p role="status" className="text-sm text-ink-muted">Ask the guest to scan this with any UPI app and pay <span className="font-semibold text-ink">{formatCurrency(qr.amount)}</span>. It is added to this bill by itself once they pay.</p>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={qr.imageUrl} alt={`UPI QR code to pay ${formatCurrency(qr.amount)}`} className="mx-auto w-56 h-56 rounded-lg border border-stone-200 bg-white object-contain" />
+                    <p className="text-sm text-ink-muted">Waiting for payment… expires in {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}</p>
+                  </>
+                )}
+                <Button className="w-full" variant={qrPaid ? 'primary' : 'ghost'} onClick={() => { closePay(); fetchBills(); }}>{qrPaid ? 'Done' : 'Cancel and close'}</Button>
+              </div>
+            ) : link ? (
               <div className="mt-5 space-y-4">
                 <p role="status" className="rounded-lg bg-sage-pale px-4 py-3 text-sm text-sage font-medium">
                   Payment link for {formatCurrency(link.amount)} is ready. Send it to the guest. The payment is added to this bill by itself once they pay.
@@ -668,7 +716,7 @@ export function BillingView({ kind }: { kind: BillKind }) {
             <div className="mt-5 space-y-4">
               <div>
                 <Input
-                  label={form.method === 'razorpay' ? 'Amount to collect (₹)' : 'Amount received (₹)'}
+                  label={isOnline(form.method) ? 'Amount to collect (₹)' : 'Amount received (₹)'}
                   type="number"
                   inputMode="decimal"
                   min={0}
@@ -686,7 +734,7 @@ export function BillingView({ kind }: { kind: BillKind }) {
                 )}
               </div>
               <Select label="Paid by" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} options={methodOptions} />
-              {form.method !== 'cash' && form.method !== 'razorpay' && (
+              {form.method !== 'cash' && !isOnline(form.method) && (
                 <Input label={`${REFERENCE_LABEL[form.method]} (optional)`} value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
               )}
               <Input label="Note (optional)" placeholder="For example: advance for the stay" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
@@ -695,7 +743,7 @@ export function BillingView({ kind }: { kind: BillKind }) {
             {payError && <p role="alert" className="mt-4 rounded-lg bg-terra-pale px-4 py-3 text-sm text-terra">{payError}</p>}
             <div className="mt-6 space-y-3">
               <Button className="w-full" onClick={handleRecordPayment} isLoading={paying}>
-                {paying ? 'Saving…' : form.method === 'razorpay' ? 'Create payment link' : 'Save payment'}
+                {paying ? 'Saving…' : form.method === 'razorpay_qr' ? 'Show QR code' : form.method === 'razorpay' ? 'Create payment link' : 'Save payment'}
               </Button>
               <Button variant="ghost" className="w-full" onClick={closePay} disabled={paying}>
                 Cancel

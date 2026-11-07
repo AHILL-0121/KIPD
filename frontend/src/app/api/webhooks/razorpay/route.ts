@@ -7,7 +7,7 @@ import { verifyWebhookSignature } from '@/lib/razorpay';
 export const dynamic = 'force-dynamic';
 
 /**
- * Razorpay calls this (no login) when a payment link is paid. It is trusted only because the body's HMAC
+ * Razorpay calls this (no login) when a payment link is paid or a QR code is paid. It is trusted only because the body's HMAC
  * matches RAZORPAY_WEBHOOK_SECRET. Nothing else in the request is believed until that check passes.
  *
  * Idempotent: Razorpay retries, so the same payment can arrive more than once. payments.razorpay_payment_id is
@@ -17,6 +17,7 @@ const eventSchema = z.object({
   event: z.string(),
   payload: z.object({
     payment_link: z.object({ entity: z.object({ notes: z.record(z.unknown()).nullish() }).passthrough() }).optional(),
+    qr_code: z.object({ entity: z.object({ notes: z.record(z.unknown()).nullish() }).passthrough() }).optional(),
     payment: z.object({ entity: z.object({ id: z.string(), amount: z.number().int().positive(), status: z.string().optional() }).passthrough() }).optional(),
   }).passthrough(),
 }).passthrough();
@@ -37,11 +38,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true, ignored: 'unreadable event' });
   }
 
-  // Only a paid link means money arrived. Everything else (created, expired, cancelled) is acknowledged and ignored.
-  if (event.event !== 'payment_link.paid') return NextResponse.json({ received: true, ignored: event.event });
+  // Only a paid link or a paid QR means money arrived. Everything else (created, expired, closed) is acknowledged and ignored.
+  const viaQr = event.event === 'qr_code.credited';
+  if (event.event !== 'payment_link.paid' && !viaQr) return NextResponse.json({ received: true, ignored: event.event });
 
   const payment = event.payload.payment?.entity;
-  const notes = event.payload.payment_link?.entity.notes ?? {};
+  const notes = (viaQr ? event.payload.qr_code?.entity.notes : event.payload.payment_link?.entity.notes) ?? {};
   const billId = String(notes.billId ?? '');
   const tenantId = String(notes.tenantId ?? '');
   if (!payment || !uuidRe.test(billId) || !uuidRe.test(tenantId)) {
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
         returning id, tenant_id
       ), saved as (
         insert into payments (tenant_id, bill_id, amount, method, reference, received_by, razorpay_payment_id, note)
-        select tenant_id, id, ${pay}::numeric, 'razorpay', ${payment.id}, 'Razorpay', ${payment.id}, 'Paid by online payment link' from moved
+        select tenant_id, id, ${pay}::numeric, 'razorpay', ${payment.id}, 'Razorpay', ${payment.id}, ${viaQr ? 'Paid by scanning the QR code' : 'Paid by online payment link'}::text from moved
         returning id
       )
       select id from saved

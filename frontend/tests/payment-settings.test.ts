@@ -175,6 +175,76 @@ describe('creating an online payment link', () => {
   });
 });
 
+describe('creating an online payment QR', () => {
+  const QR_BODY = { id: 'qr_abc123', image_url: 'https://rzp.io/qr/abc123.png', status: 'active' };
+  const razorpay = (response: { status?: number; body?: unknown } = {}) => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(response.body ?? QR_BODY), { status: response.status ?? 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  };
+  const turnOn = async () => { loginAs('ownerA'); await putSettings({ manualMethods: ['cash'], onlinePayments: true, depositPercent: 0 }); loginAs('frontA'); };
+
+  it('asks Razorpay for a one-time, fixed-amount UPI QR for the exact paise, and records nothing yet', async () => {
+    const api = razorpay();
+    await turnOn();
+    const r = await pay(A.bill, { paymentMethod: 'razorpay_qr', amount: 500 });
+    expect(r.status).toBe(200);
+    expect(r.json.paymentQr).toMatchObject({ id: 'qr_abc123', imageUrl: 'https://rzp.io/qr/abc123.png', amount: 500 });
+    expect(new Date(r.json.paymentQr.expiresAt).getTime()).toBeGreaterThan(Date.now() + 10 * 60 * 1000);
+
+    const [url, init] = api.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://api.razorpay.com/v1/payments/qr_codes');
+    const sent = JSON.parse(String(init.body));
+    expect(sent).toMatchObject({ type: 'upi_qr', usage: 'single_use', fixed_amount: true, payment_amount: 50000, notes: { billId: A.bill, tenantId: A.tenant } });
+    expect(sent.close_by).toBeGreaterThan(Math.floor(Date.now() / 1000) + 600);
+
+    expect(await bill(A.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });
+    expect(await q(`select 1 from payments where bill_id = '${A.bill}'`)).toHaveLength(0);
+  });
+
+  it('follows the same rules as a link: off in Settings, no keys, too much, or Razorpay failing', async () => {
+    const api = razorpay();
+    loginAs('frontA');
+    expect((await pay(A.bill, { paymentMethod: 'razorpay_qr', amount: 100 })).status).toBe(409);
+    await turnOn();
+    expect((await pay(A.bill, { paymentMethod: 'razorpay_qr', amount: 1180.01 })).status).toBe(409);
+    expect(api).not.toHaveBeenCalled();
+    razorpay({ status: 400, body: { error: { description: 'Bad things' } } });
+    const refused = await pay(A.bill, { paymentMethod: 'razorpay_qr', amount: 100 });
+    expect(refused.status).toBe(502);
+    expect(refused.json.error).not.toMatch(/Bad things/);
+    delete process.env.RAZORPAY_KEY_SECRET;
+    expect((await pay(A.bill, { paymentMethod: 'razorpay_qr', amount: 100 })).status).toBe(503);
+    expect(await bill(A.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });
+  });
+
+  it("another property's bill cannot get a QR", async () => {
+    razorpay();
+    await turnOn();
+    expect((await pay(B.bill, { paymentMethod: 'razorpay_qr', amount: 100 })).status).toBe(404);
+  });
+
+  it('closing a QR only works for a QR made for this property', async () => {
+    const closeQr = (qr: string) => call(billing.DELETE, 'DELETE', `/api/billing?qr=${qr}`);
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(String(url).endsWith('/close') ? {} : { id: 'qr_abc123', notes: { tenantId: A.tenant } })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    loginAs('frontA');
+    expect((await closeQr('qr_abc123')).json).toMatchObject({ closed: true });
+    expect(fetchMock.mock.calls.map(([u]) => u)).toEqual([
+      'https://api.razorpay.com/v1/payments/qr_codes/qr_abc123',
+      'https://api.razorpay.com/v1/payments/qr_codes/qr_abc123/close',
+    ]);
+
+    fetchMock.mockClear();
+    loginAs('ownerB');
+    expect((await closeQr('qr_abc123')).json).toMatchObject({ closed: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1); // looked it up, saw it was not theirs, never closed it
+    expect((await closeQr('../../evil')).json).toMatchObject({ closed: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('the Razorpay webhook', () => {
   const event = (billId: string, tenantId: string, paymentId = 'pay_1', amountPaise = 50000, name = 'payment_link.paid') => ({
     event: name,
@@ -239,6 +309,27 @@ describe('the Razorpay webhook', () => {
     delete process.env.RAZORPAY_WEBHOOK_SECRET;
     expect((await deliver(event(A.bill, A.tenant), { secret: '' })).status).toBe(400);
     expect(verifyWebhookSignature('x', 'y', undefined)).toBe(false);
+  });
+
+  it('a signed "QR credited" event pays the bill the same way, once, and says it was a QR', async () => {
+    const qrEvent = (paymentId: string, amountPaise: number) => ({
+      event: 'qr_code.credited',
+      payload: {
+        qr_code: { entity: { id: 'qr_abc123', notes: { billId: A.bill, tenantId: A.tenant } } },
+        payment: { entity: { id: paymentId, amount: amountPaise, status: 'captured' } },
+      },
+    });
+    expect((await deliver(qrEvent('pay_qr1', 50000))).status).toBe(200);
+    expect((await deliver(qrEvent('pay_qr1', 50000))).status).toBe(200); // retry
+    expect(await bill(A.bill)).toMatchObject({ status: 'partial', paid_amount: '500.00' });
+    const rows = await q<{ method: string; note: string }>(`select method, note from payments where bill_id = '${A.bill}'`);
+    expect(rows).toEqual([{ method: 'razorpay', note: 'Paid by scanning the QR code' }]);
+  });
+
+  it('a QR event with no usable bill reference changes nothing', async () => {
+    const res = await deliver({ event: 'qr_code.credited', payload: { qr_code: { entity: { id: 'qr_x', notes: {} } }, payment: { entity: { id: 'pay_z', amount: 50000 } } } });
+    expect(res.status).toBe(200);
+    expect(await bill(A.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });
   });
 
   it('ignores events that are not a paid link, without error', async () => {

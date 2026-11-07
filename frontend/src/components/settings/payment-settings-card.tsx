@@ -108,7 +108,7 @@ export function PaymentSettingsCard() {
             <input type="checkbox" className="mt-0.5 h-4 w-4 accent-teal-700" checked={online} onChange={(e) => { setMessage(null); setOnline(e.target.checked); }} />
             <span>
               <span className="font-semibold">Online payment links (Razorpay)</span>
-              <span className="block text-ink-muted mt-0.5">Staff can send a guest a link to pay a hotel or restaurant bill, or part of it. The payment is added to the bill by itself once it is paid.</span>
+              <span className="block text-ink-muted mt-0.5">Staff can show a QR code for the guest to scan, or send a link, to pay a hotel or restaurant bill, or part of it. The payment is added to the bill by itself once it is paid.</span>
             </span>
           </label>
           {online && loaded && !configured && (

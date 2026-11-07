@@ -8,7 +8,7 @@ import { HttpError, badRequest, handleError, parseJson } from '@/lib/http';
 import { ownedBill, ownedBooking } from '@/lib/tenant-scope';
 import { nightsBetween } from '@/lib/stay-bill';
 import { MANUAL_METHODS, getPaymentSettings } from '@/lib/payment-settings';
-import { createPaymentLink, razorpayConfigured } from '@/lib/razorpay';
+import { closePaymentQr, createPaymentLink, createPaymentQr, razorpayConfigured } from '@/lib/razorpay';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -24,11 +24,11 @@ const createSchema = z.object({
 /** Money in rupees with at most two decimals, as whole paise (so 0.1 + 0.2 style rounding can never leak in). */
 const paise = z.coerce.number().positive().max(10_000_000).refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6, 'Use at most two decimal places');
 
-// 'razorpay' creates an online payment link; the money is recorded only when Razorpay's webhook confirms it was paid.
+// 'razorpay' creates an online payment link and 'razorpay_qr' a UPI QR to scan; the money is recorded only when Razorpay's webhook confirms it was paid.
 // Every other method is money a person received and is recording here: cash, UPI, a card machine, or a bank transfer.
 const paySchema = z.object({
   billId: z.string().uuid(),
-  paymentMethod: z.enum([...MANUAL_METHODS, 'razorpay']).optional().default('cash'),
+  paymentMethod: z.enum([...MANUAL_METHODS, 'razorpay', 'razorpay_qr']).optional().default('cash'),
   /** Defaults to everything still owed. Less than that is a part payment (a deposit, for example). */
   amount: paise.optional(),
   reference: z.string().trim().max(60).optional(),
@@ -121,12 +121,21 @@ export async function PATCH(request: NextRequest) {
 
     // Online payment: make a Razorpay link for the amount (part payments included) and hand it back to share.
     // Nothing is recorded yet. The payment is added when Razorpay's webhook says it was paid.
-    if (paymentMethod === 'razorpay') {
+    if (paymentMethod === 'razorpay' || paymentMethod === 'razorpay_qr') {
       if (!settings.onlinePayments) throw new HttpError(409, 'Online payments are switched off in Settings.');
       if (!razorpayConfigured()) throw new HttpError(503, 'Online payments are not set up yet.');
       const wantPaise = amount === undefined ? owedPaise : Math.round(amount * 100);
       if (wantPaise > owedPaise) throw new HttpError(409, `Only ${rupees(owedPaise / 100)} is still owed on this bill.`);
       const [guest] = bill.guestId ? await db.select().from(guests).where(and(eq(guests.id, bill.guestId), eq(guests.tenantId, tenantId))).limit(1) : [];
+      if (paymentMethod === 'razorpay_qr') {
+        const qr = await createPaymentQr({
+          amountPaise: wantPaise,
+          description: note || (bill.kind === 'restaurant' ? 'Payment for your restaurant bill' : 'Payment for your stay'),
+          billId: bill.id,
+          tenantId,
+        });
+        return NextResponse.json({ success: true, paymentQr: qr });
+      }
       const link = await createPaymentLink({
         amountPaise: wantPaise,
         description: note || (bill.kind === 'restaurant' ? 'Payment for your restaurant bill' : 'Payment for your stay'),
@@ -180,5 +189,17 @@ export async function PATCH(request: NextRequest) {
     });
   } catch (error) {
     return handleError(error, 'Failed to process payment');
+  }
+}
+
+// Staff closed the payment dialog without waiting for the QR to be paid: stop it taking money.
+export async function DELETE(request: NextRequest) {
+  try {
+    const { tenantId } = await requireTenant(ROLES.frontDesk);
+    const qrId = request.nextUrl.searchParams.get('qr') ?? '';
+    const closed = await closePaymentQr(qrId, tenantId);
+    return NextResponse.json({ success: true, closed });
+  } catch (error) {
+    return handleError(error, 'Failed to close the QR code');
   }
 }
