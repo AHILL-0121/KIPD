@@ -77,6 +77,48 @@ describe('Record payment follows Settings', () => {
   });
 });
 
+describe('showing a QR code for the guest to scan', () => {
+  const online: Settings = { manualMethods: ALL, onlinePayments: true, depositPercent: 0, razorpayConfigured: true };
+  const qrResponse = () => new Response(JSON.stringify({ success: true, paymentQr: { id: 'qr_1', imageUrl: 'https://rzp.io/qr/1.png', amount: 4000, expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString() } }));
+  const showQr = async (api: ReturnType<typeof serve>) => {
+    render(<BillingView kind="stay" />);
+    const dialog = await waitFor(async () => {
+      const d = await openDialog(/Guest a/);
+      expect(optionsOf(d)).toContain('Online payment QR (Razorpay)');
+      return d;
+    });
+    fireEvent.change(within(dialog).getByLabelText('Paid by'), { target: { value: 'razorpay_qr' } });
+    fireEvent.change(within(dialog).getByLabelText(/Amount to collect/), { target: { value: '4000' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Show QR code' }));
+    return { dialog, api };
+  };
+
+  it('offers the QR among the online ways, asks for it, and shows the picture with a countdown', async () => {
+    const { dialog, api } = await showQr(serve([stay('a')], online, qrResponse));
+    const img = await within(dialog).findByRole('img', { name: /UPI QR code to pay ₹4,000/ });
+    expect(img.getAttribute('src')).toBe('https://rzp.io/qr/1.png');
+    expect(within(dialog).getByText(/expires in 1[45]:\d\d/)).toBeTruthy();
+    expect(sent(api)).toEqual([expect.objectContaining({ paymentMethod: 'razorpay_qr', amount: 4000 })]);
+  });
+
+  it('closing before it is paid asks the server to stop the QR', async () => {
+    const { dialog, api } = await showQr(serve([stay('a')], online, qrResponse));
+    await within(dialog).findByRole('img');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel and close' }));
+    await waitFor(() => expect(api.mock.calls.some(([url, init]) => url === '/api/billing?qr=qr_1' && init?.method === 'DELETE')).toBe(true));
+  });
+
+  it('flips to "received" by itself once the bill shows the payment, with no click', async () => {
+    const bills = [stay('a')];
+    const { dialog } = await showQr(serve(bills, online, qrResponse));
+    await within(dialog).findByRole('img');
+    bills[0] = stay('a', 4000) as typeof bills[0]; // the webhook landed; the next poll sees it
+    expect((await within(dialog).findByText(/₹4,000 received/, {}, { timeout: 6000 })).textContent).toMatch(/₹6,000 is still owed/);
+    expect(within(dialog).queryByRole('img')).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Done' })).toBeTruthy();
+  }, 10000);
+});
+
 describe('the suggested deposit', () => {
   it('fills in the amount on a first payment, says why, and the full amount is one click away', async () => {
     serve([stay('a')], { manualMethods: ALL, onlinePayments: false, depositPercent: 30, razorpayConfigured: false });
