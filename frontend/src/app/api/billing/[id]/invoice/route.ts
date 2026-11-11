@@ -72,7 +72,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       snapshot = buildInvoiceSnapshot({
         tenantName: tenant?.name ?? '', settings, property: property ?? null,
         guest: bill.guest, room: bill.booking.room, booking: bill.booking,
-        nights: nightsBetween(bill.booking.checkInDate, bill.booking.checkOutDate),
+        nights: nightsBetween(bill.booking.checkInDate, bill.booking.checkOutDate, tenant?.timezone ?? 'Asia/Kolkata'),
         breakdown: bill.itemsBreakdown as never, billTotal: Number(bill.totalAmount), buyer,
       });
     } catch (e) {

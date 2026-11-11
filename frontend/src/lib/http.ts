@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ZodError, type ZodType } from 'zod';
+import { ZodError, type ZodType, type ZodTypeDef } from 'zod';
 
 /** An error that maps directly to an HTTP status. Safe to show the message to the client. */
 export class HttpError extends Error {
@@ -21,7 +21,8 @@ export function assertUuid(id: unknown, what = 'Resource'): string {
   return id;
 }
 
-export async function parseJson<T>(request: Request, schema: ZodType<T>): Promise<T> {
+// The input type is left open so a schema can accept one shape (a date string) and produce another (a Date).
+export async function parseJson<T>(request: Request, schema: ZodType<T, ZodTypeDef, any>): Promise<T> {
   let body: unknown;
   try {
     body = await request.json();
