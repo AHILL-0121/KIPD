@@ -1,8 +1,16 @@
 import { bills } from '@/db/schema';
+import { todayInZone } from '@/lib/tz';
 import { DEFAULT_TAX_SETTINGS, ROOM_SAC, roomTax, splitGst, taxGroups, type TaxGroup, type TaxSettings } from '@/lib/gst';
 
-/** Nights between two instants: at least one, and a part-day counts as a night (the same rule the booking price uses). */
-export const nightsBetween = (checkIn: Date, checkOut: Date) => Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / 86_400_000));
+/**
+ * Nights between arrival and departure: the number of calendar dates from one to the other in the hotel's own time zone,
+ * never less than one. The time of day does not matter (a 15:00 check-out is not an extra night) and neither do 23 or 25
+ * hour days when the clocks change. This is the rule the booking price and the bill both use.
+ */
+export const nightsBetween = (checkIn: Date, checkOut: Date, timeZone: string = DEFAULT_TIME_ZONE) => {
+  const day = (d: Date) => Date.parse(`${todayInZone(timeZone, d)}T00:00:00Z`);
+  return Math.max(1, Math.round((day(checkOut) - day(checkIn)) / 86_400_000));
+};
 
 interface StayBillInput {
   tenantId: string;
@@ -12,12 +20,15 @@ interface StayBillInput {
   roomTypeName: string;
   checkIn: Date;
   checkOut: Date;
+  /** The hotel's time zone, which decides where one night ends and the next begins. */
+  timeZone?: string;
   /** The booking's price: nights x the room type's rate. */
   total: string;
   /** The hotel's tax profile. Left out (or "No GST"), the bill is just the booking price, as before. */
   tax?: TaxSettings;
 }
 
+const DEFAULT_TIME_ZONE = 'Asia/Kolkata';
 const rupees = (paise: number) => paise / 100;
 
 /**
@@ -28,7 +39,7 @@ const rupees = (paise: number) => paise / 100;
  * Insert it with onConflictDoNothing(): a booking can only have one live stay bill, so confirming twice is harmless.
  */
 export function stayBillValues(i: StayBillInput): typeof bills.$inferInsert {
-  const nights = nightsBetween(i.checkIn, i.checkOut);
+  const nights = nightsBetween(i.checkIn, i.checkOut, i.timeZone);
   const settings = i.tax ?? DEFAULT_TAX_SETTINGS;
   const description = `Room ${i.roomNumber} (${i.roomTypeName}), ${nights} ${nights === 1 ? 'night' : 'nights'}`;
 

@@ -21,7 +21,7 @@ const TRANSITIONS = {
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { tenantId } = await requireTenant(ROLES.frontDesk);
+    const { tenantId, timezone } = await requireTenant(ROLES.frontDesk);
     const { action } = await parseJson(request, schema);
 
     // 404 if the booking isn't in this tenant's properties.
@@ -47,7 +47,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if (!full?.room) throw new HttpError(409, 'This booking\'s room no longer exists.');
       writes.push(db.insert(bills).values(stayBillValues({
         tenantId, bookingId: booking.id, guestId: booking.guestId, roomNumber: full.room.roomNumber,
-        roomTypeName: full.room.roomType.name, checkIn: booking.checkInDate, checkOut: booking.checkOutDate, total: booking.totalAmount, tax: await getTaxSettings(tenantId),
+        roomTypeName: full.room.roomType.name, checkIn: booking.checkInDate, checkOut: booking.checkOutDate, timeZone: timezone, total: booking.totalAmount, tax: await getTaxSettings(tenantId),
       })).onConflictDoNothing());
     }
 

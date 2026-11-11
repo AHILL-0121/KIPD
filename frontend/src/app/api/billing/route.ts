@@ -39,7 +39,7 @@ const rupees = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionD
 
 export async function GET(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.frontDesk);
+    const { tenantId, timezone } = await requireTenant(ROLES.frontDesk);
     const kind = request.nextUrl.searchParams.get('kind');
     if (kind && kind !== 'stay' && kind !== 'restaurant') throw badRequest('kind must be stay or restaurant');
 
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
         roomNumber: bill.booking.room?.roomNumber ?? null,
         checkIn: bill.booking.checkInDate,
         checkOut: bill.booking.checkOutDate,
-        nights: nightsBetween(bill.booking.checkInDate, bill.booking.checkOutDate),
+        nights: nightsBetween(bill.booking.checkInDate, bill.booking.checkOutDate, timezone),
         bookingStatus: bill.booking.status,
       } : null,
       payments: bill.payments
