@@ -38,7 +38,7 @@ const optionsOf = (dialog: HTMLElement) => within(within(dialog).getByLabelText(
 beforeEach(() => {
   vi.stubGlobal('EventSource', class { onmessage = null; onerror = null; onopen = null; close() {} });
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); sessionStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Record payment follows Settings', () => {
   it('offers only the ways Settings allows', async () => {
@@ -99,6 +99,16 @@ describe('showing a QR code for the guest to scan', () => {
     expect(img.getAttribute('src')).toBe('https://rzp.io/qr/1.png');
     expect(within(dialog).getByText(/expires in 1[45]:\d\d/)).toBeTruthy();
     expect(sent(api)).toEqual([expect.objectContaining({ paymentMethod: 'razorpay_qr', amount: 4000 })]);
+  });
+
+  it('stops offering the QR once Razorpay says the account has no UPI, and falls back to the payment link', async () => {
+    const refused = () => new Response(JSON.stringify({ error: 'UPI QR codes are not available on this Razorpay account. Use a payment link instead.' }), { status: 409 });
+    const { dialog } = await showQr(serve([stay('a')], online, refused));
+    await within(dialog).findByText(/UPI QR codes are not available/);
+    expect(optionsOf(dialog)).not.toContain('Online payment QR (Razorpay)');
+    expect(optionsOf(dialog)).toContain('Online payment link (Razorpay)');
+    expect((within(dialog).getByLabelText('Paid by') as HTMLSelectElement).value).toBe('razorpay');
+    expect(within(dialog).getByRole('button', { name: 'Create payment link' })).toBeTruthy();
   });
 
   it('closing before it is paid asks the server to stop the QR', async () => {

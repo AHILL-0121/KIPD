@@ -218,6 +218,16 @@ describe('creating an online payment QR', () => {
     expect(await bill(A.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });
   });
 
+  it('says plainly when the Razorpay account has no UPI (as in test mode), and records nothing', async () => {
+    loginAs('frontA');
+    await turnOn();
+    razorpay({ status: 400, body: { error: { description: 'UPI transactions are not enabled for the merchant' } } });
+    const r = await pay(A.bill, { paymentMethod: 'razorpay_qr', amount: 100 });
+    expect(r.status).toBe(409);
+    expect(r.json.error).toMatch(/^UPI QR codes are not available/);
+    expect(await bill(A.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });
+  });
+
   it("another property's bill cannot get a QR", async () => {
     razorpay();
     await turnOn();
