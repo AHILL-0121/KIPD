@@ -91,7 +91,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true, needsReview: true });
   } catch (error) {
     // A concurrent delivery of the same payment loses the unique index race and rolls back whole: treat as a repeat.
-    if (String((error as { message?: string })?.message ?? error).includes('payments_razorpay_payment_uq')) {
+    // Drizzle wraps the driver's error: the constraint name is on `cause`, the outer message is just "Failed query".
+    const text = [error, (error as { cause?: unknown })?.cause].map((e) => String((e as { message?: string })?.message ?? e)).join(' ');
+    if (text.includes('payments_razorpay_payment_uq')) {
       return NextResponse.json({ received: true, duplicate: true });
     }
     console.error('Razorpay webhook failed', error);

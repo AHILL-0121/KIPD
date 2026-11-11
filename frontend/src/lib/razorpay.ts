@@ -81,6 +81,9 @@ export interface PaymentQr {
   expiresAt: string;
 }
 
+/** Returned when Razorpay says UPI is not switched on for the account. The billing screen matches on this text. */
+export const QR_UNAVAILABLE_MESSAGE = 'UPI QR codes are not available on this Razorpay account. Use a payment link instead.';
+
 /** How long a QR stays payable. Razorpay needs at least two minutes. */
 export const QR_LIFETIME_SECONDS = 15 * 60;
 
@@ -121,6 +124,8 @@ export async function createPaymentQr({ amountPaise, description, billId, tenant
   const data = (await res.json().catch(() => ({}))) as { id?: string; image_url?: string; error?: { description?: string } };
   if (!res.ok || !data.id || !data.image_url) {
     console.error('Razorpay refused the QR code', res.status, data.error?.description);
+    // The account has no UPI (test mode never has it). Say so plainly: the billing screen then stops offering QR codes.
+    if (res.status === 400 && /not enabled/i.test(data.error?.description ?? '')) throw new HttpError(409, QR_UNAVAILABLE_MESSAGE);
     throw new HttpError(502, 'Razorpay could not create the QR code. Nothing was changed.');
   }
   return { id: data.id, imageUrl: data.image_url, amount: amountPaise / 100, expiresAt: new Date(closeBy * 1000).toISOString() };

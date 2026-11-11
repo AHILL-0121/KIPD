@@ -62,6 +62,9 @@ const METHODS = [
 ];
 const ONLINE_QR = { value: 'razorpay_qr', label: 'Online payment QR (Razorpay)' };
 const ONLINE = { value: 'razorpay', label: 'Online payment link (Razorpay)' };
+// The server's answer when Razorpay has no UPI for this account. Matched by text, so keep it in step with QR_UNAVAILABLE_MESSAGE in lib/razorpay.ts.
+const QR_UNAVAILABLE = 'UPI QR codes are not available';
+const QR_FLAG = 'kipd.qrUnavailable';
 const isOnline = (method: string) => method === 'razorpay' || method === 'razorpay_qr';
 const METHOD_LABEL: Record<string, string> = { ...Object.fromEntries(METHODS.map(m => [m.value, m.label])), razorpay: 'Online payment', razorpay_qr: 'Online payment', stripe: 'Card (online)' };
 
@@ -103,6 +106,9 @@ export function BillingView({ kind }: { kind: BillKind }) {
   const [paySettings, setPaySettings] = useState<PaySettings>(DEFAULT_PAY);
   const [link, setLink] = useState<{ url: string; amount: number } | null>(null);
   const [copied, setCopied] = useState(false);
+  // Set once Razorpay refuses a QR for lack of UPI, so staff are not offered something that cannot work. Lasts for this tab.
+  const [qrUnavailable, setQrUnavailable] = useState(false);
+  useEffect(() => { try { if (sessionStorage.getItem(QR_FLAG)) setQrUnavailable(true); } catch { /* storage blocked: the flag just resets */ } }, []);
   // A QR on screen, waiting for the guest to scan it. paidBefore is what the bill had received when it was made.
   const [qr, setQr] = useState<{ id: string; imageUrl: string; amount: number; expiresAt: number; paidBefore: number } | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -155,7 +161,7 @@ export function BillingView({ kind }: { kind: BillKind }) {
   // The ways offered in the dialog: the manual ones Settings allows, plus an online link (hotel or restaurant) when it is on.
   const methodOptions = [
     ...METHODS.filter(m => paySettings.manualMethods.includes(m.value)),
-    ...(paySettings.onlinePayments && paySettings.razorpayConfigured ? [ONLINE_QR, ONLINE] : []),
+    ...(paySettings.onlinePayments && paySettings.razorpayConfigured ? [...(qrUnavailable ? [] : [ONLINE_QR]), ONLINE] : []),
   ];
 
   // A first payment on a hotel stay starts at the suggested deposit, when the property has one. Anything else starts at what is owed.
@@ -290,6 +296,11 @@ export function BillingView({ kind }: { kind: BillKind }) {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        if (form.method === 'razorpay_qr' && typeof data.error === 'string' && data.error.startsWith(QR_UNAVAILABLE)) {
+          setQrUnavailable(true);
+          try { sessionStorage.setItem(QR_FLAG, '1'); } catch { /* ignore */ }
+          setForm({ ...form, method: 'razorpay' }); // the payment link is the way that works
+        }
         setPayError(res.status < 500 && typeof data.error === 'string' ? data.error : 'Could not record the payment. Nothing was changed, please try again.');
         return;
       }
