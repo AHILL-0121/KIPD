@@ -284,10 +284,10 @@ Migrations so far:
 | 0002 | No-overlap constraint on bookings |
 | 0003 | Hotel bills and payment details |
 | 0004 | Payment settings and Razorpay |
-| 0008 | Razorpay accounts: one per business, secrets encrypted |
 | 0005 | Tax profile and numbered invoices |
 | 0006 | Post to room and credit notes |
 | 0007 | Property and receipt settings |
+| 0008 | Razorpay accounts: one per business, secrets encrypted |
 
 Practice for changes: make them additive where possible, run them first on a Neon branch, run `db:drift` afterwards,
 and apply them to production at or before the deploy that needs them.
