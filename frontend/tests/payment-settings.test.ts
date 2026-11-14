@@ -3,27 +3,35 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as billing from '@/app/api/billing/route';
 import * as settings from '@/app/api/settings/payments/route';
-import * as webhook from '@/app/api/webhooks/razorpay/route';
+import * as webhook from '@/app/api/webhooks/razorpay/[tenantId]/route';
 import { suggestedDeposit } from '@/lib/deposit';
 import { parsePaymentSettings } from '@/lib/payment-settings';
 import { verifyWebhookSignature } from '@/lib/razorpay';
+import { saveRazorpayKeys } from '@/lib/razorpay-account';
+import { seal } from '@/lib/secret-box';
+import { razorpayAccounts } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { testDb } from './helpers/db';
 import { call, ids, loginAs, q, resetAndSeed } from './helpers/harness';
 
 const A = ids.A, B = ids.B;
 const SECRET = 'whsec_test_secret';
 
+/** Gives a business its own Razorpay account, as if its owner had connected it in Settings. */
+async function connect(tenantId: string, keyId = 'rzp_test_keyA', webhookSecret: string | null = SECRET) {
+  await saveRazorpayKeys(tenantId, { keyId, keySecret: 'key_secret_value' }, 'test');
+  if (webhookSecret) await testDb.update(razorpayAccounts).set({ webhookSecretEnc: seal(webhookSecret, tenantId) }).where(eq(razorpayAccounts.tenantId, tenantId));
+}
+const disconnect = (tenantId: string) => testDb.delete(razorpayAccounts).where(eq(razorpayAccounts.tenantId, tenantId));
+
 beforeEach(async () => {
   await resetAndSeed();
-  process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
-  process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret';
-  process.env.RAZORPAY_WEBHOOK_SECRET = SECRET;
+  process.env.PAYMENT_KEYS_SECRET = 'unit-test-secret-that-is-at-least-32-chars-long';
+  await connect(A.tenant); // tenant A has Razorpay; tenant B does not, unless a test connects it
 });
 afterEach(() => {
   vi.unstubAllGlobals();
-  delete process.env.RAZORPAY_KEY_ID;
-  delete process.env.RAZORPAY_KEY_SECRET;
-  delete process.env.RAZORPAY_WEBHOOK_SECRET;
+  delete process.env.PAYMENT_KEYS_SECRET;
 });
 
 const getSettings = () => call(settings.GET, 'GET', '/api/settings/payments');
@@ -36,15 +44,27 @@ describe('the settings themselves', () => {
     loginAs('ownerA');
     const r = await getSettings();
     expect(r.status).toBe(200);
-    expect(r.json).toEqual({ manualMethods: ['cash', 'upi', 'card', 'bank_transfer'], onlinePayments: false, depositPercent: 0, razorpayConfigured: true });
+    expect(r.json).toMatchObject({ manualMethods: ['cash', 'upi', 'card', 'bank_transfer'], onlinePayments: false, depositPercent: 0, razorpayConfigured: true });
   });
 
-  it('tells the page whether the server has Razorpay keys, and never what they are', async () => {
-    delete process.env.RAZORPAY_KEY_SECRET;
+  it('tells the page whether this business has connected Razorpay, and never its secrets', async () => {
     loginAs('ownerA');
-    const r = await getSettings();
-    expect(r.json.razorpayConfigured).toBe(false);
-    expect(JSON.stringify(r.json)).not.toMatch(/rzp_test|secret/i);
+    const connected = await getSettings();
+    expect(connected.json.razorpayConfigured).toBe(true);
+    expect(JSON.stringify(connected.json)).not.toMatch(/key_secret_value|whsec_test_secret|v1\./);
+    // front desk learns only yes or no, not which account
+    loginAs('frontA');
+    const front = await getSettings();
+    expect(front.json.razorpayConfigured).toBe(true);
+    expect(front.json.razorpay).toBeUndefined();
+    // the other business has not connected anything
+    loginAs('ownerB');
+    expect((await getSettings()).json).toMatchObject({ razorpayConfigured: false, razorpay: { connected: false, keyId: null } });
+    // keys without a webhook secret are not enough: a paid link could never mark the bill paid
+    await disconnect(A.tenant);
+    await connect(A.tenant, 'rzp_test_keyA', null);
+    loginAs('ownerA');
+    expect((await getSettings()).json).toMatchObject({ razorpayConfigured: false, razorpay: { connected: true, webhookReady: false } });
   });
 
   it('an owner saves and the choices stick; the other property is untouched', async () => {
@@ -125,7 +145,7 @@ describe('creating an online payment link', () => {
 
     const [url, init] = api.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://api.razorpay.com/v1/payment_links');
-    expect((init.headers as Record<string, string>).Authorization).toBe(`Basic ${Buffer.from('rzp_test_key:rzp_test_secret').toString('base64')}`);
+    expect((init.headers as Record<string, string>).Authorization).toBe(`Basic ${Buffer.from('rzp_test_keyA:key_secret_value').toString('base64')}`); // this business's own keys
     const sent = JSON.parse(String(init.body));
     expect(sent).toMatchObject({ amount: 50000, currency: 'INR', accept_partial: false, notes: { billId: A.bill, tenantId: A.tenant } });
 
@@ -153,7 +173,7 @@ describe('creating an online payment link', () => {
     expect(tooMuch.status).toBe(409);
     expect(tooMuch.json.error).toMatch(/Only ₹1,180 is still owed/);
 
-    delete process.env.RAZORPAY_KEY_SECRET;
+    await disconnect(A.tenant);
     expect((await pay(A.bill, { paymentMethod: 'razorpay', amount: 100 })).status).toBe(503);
     expect(api).not.toHaveBeenCalled();
   });
@@ -214,7 +234,7 @@ describe('creating an online payment QR', () => {
     const refused = await pay(A.bill, { paymentMethod: 'razorpay_qr', amount: 100 });
     expect(refused.status).toBe(502);
     expect(refused.json.error).not.toMatch(/Bad things/);
-    delete process.env.RAZORPAY_KEY_SECRET;
+    await disconnect(A.tenant);
     expect((await pay(A.bill, { paymentMethod: 'razorpay_qr', amount: 100 })).status).toBe(503);
     expect(await bill(A.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });
   });
@@ -249,6 +269,9 @@ describe('creating an online payment QR', () => {
 
     fetchMock.mockClear();
     loginAs('ownerB');
+    expect((await closeQr('qr_abc123')).json).toMatchObject({ closed: false }); // B has no Razorpay account at all
+    expect(fetchMock).not.toHaveBeenCalled();
+    await connect(B.tenant, 'rzp_test_keyB');
     expect((await closeQr('qr_abc123')).json).toMatchObject({ closed: false });
     expect(fetchMock).toHaveBeenCalledTimes(1); // looked it up, saw it was not theirs, never closed it
     expect((await closeQr('../../evil')).json).toMatchObject({ closed: false });
@@ -264,12 +287,13 @@ describe('the Razorpay webhook', () => {
       payment: { entity: { id: paymentId, amount: amountPaise, status: 'captured' } },
     },
   });
-  const deliver = (body: unknown, opts: { signature?: string | null; secret?: string } = {}) => {
+  const deliver = (body: unknown, opts: { signature?: string | null; secret?: string; to?: string } = {}) => {
     const raw = typeof body === 'string' ? body : JSON.stringify(body);
     const signature = opts.signature === undefined ? createHmac('sha256', opts.secret ?? SECRET).update(raw).digest('hex') : opts.signature;
-    return webhook.POST(new NextRequest('http://localhost/api/webhooks/razorpay', {
+    const tenantId = opts.to ?? A.tenant; // each business has its own webhook address
+    return webhook.POST(new NextRequest(`http://localhost/api/webhooks/razorpay/${tenantId}`, {
       method: 'POST', body: raw, headers: signature ? { 'x-razorpay-signature': signature } : {},
-    }));
+    }), { params: { tenantId } });
   };
   const paymentsOf = (billId: string) => q<{ amount: string; method: string; reference: string; razorpay_payment_id: string }>(`select * from payments where bill_id = '${billId}'`);
 
@@ -338,10 +362,34 @@ describe('the Razorpay webhook', () => {
     expect(await bill(A.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });
   });
 
-  it('refuses everything when the server has no webhook secret', async () => {
-    delete process.env.RAZORPAY_WEBHOOK_SECRET;
+  it('refuses everything for a business with no webhook secret, no account, or an address that is not a business', async () => {
+    await disconnect(A.tenant);
+    await connect(A.tenant, 'rzp_test_keyA', null);
     expect((await deliver(event(A.bill, A.tenant), { secret: '' })).status).toBe(400);
+    expect((await deliver(event(A.bill, A.tenant))).status).toBe(400);
+    await disconnect(A.tenant);
+    expect((await deliver(event(A.bill, A.tenant))).status).toBe(400);
+    expect((await deliver(event(A.bill, A.tenant), { to: 'not-a-tenant' })).status).toBe(400);
     expect(verifyWebhookSignature('x', 'y', undefined)).toBe(false);
+    expect(verifyWebhookSignature('x', 'y', null)).toBe(false);
+    expect(await bill(A.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });
+  });
+
+  it('each business has its own secret: one business cannot sign for another', async () => {
+    await connect(B.tenant, 'rzp_test_keyB', 'whsec_business_b');
+    // A's secret at B's address is refused, even for B's own bill
+    expect((await deliver(event(B.bill, B.tenant, 'pay_b1', 10000), { to: B.tenant })).status).toBe(400);
+    // B's secret at A's address is refused
+    expect((await deliver(event(A.bill, A.tenant), { secret: 'whsec_business_b' })).status).toBe(400);
+    // B, signing correctly at its own address, cannot pay A's bill: the business is the address, not the notes
+    const cross = await deliver(event(A.bill, A.tenant, 'pay_b2'), { to: B.tenant, secret: 'whsec_business_b' });
+    expect(cross.status).toBe(200);
+    expect(await cross.json()).toMatchObject({ ignored: 'no bill reference' });
+    expect(await bill(A.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });
+    // and B's own payment at B's own address works
+    const own = await deliver(event(B.bill, B.tenant, 'pay_b3', 10000), { to: B.tenant, secret: 'whsec_business_b' });
+    expect(own.status).toBe(200);
+    expect(await bill(B.bill)).toMatchObject({ status: 'partial', paid_amount: '100.00' });
   });
 
   it('a signed "QR credited" event pays the bill the same way, once, and says it was a QR', async () => {
@@ -371,7 +419,7 @@ describe('the Razorpay webhook', () => {
     expect(await bill(A.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });
   });
 
-  it("cannot pay another property's bill: the tenant in the notes has to own the bill", async () => {
+  it("cannot pay another property's bill: the business the webhook belongs to has to own the bill", async () => {
     const res = await deliver(event(B.bill, A.tenant, 'pay_x'));
     expect(res.status).toBe(200);
     expect(await bill(B.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });

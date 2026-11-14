@@ -161,14 +161,17 @@ menu category selected. No business configuration is stored there.
 Staff can record payments manually (cash, UPI, card, bank transfer). Which methods are offered is controlled by the
 Payments setting. Two automated paths exist:
 
-1. **Razorpay payment links** for hotel stays. A link is created from the bill and paid online. Razorpay calls
-   `POST /api/webhooks/razorpay` with the `payment_link.paid` event. That route is public in the Clerk middleware and
-   instead verifies Razorpay's signature using `RAZORPAY_WEBHOOK_SECRET`. A unique index on
+1. **Razorpay payment links and UPI QR codes**, for hotel and restaurant bills. Each business connects its **own**
+   Razorpay account in Settings > Payments (owner only), so the money settles to its own bank account and never passes
+   through the platform. The Key Secret and the webhook secret are stored encrypted with `PAYMENT_KEYS_SECRET` and are
+   never sent to a browser. Razorpay calls `POST /api/webhooks/razorpay/<tenant id>` (the exact address is shown in
+   Settings) with the `payment_link.paid` and `qr_code.credited` events. That route is public in the Clerk middleware
+   and instead verifies Razorpay's signature using that business's own webhook secret. A unique index on
    `payments.razorpay_payment_id` means a webhook delivered twice cannot count a payment twice.
 2. **UPI notification matching** from the Android app (see below), which posts to `/api/payments/notification-match`
    and returns a suggested bill for staff to confirm.
 
-Razorpay is optional. Without keys the app works and online links are simply unavailable.
+Razorpay is optional. A business that has not connected an account works as before; online links are simply unavailable to it.
 
 ## Real-time updates
 
@@ -232,14 +235,13 @@ Copy `frontend/.env.example` to `frontend/.env.local`.
 | `NEXT_PUBLIC_CLERK_SIGN_IN_URL`, `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | Yes | Auth routes (`/sign-in`, `/sign-up`) |
 | `NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL`, `NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL` | Yes | Where to land after auth (`/dashboard`) |
 | `NEXT_PUBLIC_APP_URL` | Yes | Public base URL used in generated links |
-| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | No | Online payment links. Use test keys until live. |
-| `RAZORPAY_WEBHOOK_SECRET` | No | A long random string you choose. Enter the same value in the Razorpay dashboard. |
+| `PAYMENT_KEYS_SECRET` | For online payments | Encrypts each business's Razorpay keys. Any random string of 32+ characters. Never change it: stored keys become unreadable and every business must re-enter them. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | No | Outgoing email |
 | `CONTACT_ADMIN_EMAIL` | No | Recipient of the public "request access" form |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Recommended in production | Shared rate limiting. Without it, limits are per server instance. |
 | `BLOB_READ_WRITE_TOKEN` | No | Vercel Blob storage |
 
-Razorpay webhook URL: `<NEXT_PUBLIC_APP_URL>/api/webhooks/razorpay`, event `payment_link.paid`.
+Razorpay keys are not environment variables: each business enters its own in Settings > Payments, where its webhook address and secret are shown. `NEXT_PUBLIC_APP_URL` must be the public address of the deployment, because the webhook address is built from it.
 
 ## Local development
 
@@ -282,6 +284,7 @@ Migrations so far:
 | 0002 | No-overlap constraint on bookings |
 | 0003 | Hotel bills and payment details |
 | 0004 | Payment settings and Razorpay |
+| 0008 | Razorpay accounts: one per business, secrets encrypted |
 | 0005 | Tax profile and numbered invoices |
 | 0006 | Post to room and credit notes |
 | 0007 | Property and receipt settings |

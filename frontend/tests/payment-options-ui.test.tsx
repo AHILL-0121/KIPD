@@ -280,10 +280,10 @@ describe('Settings → Payments', () => {
     expect(puts(api)).toHaveLength(0);
   });
 
-  it('warns, without blocking, when online payments are on but the server has no Razorpay keys', async () => {
+  it('warns, without blocking, when online payments are on but the business has not connected Razorpay', async () => {
     server({ manualMethods: ['cash'], onlinePayments: true, depositPercent: 0, razorpayConfigured: false });
     render(<PaymentSettingsCard />);
-    expect((await screen.findByText(/Razorpay is not connected on the server yet/)).getAttribute('role')).toBe('status');
+    expect((await screen.findByText(/Your Razorpay account is not connected yet/)).getAttribute('role')).toBe('status');
   });
 
   it('says so, and keeps what was typed, when saving fails', async () => {

@@ -4,12 +4,28 @@ import { HttpError } from '@/lib/http';
 /**
  * Razorpay, the minimum this app needs: create a Payment Link for a bill, and check that a webhook really came
  * from Razorpay. Plain fetch, no SDK, so there is nothing extra to keep up to date and it is easy to test.
- * Keys are platform-wide environment variables; each property only switches online payments on or off.
+ * Every call takes the keys of the business the payment is for (see lib/razorpay-account.ts). There are no
+ * platform-wide keys: the money goes to the business's own Razorpay account, never through Kipd.
  */
 const API = 'https://api.razorpay.com/v1';
 
-export function razorpayConfigured(): boolean {
-  return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+export interface RazorpayKeys { keyId: string; keySecret: string }
+
+export const KEY_ID_PATTERN = /^rzp_(test|live)_[A-Za-z0-9]+$/;
+
+/**
+ * Asks Razorpay whether these keys are real, before they are saved. 'ok', 'rejected' (Razorpay said no),
+ * or 'unreachable' (could not ask; nothing is known).
+ */
+export async function checkKeys(keys: RazorpayKeys): Promise<'ok' | 'rejected' | 'unreachable'> {
+  try {
+    const res = await fetch(`${API}/payments?count=1`, { headers: { Authorization: authHeader(keys.keyId, keys.keySecret) } });
+    if (res.ok) return 'ok';
+    return res.status === 401 || res.status === 400 ? 'rejected' : 'unreachable';
+  } catch (error) {
+    console.error('Razorpay unreachable', error);
+    return 'unreachable';
+  }
 }
 
 export interface PaymentLink {
@@ -28,10 +44,8 @@ interface LinkRequest {
   customer?: { name?: string | null; email?: string | null; phone?: string | null };
 }
 
-export async function createPaymentLink({ amountPaise, description, billId, tenantId, customer }: LinkRequest): Promise<PaymentLink> {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret) throw new HttpError(503, 'Online payments are not set up yet');
+export async function createPaymentLink(keys: RazorpayKeys, { amountPaise, description, billId, tenantId, customer }: LinkRequest): Promise<PaymentLink> {
+  const { keyId, keySecret } = keys;
   if (!Number.isInteger(amountPaise) || amountPaise < 100) throw new HttpError(400, 'An online payment must be at least ₹1');
 
   let res: Response;
@@ -87,16 +101,16 @@ export const QR_UNAVAILABLE_MESSAGE = 'UPI QR codes are not available on this Ra
 /** How long a QR stays payable. Razorpay needs at least two minutes. */
 export const QR_LIFETIME_SECONDS = 15 * 60;
 
-const authHeader = (keyId: string, keySecret: string) => `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
+function authHeader(keyId: string, keySecret: string) {
+  return `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
+}
 
 /**
  * A one-time UPI QR for an exact amount. It can be paid once, only for that amount, and closes itself
  * when it expires. The bill and property go in the notes so the webhook knows what the money is for.
  */
-export async function createPaymentQr({ amountPaise, description, billId, tenantId }: Omit<LinkRequest, 'customer'>): Promise<PaymentQr> {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret) throw new HttpError(503, 'Online payments are not set up yet');
+export async function createPaymentQr(keys: RazorpayKeys, { amountPaise, description, billId, tenantId }: Omit<LinkRequest, 'customer'>): Promise<PaymentQr> {
+  const { keyId, keySecret } = keys;
   if (!Number.isInteger(amountPaise) || amountPaise < 100) throw new HttpError(400, 'An online payment must be at least ₹1');
 
   const closeBy = Math.floor(Date.now() / 1000) + QR_LIFETIME_SECONDS;
@@ -135,10 +149,9 @@ export async function createPaymentQr({ amountPaise, description, billId, tenant
  * Stops a QR from taking payment, for when staff close the dialog without waiting. Only a QR made for this
  * property can be closed here. Returns false when it could not be closed; it will still expire by itself.
  */
-export async function closePaymentQr(qrId: string, tenantId: string): Promise<boolean> {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret || !/^qr_[A-Za-z0-9]+$/.test(qrId)) return false;
+export async function closePaymentQr(keys: RazorpayKeys | null, qrId: string, tenantId: string): Promise<boolean> {
+  if (!keys || !/^qr_[A-Za-z0-9]+$/.test(qrId)) return false;
+  const { keyId, keySecret } = keys;
   try {
     const headers = { Authorization: authHeader(keyId, keySecret) };
     const found = await fetch(`${API}/payments/qr_codes/${qrId}`, { headers });
@@ -153,7 +166,7 @@ export async function closePaymentQr(qrId: string, tenantId: string): Promise<bo
 }
 
 /** True only when `signature` is the HMAC-SHA256 of the exact raw body, keyed with the webhook secret. */
-export function verifyWebhookSignature(rawBody: string, signature: string | null, secret: string | undefined): boolean {
+export function verifyWebhookSignature(rawBody: string, signature: string | null, secret: string | null | undefined): boolean {
   if (!signature || !secret) return false;
   const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
   const a = Buffer.from(expected);

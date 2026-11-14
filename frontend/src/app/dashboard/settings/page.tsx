@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/toaster';
 import { PaymentSettingsCard } from '@/components/settings/payment-settings-card';
+import { RazorpayConnectionCard } from '@/components/settings/razorpay-connection-card';
 import { TaxSettingsCard } from '@/components/settings/tax-settings-card';
 import {
   Settings as SettingsIcon,
@@ -173,6 +174,7 @@ export default function SettingsPage() {
 
         {/* Payments */}
         <PaymentSettingsCard />
+        <RazorpayConnectionCard />
 
         {/* Tax & invoices */}
         <TaxSettingsCard />
