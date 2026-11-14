@@ -154,11 +154,22 @@ export async function requireTenant(allowed?: Role[]): Promise<TenantContext> {
   return context;
 }
 
+// Same 60 s lifetime as the tenant context above. Only a confirmed admin is remembered, so a
+// refusal is always re-checked; removing someone's admin flag takes effect within a minute.
+if (!globalAny.platformAdminCache) {
+  globalAny.platformAdminCache = new Map<string, { data: TenantContext, expiresAt: number }>();
+}
+
 export async function requirePlatformAdmin(): Promise<TenantContext> {
   const { userId } = await auth();
 
   if (!userId) {
     throw unauthorized();
+  }
+
+  const cached = globalAny.platformAdminCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data;
   }
 
   // Fetch user data directly from Clerk to get publicMetadata
@@ -178,7 +189,7 @@ export async function requirePlatformAdmin(): Promise<TenantContext> {
 
     const userName = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Admin';
 
-    return {
+    const data: TenantContext = {
       tenantId: '',
       userId,
       role: 'platform_admin',
@@ -187,6 +198,8 @@ export async function requirePlatformAdmin(): Promise<TenantContext> {
       tenantStatus: 'active',
       timezone: DEFAULT_TZ,
     };
+    globalAny.platformAdminCache.set(userId, { data, expiresAt: Date.now() + 60000 });
+    return data;
   } catch (error) {
     if (error instanceof HttpError) throw error;
     console.error('Error fetching user from Clerk:', error);

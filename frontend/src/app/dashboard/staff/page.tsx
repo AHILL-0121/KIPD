@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { confirmDialog } from '@/components/ui/confirm';
+import { toast } from '@/components/ui/toaster';
 import { Plus, Mail, MoreVertical, UserCog } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -63,14 +65,14 @@ export default function StaffPage() {
       const staffList = await response.json();
       setStaff(staffList);
     } catch (e: any) {
-      alert(e.message || 'Error executing account creation');
+      toast('error', e.message || 'Could not create the account');
     } finally {
       setLoading(false);
     }
   };
 
   const deleteStaff = async (id: string, name: string) => {
-    if (!confirm(`Are you absolutely sure you want to completely remove ${name} from your staff?`)) return;
+    if (!(await confirmDialog({ title: `Remove ${name}?`, message: 'They lose access to this business straight away.', confirmLabel: 'Remove', danger: true }))) return;
 
     try {
       await fetch(`/api/staff/${id}`, { method: 'DELETE' });
@@ -78,7 +80,7 @@ export default function StaffPage() {
       setActiveMenu(null);
     } catch (e) {
       console.error(e);
-      alert('Failed to delete staff member.');
+      toast('error', 'Could not remove the staff member', 'Please try again.');
     }
   };
 

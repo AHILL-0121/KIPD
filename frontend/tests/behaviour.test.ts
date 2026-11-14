@@ -137,7 +137,9 @@ describe('bookings', () => {
 
     await act('check-in');  expect(await state()).toEqual({ b: 'checked_in', r: 'occupied' });
     await act('check-out'); expect(await state()).toEqual({ b: 'checked_out', r: 'cleaning' });
-    await act('cancel');    expect(await state()).toEqual({ b: 'cancelled', r: 'available' });
+    // A finished stay cannot be cancelled afterwards: that would void a real bill. The room waits to be cleaned.
+    expect((await act('cancel')).status).toBe(409);
+    expect(await state()).toEqual({ b: 'checked_out', r: 'cleaning' });
     expect((await act('explode')).status).toBe(400);
   });
 });

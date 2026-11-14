@@ -26,7 +26,7 @@ export const staffIds = {
 };
 
 /* ───────── who is logged in ───────── */
-type G = { __user?: string | null; __clerk?: Record<string, unknown>; authCache?: Map<string, unknown> };
+type G = { __user?: string | null; __clerk?: Record<string, unknown>; authCache?: Map<string, unknown>; platformAdminCache?: Map<string, unknown> };
 const g = globalThis as unknown as G;
 
 /**
@@ -43,6 +43,7 @@ export type Persona = keyof typeof personas;
 export function loginAs(who: Persona | null) {
   g.__user = who ? personas[who] : null;
   g.authCache?.clear(); // the app caches roles for 60 s; tests must not see stale roles
+  g.platformAdminCache?.clear();
 }
 
 /* ───────── database ───────── */

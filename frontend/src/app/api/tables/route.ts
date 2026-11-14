@@ -5,12 +5,12 @@ import { db } from '@/db';
 import { orders, tables } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { assertUuid, badRequest, handleError, notFound, parseJson } from '@/lib/http';
-import { firstOutlet, ownedTable } from '@/lib/tenant-scope';
+import { firstOutlet, ownedOutlet, ownedTable } from '@/lib/tenant-scope';
 
 const tableNumber = z.coerce.string().trim().min(1).max(20);
 const capacity = z.coerce.number().int().min(1).max(100);
 
-const createSchema = z.object({ tableNumber, capacity: capacity.optional().default(4) });
+const createSchema = z.object({ tableNumber, capacity: capacity.optional().default(4), outletId: z.string().uuid().optional() });
 const patchSchema = z.object({ tableId: z.string().uuid(), tableNumber: tableNumber.optional(), capacity: capacity.optional() });
 
 export async function GET() {
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const { tenantId } = await requireTenant(ROLES.manage);
     const body = await parseJson(request, createSchema);
 
-    const outlet = await firstOutlet(tenantId);
+    const outlet = body.outletId ? await ownedOutlet(tenantId, body.outletId) : await firstOutlet(tenantId);
     if (!outlet) throw badRequest('No outlet found. Set up a restaurant first.');
 
     // The table's QR link carries its own id, so choose the id first and store the link in one insert.

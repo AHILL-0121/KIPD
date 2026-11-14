@@ -3,7 +3,7 @@ import * as tablesRoute from '@/app/api/tables/route';
 import * as rooms from '@/app/api/rooms/route';
 import * as bookings from '@/app/api/bookings/route';
 import * as settle from '@/app/api/orders/settle-tab/route';
-import * as orderStatus from '@/app/api/orders/[id]/status/route';
+import * as orderById from '@/app/api/orders/[id]/route';
 import * as notification from '@/app/api/payments/notification-match/route';
 import fs from 'fs';
 import path from 'path';
@@ -96,7 +96,7 @@ describe('what happens on delete', () => {
 describe('API behaviour with the new rules', () => {
   it('the old "delivered" status from a client is stored as "served"', async () => {
     loginAs('kitchenA');
-    expect((await call(orderStatus.PATCH, 'PATCH', `/api/orders/${A.order}/status`, { params: { id: A.order }, body: { status: 'delivered' } })).status).toBe(200);
+    expect((await call(orderById.PATCH, 'PATCH', `/api/orders/${A.order}`, { params: { id: A.order }, body: { status: 'delivered' } })).status).toBe(200);
     expect(await q(`select status from orders where id = '${A.order}'`)).toEqual([{ status: 'served' }]);
   });
 });

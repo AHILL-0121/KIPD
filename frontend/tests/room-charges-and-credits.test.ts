@@ -99,6 +99,8 @@ async function checkedInStay(from = '2032-05-01', to = '2032-05-03', gst = true)
   const r = await call(bookings.POST, 'POST', '/api/bookings', { body: { roomId: A.room, guestName: 'Stay Guest', guestEmail: `${from}@guest.test`, checkInDate: from, checkOutDate: to } });
   expect(r.status).toBe(200);
   const bookingId = r.json.booking.id as string;
+  // One guest per room: an earlier test guest has left before this one arrives.
+  await q(`update bookings set status = 'checked_out' where room_id = '${A.room}' and status = 'checked_in'`);
   expect((await act(bookingId, 'check-in')).status).toBe(200);
   const [bill] = await q<{ id: string }>(`select id from bills where booking_id = '${bookingId}'`);
   return { bookingId, stayBillId: bill.id };

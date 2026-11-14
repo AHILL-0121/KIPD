@@ -10,6 +10,8 @@ import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 interface KDSOrder {
   id: string;
   type: 'dine_in' | 'room_service';
+  /** 'guest' when the guest ordered from the QR menu themselves; 'staff' when a waiter entered it */
+  source?: 'staff' | 'guest';
   tableNumber?: string;
   roomNumber?: string;
   items: Array<{
@@ -66,7 +68,7 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
   useLive(load, params.outletId);
 
   const send = async (orderId: string, status: KDSOrder['status']) => {
-    const res = await fetch(`/api/orders/${orderId}/status`, {
+    const res = await fetch(`/api/orders/${orderId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
@@ -143,6 +145,7 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
                     <MapPin className="w-5 h-5 text-ink-muted" aria-hidden="true" />
                     <h2 className="font-bold text-2xl text-ink">{where}</h2>
                   </div>
+                  {order.source === 'guest' && <p className="text-xs font-semibold uppercase tracking-wide text-amber-deep mb-1">Ordered by guest (QR)</p>}
                   <div className={`flex items-center gap-1.5 text-sm ${late ? 'text-terra font-semibold' : 'text-ink-muted'}`}>
                     {late ? <AlertCircle className="w-4 h-4" aria-hidden="true" /> : <Clock className="w-4 h-4" aria-hidden="true" />}
                     <span>{late ? 'Late: ' : ''}{timeAgo}</span>

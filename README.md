@@ -186,7 +186,8 @@ to the deployed site, so the app loads the live web application:
   live. No new APK is needed.
 - A new APK is needed only when native code under `frontend/android/` changes, or the app name, permissions or icon do.
 - Cookies are persisted through `CapacitorCookies` so a login survives the app being closed. The Clerk middleware
-  allows the Capacitor origins (`capacitor://localhost` and `capacitor://com.kipd.android`) as authorized parties.
+  allow-lists the app's own origin (`capacitor://com.kipd.android`) and the deployed site as authorized parties.
+  Local origins (`capacitor://localhost`, `http://localhost:3000`) are accepted only outside production.
 
 ### UPI notification listener
 

@@ -1,15 +1,21 @@
 import { authMiddleware } from '@clerk/nextjs';
 import { NextResponse } from 'next/server';
 
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Origins allowed to present a session token. The Android app loads the deployed site, so in
+// production only the site itself and the app's own scheme are listed. Local origins and a
+// generous clock tolerance (for emulators whose clock drifts) exist only in development.
+const authorizedParties = Array.from(new Set([
+  'https://sa-kipd.vercel.app',
+  ...(process.env.NEXT_PUBLIC_APP_URL ? [new URL(process.env.NEXT_PUBLIC_APP_URL).origin] : []),
+  'capacitor://com.kipd.android',
+  ...(isProduction ? [] : ['capacitor://localhost', 'http://localhost', 'http://localhost:3000']),
+]));
+
 export default authMiddleware({
-  clockSkewInMs: 1000 * 60 * 5, // 5 minutes
-  authorizedParties: [
-    'capacitor://localhost',
-    'http://localhost',
-    'http://localhost:3000',
-    'https://sa-kipd.vercel.app',
-    'capacitor://com.kipd.android',
-  ],
+  ...(isProduction ? {} : { clockSkewInMs: 1000 * 60 * 5 }),
+  authorizedParties,
   publicRoutes: [
     '/',
     '/sign-in(.*)',
@@ -22,6 +28,10 @@ export default authMiddleware({
     // Guest-facing: the QR menu, ordering and hotel booking. These routes resolve the tenant from the
     // slug in the link, are rate limited, and expose nothing except the public menu / room types.
     '/api/public/(.*)',
+    // The "request access" form on the sign-up page. Rate limited in the route.
+    '/api/contact-admin',
+    // Uptime checks. Reveals only whether the app and its database answer.
+    '/api/health',
   ],
 
   async afterAuth(auth, req) {

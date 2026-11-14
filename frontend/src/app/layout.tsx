@@ -3,6 +3,7 @@ import localFont from 'next/font/local'
 import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
+import { ConfirmHost } from '@/components/ui/confirm'
 
 // Bundled with the app (npm @fontsource) rather than fetched from Google at build time, so builds work offline and in CI.
 
@@ -27,7 +28,7 @@ const plexMono = localFont({
 })
 
 export const metadata: Metadata = {
-  title: 'Kipd — Hotel & Restaurant Management',
+  title: 'Kipd | Hotel & Restaurant Management',
   description: 'Modern SaaS platform for boutique hotels and hospitality businesses',
 }
 
@@ -42,6 +43,7 @@ export default function RootLayout({
         <body className="font-sans bg-cream text-ink antialiased">
           {children}
           <Toaster />
+          <ConfirmHost />
         </body>
       </html>
     </ClerkProvider>

@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { confirmDialog } from '@/components/ui/confirm';
 import { Plus, Search, MoreVertical, Power, Edit, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -106,7 +107,8 @@ export default function TenantsPage() {
   };
 
   const handleDeleteTenant = async (tenantId: string, tenantName: string) => {
-    if (!confirm(`Are you sure you want to delete "${tenantName}"? This action cannot be undone.`)) {
+    // The server hides the tenant and blocks access; no data is removed (see DELETE /api/admin/tenants/[id]).
+    if (!(await confirmDialog({ title: `Delete "${tenantName}"?`, message: 'Everyone in this business loses access straight away. Its records are kept.', confirmLabel: 'Delete tenant', danger: true }))) {
       return;
     }
 

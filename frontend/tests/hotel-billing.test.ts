@@ -53,7 +53,7 @@ describe('a stay bill opens with the booking', () => {
     expect(await stayBills(A.booking)).toHaveLength(0);
     expect((await act(A.booking, 'check-in')).status).toBe(200);
     expect(await stayBills(A.booking)).toHaveLength(1);
-    expect((await act(A.booking, 'check-in')).status).toBe(200);
+    expect((await act(A.booking, 'check-in')).status).toBe(409); // already checked in
     expect(await stayBills(A.booking)).toHaveLength(1);
   });
 

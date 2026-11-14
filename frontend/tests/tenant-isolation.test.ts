@@ -6,7 +6,6 @@ import * as roomTypes from '@/app/api/room-types/route';
 import * as tablesRoute from '@/app/api/tables/route';
 import * as orders from '@/app/api/orders/route';
 import * as orderById from '@/app/api/orders/[id]/route';
-import * as orderStatus from '@/app/api/orders/[id]/status/route';
 import * as settle from '@/app/api/orders/settle-tab/route';
 import * as bookings from '@/app/api/bookings/route';
 import * as bookingById from '@/app/api/bookings/[id]/route';
@@ -45,7 +44,7 @@ function attacks(victim: Side): Attack[] {
     { name: 'place an order on another tenant\'s table', expectStatus: 404, run: () => call(orders.POST, 'POST', '/api/orders', { body: { tableId: v.table, items: [{ menuItemId: me.item, quantity: 1 }] } }) },
     { name: 'order another tenant\'s dish at my table', expectStatus: 400, run: () => call(orders.POST, 'POST', '/api/orders', { body: { tableId: me.table, items: [{ menuItemId: v.item, quantity: 1 }] } }) },
     { name: 'change another tenant\'s order status (PATCH /orders/[id])', expectStatus: 404, run: () => call(orderById.PATCH, 'PATCH', `/api/orders/${v.order}`, { params: { id: v.order }, body: { status: 'cancelled' } }) },
-    { name: 'change another tenant\'s order status (PATCH /orders/[id]/status)', expectStatus: 404, run: () => call(orderStatus.PATCH, 'PATCH', `/api/orders/${v.order}/status`, { params: { id: v.order }, body: { status: 'ready' } }) },
+    { name: 'change another tenant\'s order status (PATCH /orders/[id], as the kitchen)', expectStatus: 404, run: () => call(orderById.PATCH, 'PATCH', `/api/orders/${v.order}`, { params: { id: v.order }, body: { status: 'ready' } }) },
     { name: 'settle another tenant\'s table', expectStatus: 404, run: () => call(settle.POST, 'POST', '/api/orders/settle-tab', { body: { tableId: v.table } }) },
     { name: 'book another tenant\'s room', expectStatus: 404, run: () => call(bookings.POST, 'POST', '/api/bookings', { body: { ...booking, roomId: v.room } }) },
     { name: 'cancel another tenant\'s booking', expectStatus: 404, run: () => call(bookingById.PATCH, 'PATCH', `/api/bookings/${v.booking}`, { params: { id: v.booking }, body: { action: 'cancel' } }) },
@@ -111,7 +110,7 @@ describe('malformed ids are not found, not server errors', () => {
     ['menu', () => call(menu.DELETE, 'DELETE', '/api/menu?id=not-a-uuid')],
     ['rooms', () => call(rooms.DELETE, 'DELETE', '/api/rooms?id=123')],
     ['booking', () => call(bookingById.PATCH, 'PATCH', '/api/bookings/abc', { params: { id: 'abc' }, body: { action: 'cancel' } })],
-    ['order', () => call(orderStatus.PATCH, 'PATCH', '/api/orders/zzz/status', { params: { id: 'zzz' }, body: { status: 'ready' } })],
+    ['order', () => call(orderById.PATCH, 'PATCH', '/api/orders/zzz', { params: { id: 'zzz' }, body: { status: 'ready' } })],
     ['kitchen display', () => call(kds.GET, 'GET', '/api/kds/nope', { params: { outletId: 'nope' } })],
   ])('%s returns 404', async (_name, run) => {
     loginAs('ownerA');

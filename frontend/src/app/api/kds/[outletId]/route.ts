@@ -24,6 +24,7 @@ export async function GET(_request: Request, { params }: { params: { outletId: s
     return NextResponse.json(active.map((order) => ({
       id: order.id,
       type: order.type,
+      source: order.source,
       tableNumber: order.table?.tableNumber,
       roomNumber: order.room?.roomNumber,
       status: order.status,

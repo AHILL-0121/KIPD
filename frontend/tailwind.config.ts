@@ -12,6 +12,8 @@ const config: Config = {
       // amber = primary (teal), terra = danger, sage = success, cream = page background.
       colors: {
         cream: '#F4F5F7',
+        // Older pages say bg-canvas; it is the same page background as cream.
+        canvas: '#F4F5F7',
         amber: {
           DEFAULT: '#0B6B6F',
           50: '#F0F9F8',
@@ -45,6 +47,8 @@ const config: Config = {
       fontFamily: {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         serif: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        // Headings use the same family as body text (design v3 has one typeface).
+        display: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
       },
       boxShadow: {

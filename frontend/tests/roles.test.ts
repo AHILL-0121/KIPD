@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import * as menu from '@/app/api/menu/route';
 import * as rooms from '@/app/api/rooms/route';
 import * as orders from '@/app/api/orders/route';
-import * as orderStatus from '@/app/api/orders/[id]/status/route';
+import * as orderById from '@/app/api/orders/[id]/route';
 import * as settle from '@/app/api/orders/settle-tab/route';
 import * as bookings from '@/app/api/bookings/route';
 import * as billing from '@/app/api/billing/route';
@@ -32,7 +32,7 @@ const cases: Case[] = [
   { who: 'kitchenA', label: 'see bills', expected: 403, run: () => call(billing.GET, 'GET', '/api/billing') },
   { who: 'kitchenA', label: 'see bookings', expected: 403, run: () => call(bookings.GET, 'GET', '/api/bookings') },
   { who: 'kitchenA', label: 'see the menu', expected: 200, run: () => call(menu.GET, 'GET', '/api/menu') },
-  { who: 'kitchenA', label: 'update an order status', expected: 200, run: () => call(orderStatus.PATCH, 'PATCH', `/api/orders/${A.order}/status`, { params: { id: A.order }, body: { status: 'preparing' } }) },
+  { who: 'kitchenA', label: 'update an order status', expected: 200, run: () => call(orderById.PATCH, 'PATCH', `/api/orders/${A.order}`, { params: { id: A.order }, body: { status: 'preparing' } }) },
   { who: 'kitchenA', label: 'see the kitchen display', expected: 200, run: () => call(kds.GET, 'GET', `/api/kds/${A.outlet}`, { params: { outletId: A.outlet } }) },
   // waiter
   { who: 'waiterA', label: 'place an order', expected: 200, run: () => call(orders.POST, 'POST', '/api/orders', { body: validOrder }) },
