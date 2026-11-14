@@ -24,7 +24,7 @@ export default authMiddleware({
     '/menu/(.*)',
     '/onboarding',
     // Razorpay calls this without a Clerk session. The route verifies Razorpay's signature itself.
-    '/api/webhooks/razorpay',
+    '/api/webhooks/razorpay/(.*)',
     // Guest-facing: the QR menu, ordering and hotel booking. These routes resolve the tenant from the
     // slug in the link, are rate limited, and expose nothing except the public menu / room types.
     '/api/public/(.*)',

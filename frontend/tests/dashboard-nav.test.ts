@@ -23,7 +23,7 @@ describe('sidebar groups', () => {
 
   it('each role sees only its own pages', () => {
     expect(labels('both', 'front_desk')).toEqual(['Home: Home', 'Hotel: Rooms, Bookings, Billing', 'Restaurant: Billing']); // the cashier for both
-    expect(labels('both', 'waiter')).toEqual(['Restaurant: Orders']);
+    expect(labels('both', 'waiter')).toEqual(['Restaurant: Orders, Kitchen Display']); // the kitchen board, but no billing
     expect(labels('both', 'kitchen')).toEqual(['Restaurant: Kitchen Display']);
     expect(labels('both', 'manager')).toEqual(labels('both', 'owner'));
   });

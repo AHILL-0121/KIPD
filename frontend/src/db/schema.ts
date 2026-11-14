@@ -455,6 +455,24 @@ export const webhookLogs = pgTable('webhook_logs', {
 ]);
 
 // ============= UPI & NOTIFICATIONS =============
+/**
+ * A business's own Razorpay account. Money paid online goes straight to that business's bank account; Kipd never holds it.
+ * The key secret and the webhook secret are stored encrypted (lib/secret-box.ts) and are never sent to a browser.
+ * Kept out of the tenants table on purpose: tenant rows are read in many places and returned whole to the admin screen.
+ */
+export const razorpayAccounts = pgTable('razorpay_accounts', {
+  tenantId: uuid('tenant_id').primaryKey().references(() => tenants.id),
+  keyId: text('key_id').notNull(),
+  keySecretEnc: text('key_secret_enc').notNull(),
+  // Null until the owner generates one. Without it no payment can be confirmed, so online payments stay unavailable.
+  webhookSecretEnc: text('webhook_secret_enc'),
+  updatedBy: text('updated_by'),
+  createdAt: tstz('created_at').defaultNow().notNull(),
+  updatedAt: tstz('updated_at').defaultNow().notNull(),
+}, (t) => [
+  check('razorpay_accounts_key_id_check', sql`${t.keyId} ~ '^rzp_(test|live)_[A-Za-z0-9]+$'`),
+]);
+
 export const paymentEvents = pgTable('payment_events', {
   id: uuid('id').primaryKey().defaultRandom(),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),

@@ -5,7 +5,7 @@ import { tenants } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { handleError, parseJson } from '@/lib/http';
 import { getPaymentSettings, paymentSettingsSchema } from '@/lib/payment-settings';
-import { razorpayConfigured } from '@/lib/razorpay';
+import { getRazorpayStatus } from '@/lib/razorpay-account';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -13,10 +13,16 @@ export const revalidate = 0;
 /** Anyone who takes payments needs to know which ways are allowed, so billing roles may read. */
 export async function GET() {
   try {
-    const { tenantId } = await requireTenant(ROLES.billing);
+    const { tenantId, role } = await requireTenant(ROLES.billing);
     const settings = await getPaymentSettings(tenantId);
-    // `razorpayConfigured` says whether the server has keys, never what they are.
-    return NextResponse.json({ ...settings, razorpayConfigured: razorpayConfigured() });
+    const status = await getRazorpayStatus(tenantId);
+    // `razorpayConfigured` says whether this business can take online payments, never what its keys are.
+    // The connection details (key id, webhook address) are for owners and managers only.
+    return NextResponse.json({
+      ...settings,
+      razorpayConfigured: status.connected && status.webhookReady,
+      ...((ROLES.manage as string[]).includes(role) ? { razorpay: status } : {}),
+    });
   } catch (error) {
     return handleError(error, 'Failed to load payment settings');
   }
@@ -28,7 +34,8 @@ export async function PUT(request: NextRequest) {
     const { tenantId } = await requireTenant(ROLES.manage);
     const settings = await parseJson(request, paymentSettingsSchema);
     await db.update(tenants).set({ paymentSettings: settings, updatedAt: new Date() }).where(eq(tenants.id, tenantId));
-    return NextResponse.json({ ...settings, razorpayConfigured: razorpayConfigured() });
+    const status = await getRazorpayStatus(tenantId);
+    return NextResponse.json({ ...settings, razorpayConfigured: status.connected && status.webhookReady, razorpay: status });
   } catch (error) {
     return handleError(error, 'Failed to save payment settings');
   }

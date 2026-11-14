@@ -3,12 +3,15 @@ import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db';
 import { verifyWebhookSignature } from '@/lib/razorpay';
+import { getRazorpayAccount } from '@/lib/razorpay-account';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Razorpay calls this (no login) when a payment link is paid or a QR code is paid. It is trusted only because the body's HMAC
- * matches RAZORPAY_WEBHOOK_SECRET. Nothing else in the request is believed until that check passes.
+ * Razorpay calls this (no login) when a payment link is paid or a QR code is paid. Every business has its own address
+ * (its id is in the path) and its own secret, set up in Settings > Payments. A request is trusted only because the
+ * body's HMAC matches THAT business's secret, so one business's Razorpay account can never mark another's bill paid.
+ * Nothing else in the request is believed until that check passes.
  *
  * Idempotent: Razorpay retries, so the same payment can arrive more than once. payments.razorpay_payment_id is
  * unique, and the bill update and the payment insert are ONE statement, so a repeat changes nothing.
@@ -24,9 +27,19 @@ const eventSchema = z.object({
 
 const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest, { params }: { params: { tenantId: string } }) {
   const raw = await request.text();
-  if (!verifyWebhookSignature(raw, request.headers.get('x-razorpay-signature'), process.env.RAZORPAY_WEBHOOK_SECRET)) {
+  // An unknown business, one with no secret yet, and a bad signature all get the same answer.
+  let secret: string | null = null;
+  if (uuidRe.test(params.tenantId)) {
+    try {
+      secret = (await getRazorpayAccount(params.tenantId))?.webhookSecret ?? null;
+    } catch (error) {
+      console.error('Razorpay webhook could not load the account', error);
+      return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
+    }
+  }
+  if (!verifyWebhookSignature(raw, request.headers.get('x-razorpay-signature'), secret)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
@@ -45,8 +58,9 @@ export async function POST(request: NextRequest) {
   const payment = event.payload.payment?.entity;
   const notes = (viaQr ? event.payload.qr_code?.entity.notes : event.payload.payment_link?.entity.notes) ?? {};
   const billId = String(notes.billId ?? '');
-  const tenantId = String(notes.tenantId ?? '');
-  if (!payment || !uuidRe.test(billId) || !uuidRe.test(tenantId)) {
+  // The business is the one whose secret signed this request (the path), never one named inside the body.
+  const tenantId = params.tenantId;
+  if (!payment || !uuidRe.test(billId) || String(notes.tenantId ?? tenantId) !== tenantId) {
     console.error('Razorpay paid event without a usable bill reference');
     return NextResponse.json({ received: true, ignored: 'no bill reference' });
   }

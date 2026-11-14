@@ -38,7 +38,7 @@ export const navigation: NavItem[] = [
   { name: 'Billing', short: 'Hotel bills', href: '/dashboard/billing/hotel', icon: Receipt, area: 'hotel', types: ['hotel', 'both'], roles: ['owner', 'manager', 'front_desk'] },
   { name: 'Menu', href: '/dashboard/restaurant', icon: UtensilsCrossed, area: 'restaurant', types: ['restaurant', 'both'], roles: ['owner', 'manager'] },
   { name: 'Orders', href: '/dashboard/orders', icon: QrCode, area: 'restaurant', types: ['restaurant', 'both'], roles: ['owner', 'manager', 'waiter'] },
-  { name: 'Kitchen Display', href: '/dashboard/kds', icon: ChefHat, area: 'restaurant', types: ['restaurant', 'both'], roles: ['owner', 'manager', 'kitchen'] },
+  { name: 'Kitchen Display', href: '/dashboard/kds', icon: ChefHat, area: 'restaurant', types: ['restaurant', 'both'], roles: ['owner', 'manager', 'waiter', 'kitchen'] },
   // Front desk collects restaurant bills too (the waiter sends them over), so they see this one as the cashier.
   { name: 'Billing', short: 'Food bills', href: '/dashboard/billing/restaurant', icon: Receipt, area: 'restaurant', types: ['restaurant', 'both'], roles: ['owner', 'manager', 'front_desk'] },
   { name: 'Staff', href: '/dashboard/staff', icon: Users, area: 'manage', types: ALL, roles: ['owner', 'manager'] },

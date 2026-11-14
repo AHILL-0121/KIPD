@@ -8,7 +8,8 @@ import { HttpError, badRequest, handleError, parseJson } from '@/lib/http';
 import { ownedBill, ownedBooking } from '@/lib/tenant-scope';
 import { nightsBetween } from '@/lib/stay-bill';
 import { MANUAL_METHODS, getPaymentSettings } from '@/lib/payment-settings';
-import { closePaymentQr, createPaymentLink, createPaymentQr, razorpayConfigured } from '@/lib/razorpay';
+import { closePaymentQr, createPaymentLink, createPaymentQr } from '@/lib/razorpay';
+import { getRazorpayAccount } from '@/lib/razorpay-account';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -123,12 +124,14 @@ export async function PATCH(request: NextRequest) {
     // Nothing is recorded yet. The payment is added when Razorpay's webhook says it was paid.
     if (paymentMethod === 'razorpay' || paymentMethod === 'razorpay_qr') {
       if (!settings.onlinePayments) throw new HttpError(409, 'Online payments are switched off in Settings.');
-      if (!razorpayConfigured()) throw new HttpError(503, 'Online payments are not set up yet.');
+      // This business's own Razorpay account. Without its webhook secret a paid link could never mark the bill paid.
+      const account = await getRazorpayAccount(tenantId);
+      if (!account?.webhookSecret) throw new HttpError(503, 'Online payments are not set up yet. Connect Razorpay in Settings > Payments.');
       const wantPaise = amount === undefined ? owedPaise : Math.round(amount * 100);
       if (wantPaise > owedPaise) throw new HttpError(409, `Only ${rupees(owedPaise / 100)} is still owed on this bill.`);
       const [guest] = bill.guestId ? await db.select().from(guests).where(and(eq(guests.id, bill.guestId), eq(guests.tenantId, tenantId))).limit(1) : [];
       if (paymentMethod === 'razorpay_qr') {
-        const qr = await createPaymentQr({
+        const qr = await createPaymentQr(account, {
           amountPaise: wantPaise,
           description: note || (bill.kind === 'restaurant' ? 'Payment for your restaurant bill' : 'Payment for your stay'),
           billId: bill.id,
@@ -136,7 +139,7 @@ export async function PATCH(request: NextRequest) {
         });
         return NextResponse.json({ success: true, paymentQr: qr });
       }
-      const link = await createPaymentLink({
+      const link = await createPaymentLink(account, {
         amountPaise: wantPaise,
         description: note || (bill.kind === 'restaurant' ? 'Payment for your restaurant bill' : 'Payment for your stay'),
         billId: bill.id,
@@ -197,7 +200,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const { tenantId } = await requireTenant(ROLES.frontDesk);
     const qrId = request.nextUrl.searchParams.get('qr') ?? '';
-    const closed = await closePaymentQr(qrId, tenantId);
+    const closed = await closePaymentQr(await getRazorpayAccount(tenantId), qrId, tenantId);
     return NextResponse.json({ success: true, closed });
   } catch (error) {
     return handleError(error, 'Failed to close the QR code');

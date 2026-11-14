@@ -113,7 +113,7 @@ export function PaymentSettingsCard() {
           </label>
           {online && loaded && !configured && (
             <p role="status" className="mt-3 rounded-lg bg-amber-pale px-4 py-3 text-sm text-amber-deep">
-              Razorpay is not connected on the server yet, so links cannot be created. The administrator needs to add the Razorpay keys.
+              Your Razorpay account is not connected yet, so links cannot be created. The owner connects it under Razorpay account, below.
             </p>
           )}
         </div>

@@ -13,7 +13,10 @@ export const ROLES = {
   frontDesk: ['owner', 'manager', 'front_desk'] as Role[],
   orders: ['owner', 'manager', 'waiter'] as Role[],
   kitchen: ['owner', 'manager', 'waiter', 'kitchen'] as Role[],
-  billing: ['owner', 'manager', 'front_desk', 'waiter'] as Role[],
+  // Taking money and seeing payment settings. Waiters are not included (decided 2026-11-14).
+  billing: ['owner', 'manager', 'front_desk'] as Role[],
+  // Closing a table's tab hands its bill to the front desk. That is part of serving the table, so waiters may.
+  settleTab: ['owner', 'manager', 'front_desk', 'waiter'] as Role[],
 };
 
 export interface TenantContext {
