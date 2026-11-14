@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { toast } from '@/components/ui/toaster';
 import { PaymentSettingsCard } from '@/components/settings/payment-settings-card';
 import { TaxSettingsCard } from '@/components/settings/tax-settings-card';
 import {
@@ -43,9 +44,9 @@ export default function SettingsPage() {
         body: JSON.stringify({ receiptSettings }),
       });
       if (!res.ok) throw new Error(String(res.status));
-      alert('Receipt Layout successfully saved!');
+      toast('success', 'Receipt layout saved');
     } catch {
-      alert('Could not save the receipt layout. Please try again.');
+      toast('error', 'Could not save the receipt layout', 'Please try again.');
     }
   };
 
@@ -89,9 +90,9 @@ export default function SettingsPage() {
         body: JSON.stringify({ propertySettings }),
       });
       if (!res.ok) throw new Error(String(res.status));
-      alert('Property settings saved!');
+      toast('success', 'Property settings saved');
     } catch {
-      alert('Could not save property settings. Check the values and try again.');
+      toast('error', 'Could not save property settings', 'Check the values and try again.');
     }
   };
 

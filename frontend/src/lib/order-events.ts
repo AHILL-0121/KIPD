@@ -4,13 +4,10 @@ import { orders } from '@/db/schema';
 import { assertUuid, notFound } from '@/lib/http';
 import { broadcastOrderUpdate } from '@/lib/realtime';
 
-/**
- * Statuses accepted from the UI. The two order endpoints historically disagreed
- * ('served' vs 'delivered'); both are accepted until the vocabulary is unified
- * (checklist section 5).
- */
-export const ORDER_STATUS_INPUT = ['new', 'acknowledged', 'preparing', 'ready', 'served', 'delivered', 'cancelled'] as const;
-export type OrderStatusInput = (typeof ORDER_STATUS_INPUT)[number];
+import { ORDER_STATUS_INPUT, type OrderStatusInput } from '@/lib/order-status';
+
+// The status vocabulary lives in lib/order-status.ts so the screens can share it without importing the database.
+export { ORDER_STATUS_INPUT, type OrderStatusInput };
 
 /** Shape the kitchen display and order screens expect. */
 export async function publishOrder(tenantId: string, orderId: string) {
@@ -23,6 +20,7 @@ export async function publishOrder(tenantId: string, orderId: string) {
     const payload = {
       id: full.id,
       type: full.type,
+      source: full.source,
       tableNumber: full.table?.tableNumber,
       roomNumber: full.room?.roomNumber,
       status: full.status,

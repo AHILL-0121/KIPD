@@ -7,6 +7,7 @@ import * as webhook from '@/app/api/webhooks/razorpay/route';
 import { suggestedDeposit } from '@/lib/deposit';
 import { parsePaymentSettings } from '@/lib/payment-settings';
 import { verifyWebhookSignature } from '@/lib/razorpay';
+import { testDb } from './helpers/db';
 import { call, ids, loginAs, q, resetAndSeed } from './helpers/harness';
 
 const A = ids.A, B = ids.B;
@@ -302,6 +303,28 @@ describe('the Razorpay webhook', () => {
     expect(results.map((r) => r.status)).toEqual([200, 200]);
     expect(await bill(A.bill)).toMatchObject({ paid_amount: '500.00' });
     expect(await paymentsOf(A.bill)).toHaveLength(1);
+  });
+
+  it('a delivery that loses the race on the unique payment id is answered 200 duplicate, not 500', async () => {
+    // On Neon two real connections can both pass the "not seen yet" check; the loser hits the unique index.
+    // Drizzle wraps that error: the constraint name is only on `cause` (this returned 500 until 2026-11-11).
+    const lostRace = Object.assign(new Error('Failed query: with moved as ...'), {
+      cause: new Error('duplicate key value violates unique constraint "payments_razorpay_payment_uq"'),
+    });
+    const spy = vi.spyOn(testDb, 'execute').mockRejectedValueOnce(lostRace);
+    const res = await deliver(event(A.bill, A.tenant));
+    spy.mockRestore();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ duplicate: true });
+  });
+
+  it('any other database failure is a 500, so Razorpay retries later', async () => {
+    const spy = vi.spyOn(testDb, 'execute').mockRejectedValueOnce(Object.assign(new Error('Failed query'), { cause: new Error('connection terminated') }));
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await deliver(event(A.bill, A.tenant));
+    spy.mockRestore(); quiet.mockRestore();
+    expect(res.status).toBe(500);
+    expect(await bill(A.bill)).toMatchObject({ status: 'open', paid_amount: '0.00' });
   });
 
   it('refuses an unsigned, wrongly signed or tampered request and changes nothing', async () => {

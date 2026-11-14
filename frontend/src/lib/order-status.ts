@@ -1,3 +1,17 @@
+/**
+ * Every status an order can have, in the order it moves through them. This is the one list:
+ * the database CHECK constraint, the API and the screens all use these words.
+ */
+export const ORDER_STATUSES = ['new', 'acknowledged', 'preparing', 'ready', 'served', 'cancelled', 'closed'] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+/**
+ * What a person may set from a screen. 'closed' is missing on purpose: an order closes when its
+ * bill is settled, never by hand. 'delivered' is the old word for 'served' and is still accepted.
+ */
+export const ORDER_STATUS_INPUT = ['new', 'acknowledged', 'preparing', 'ready', 'served', 'delivered', 'cancelled'] as const;
+export type OrderStatusInput = (typeof ORDER_STATUS_INPUT)[number];
+
 export type StatusTone = 'amber' | 'terra' | 'sage' | 'stone';
 
 /**

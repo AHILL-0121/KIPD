@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'public',
   server: {
     url: 'https://sa-kipd.vercel.app/',
-    cleartext: true
+    cleartext: false
   },
   plugins: {
     CapacitorCookies: {

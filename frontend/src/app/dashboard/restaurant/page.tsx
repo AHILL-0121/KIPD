@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { LoadingState } from '@/components/ui/loading-state';
 import { Plus, UtensilsCrossed, Coffee, Edit, Eye, EyeOff, Trash2, X, QrCode, Users, Copy, Check } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { confirmDialog } from '@/components/ui/confirm';
 import { formatCurrency } from '@/lib/currency';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -209,12 +210,12 @@ export default function RestaurantPage() {
   };
 
   const handleDeleteItem = async (itemId: string) => {
-    if (!confirm('Delete this menu item?')) return;
+    if (!(await confirmDialog({ title: 'Delete this menu item?', confirmLabel: 'Delete item', danger: true }))) return;
     try {
       const res = await fetch(`/api/menu?id=${itemId}`, { method: 'DELETE' });
       if (res.status === 409) {
         // Past orders and bills refer to this item, so it can't be erased. Hiding it keeps the history intact.
-        if (confirm('This item is on past orders, so it can\'t be deleted. Hide it from the menu instead?')) {
+        if (await confirmDialog({ title: 'Hide it from the menu instead?', message: 'This item is on past orders, so it cannot be deleted.', confirmLabel: 'Hide item' })) {
           const patch = await fetch('/api/menu', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -282,7 +283,7 @@ export default function RestaurantPage() {
   };
 
   const handleDeleteTable = async (tableId: string) => {
-    if (!confirm('Delete this table? Active orders on this table may be affected.')) return;
+    if (!(await confirmDialog({ title: 'Delete this table?', message: 'Its past orders are kept, but its QR code stops working.', confirmLabel: 'Delete table', danger: true }))) return;
     try {
       await fetch(`/api/tables?id=${tableId}`, { method: 'DELETE' });
       fetchTables();

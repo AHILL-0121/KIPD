@@ -33,6 +33,8 @@ interface Order {
   status: 'new' | 'acknowledged' | 'preparing' | 'ready' | 'served' | 'closed' | 'cancelled';
   totalAmount: string;
   specialInstructions?: string;
+  /** 'guest' when the guest ordered from the QR menu themselves */
+  source?: 'staff' | 'guest';
   orderItems: OrderItem[];
   createdAt: string;
 }
@@ -327,6 +329,7 @@ export default function OrdersPage() {
                     <div className="flex items-center justify-between mb-3 border-b border-stone-200 pb-2">
                       <span className="text-sm font-semibold text-ink-soft">
                         Ticket {i + 1} <span className="font-normal text-ink-muted">· {formatDistanceToNow(new Date(ticket.createdAt), { addSuffix: true })}</span>
+                        {ticket.source === 'guest' && <span className="font-normal text-amber-deep"> · Ordered by guest (QR)</span>}
                       </span>
                       <Badge variant={orderStatus(ticket.status).tone} dot>
                         {orderStatus(ticket.status).label}

@@ -27,7 +27,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [tenantType, setTenantType] = useState<TenantType>('both');
   const [tenantName, setTenantName] = useState('');
-  const [userRole, setUserRole] = useState<StaffRole>('owner');
+  const [userRole, setUserRole] = useState<StaffRole>('kitchen'); // least privilege until the server says otherwise
   const [userName, setUserName] = useState('');
   const [isNavReady, setIsNavReady] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -84,7 +84,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         } else if (data) {
           setTenantType(data.type || 'both');
           setTenantName(data.name || '');
-          setUserRole(data.role || 'owner');
+          if (data.role) setUserRole(data.role);
           setUserName(data.userName || '');
         }
       })

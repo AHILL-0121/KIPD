@@ -126,3 +126,46 @@ export function postCharges(existing: Partial<StayBreakdown> | null, add: { item
   };
   return { breakdown, totalPaise };
 }
+
+/**
+ * The stay bill after the booking's dates, room or price changed: the room line is replaced by `fresh` (what
+ * stayBillValues() makes for the new stay) and every restaurant charge already posted to the room is kept exactly,
+ * to the paisa. What the room used to cost is the old total minus the postings, so nothing is re-rounded.
+ */
+export function reviseStayBreakdown(existing: Partial<StayBreakdown> | null | undefined, fresh: StayBreakdown): { breakdown: StayBreakdown; totalPaise: number } {
+  const extras = (existing?.items ?? []).filter((l) => l.sac === RESTAURANT_SAC);
+  if (!existing || extras.length === 0) return { breakdown: fresh, totalPaise: toPaise(fresh.total) };
+
+  const oldRoom = (existing.items ?? []).find((l) => l.sac !== RESTAURANT_SAC);
+  const postedPaise = (existing.postings ?? []).reduce((s, p) => s + toPaise(p.amount), 0);
+  const oldRoomTaxable = toPaise(oldRoom?.amt);
+  const oldRoomTax = toPaise(existing.total) - postedPaise - oldRoomTaxable;
+  const oldRoomRate = oldRoom?.gstRate ?? 0;
+
+  // Take the old room out of the tax groups; what is left is the restaurant's share.
+  const groups = taxGroups(existing).map((g) => ({ rate: g.rate, taxable: toPaise(g.taxable), tax: toPaise(g.tax) }));
+  const was = groups.find((g) => g.rate === oldRoomRate);
+  if (was) { was.taxable -= oldRoomTaxable; was.tax -= oldRoomTax; }
+  const kept = groups.filter((g) => g.taxable > 0 || g.tax > 0);
+
+  // Put the new room in.
+  for (const g of taxGroups(fresh)) {
+    const hit = kept.find((k) => k.rate === g.rate);
+    if (hit) { hit.taxable += toPaise(g.taxable); hit.tax += toPaise(g.tax); }
+    else kept.unshift({ rate: g.rate, taxable: toPaise(g.taxable), tax: toPaise(g.tax) });
+  }
+  const summary = kept.filter((g, _i, all) => !(g.rate === 0 && g.tax === 0 && g.taxable === 0 && all.length > 1));
+  const taxablePaise = summary.reduce((s, g) => s + g.taxable, 0);
+  const taxPaise = summary.reduce((s, g) => s + g.tax, 0);
+  const { cgstPaise, sgstPaise } = splitGst(taxPaise, false);
+  const totalPaise = taxablePaise + taxPaise;
+  return {
+    totalPaise,
+    breakdown: {
+      items: [...fresh.items, ...extras],
+      subtotal: taxablePaise / 100, cgst: cgstPaise / 100, sgst: sgstPaise / 100, igst: 0, total: totalPaise / 100,
+      taxSummary: summary.map((g) => ({ rate: g.rate, taxable: g.taxable / 100, tax: g.tax / 100 })),
+      postings: existing.postings ?? [],
+    },
+  };
+}

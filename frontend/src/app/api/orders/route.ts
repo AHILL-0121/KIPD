@@ -6,7 +6,7 @@ import { orderItems, orders } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { badRequest, handleError, parseJson } from '@/lib/http';
 import { publishOrder } from '@/lib/order-events';
-import { firstOutlet, ownedMenuItems, ownedRoom, ownedTable } from '@/lib/tenant-scope';
+import { ownedMenuItems, ownedOutlet, ownedRoom, ownedTable } from '@/lib/tenant-scope';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -15,6 +15,7 @@ const createSchema = z.object({
   type: z.enum(['dine_in', 'room_service']).optional(),
   tableId: z.string().uuid().nullish(),
   roomId: z.string().uuid().nullish(),
+  outletId: z.string().uuid().nullish(),
   specialInstructions: z.string().max(500).nullish(),
   items: z.array(z.object({
     menuItemId: z.string().uuid(),
@@ -28,31 +29,32 @@ export async function POST(request: NextRequest) {
     const { tenantId } = await requireTenant(ROLES.orders);
     const body = await parseJson(request, createSchema);
 
-    // 1. Where does the order go? A table fixes the outlet; otherwise the tenant's first outlet.
-    let outletId: string;
-    if (body.tableId) {
-      outletId = (await ownedTable(tenantId, body.tableId)).outletId;
-    } else {
-      const outlet = await firstOutlet(tenantId);
-      if (!outlet) throw badRequest('No outlet found');
-      outletId = outlet.id;
-    }
-    if (body.roomId) await ownedRoom(tenantId, body.roomId);
-
-    // 2. Every item must be on this tenant's menu, in this outlet, and available. Prices come from the DB.
+    // 1. Every item must be on this tenant's menu. Prices come from the DB.
     const ids = [...new Set(body.items.map((i) => i.menuItemId))];
     const found = await ownedMenuItems(tenantId, ids);
     const byId = new Map(found.map((m) => [m.id, m]));
+
+    // 2. Where does the order go? A table fixes the outlet. Without one (room service), it is the outlet the
+    //    dishes are from, so a business with two kitchens sends the ticket to the right one. An outlet named in
+    //    the request must agree.
+    let outletId: string | undefined;
+    if (body.tableId) outletId = (await ownedTable(tenantId, body.tableId)).outletId;
+    else if (body.outletId) outletId = (await ownedOutlet(tenantId, body.outletId)).id;
+    else outletId = found[0]?.outletId;
+    if (!outletId) throw badRequest('One or more items are not on the menu for this outlet');
+    if (body.roomId) await ownedRoom(tenantId, body.roomId);
+
+    // 3. Every item must be in that one outlet, and available.
     for (const id of ids) {
       const item = byId.get(id);
       if (!item || item.outletId !== outletId) throw badRequest('One or more items are not on the menu for this outlet');
       if (item.isAvailable === false) throw badRequest(`${item.name} is currently unavailable`);
     }
 
-    // 3. Total in whole paise so floats can't drift.
+    // 4. Total in whole paise so floats can't drift.
     const paise = body.items.reduce((sum, i) => sum + Math.round(Number(byId.get(i.menuItemId)!.price) * 100) * i.quantity, 0);
 
-    // 4. Order and its items are written together or not at all.
+    // 5. Order and its items are written together or not at all.
     const orderId = crypto.randomUUID();
     await db.batch([
       db.insert(orders).values({

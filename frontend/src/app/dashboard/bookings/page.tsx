@@ -74,6 +74,9 @@ export default function BookingsPage() {
   const [formError, setFormError] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [form, setForm] = useState(emptyForm());
+  const [editing, setEditing] = useState<Booking | null>(null);
+  const [editForm, setEditForm] = useState({ checkInDate: '', checkOutDate: '', roomId: '', numGuests: '1' });
+  const [editError, setEditError] = useState('');
 
   const showToast = (message: string, type: 'success' | 'error', ms = 4000) => {
     setToast({ message, type });
@@ -100,11 +103,13 @@ export default function BookingsPage() {
     fetchRooms();
   }, []);
 
-  const availableRooms = rooms.filter(r => r.status === 'available');
+  // A room that is occupied or being cleaned today can still be booked for later dates (the server checks the dates);
+  // only a room that is out of order or blocked cannot.
+  const availableRooms = rooms.filter(r => r.status !== 'maintenance' && r.status !== 'blocked');
 
   const openCreate = (roomId?: string) => {
     if (availableRooms.length === 0) {
-      showToast('No rooms are free right now. Mark a room as clean or add one on the Rooms page.', 'error');
+      showToast('There are no rooms to book. Add one on the Rooms page, or put a room back in service.', 'error');
       return;
     }
     setForm({ ...emptyForm(), roomId: availableRooms.find(r => r.id === roomId)?.id ?? availableRooms[0].id });
@@ -155,6 +160,57 @@ export default function BookingsPage() {
       showToast('Booking created', 'success');
     } catch {
       setFormError('Could not reach the server. Check your connection and try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEdit = (booking: Booking) => {
+    setEditForm({
+      checkInDate: toYmd(new Date(booking.checkInDate)), checkOutDate: toYmd(new Date(booking.checkOutDate)),
+      roomId: booking.room?.id ?? '', numGuests: String(booking.numGuests),
+    });
+    setEditError('');
+    setSelectedId(null);
+    setEditing(booking);
+  };
+
+  const editNights = nightsBetween(editForm.checkInDate, editForm.checkOutDate);
+  // A guest who is in the house can only move to a room that is free now; a future booking can take any room in service.
+  const editRooms = editing ? rooms.filter(r => r.id === editing.room?.id || (editing.status === 'checked_in' ? r.status === 'available' : r.status !== 'maintenance' && r.status !== 'blocked')) : [];
+
+  const handleEditBooking = async () => {
+    if (!editing) return;
+    const guests = parseInt(editForm.numGuests) || 0;
+    if (editNights < 1) { setEditError('Check-out must be after check-in.'); return; }
+    if (guests < 1) { setEditError('Enter how many guests are staying.'); return; }
+    // Send only what changed, so an untouched date keeps its exact stored time.
+    const changes: Record<string, unknown> = {};
+    if (editForm.checkInDate !== toYmd(new Date(editing.checkInDate))) changes.checkInDate = editForm.checkInDate;
+    if (editForm.checkOutDate !== toYmd(new Date(editing.checkOutDate))) changes.checkOutDate = editForm.checkOutDate;
+    if (editForm.roomId !== editing.room?.id) changes.roomId = editForm.roomId;
+    if (guests !== editing.numGuests) changes.numGuests = guests;
+    if (Object.keys(changes).length === 0) { setEditing(null); return; }
+    setSaving(true);
+    setEditError('');
+    try {
+      const res = await fetch(`/api/bookings/${editing.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changes),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEditError(res.status < 500 && typeof data.error === 'string' ? data.error : 'Could not change the booking. Please try again.');
+        return;
+      }
+      setEditing(null);
+      fetchBookings();
+      fetchRooms();
+      const newTotal = data.billTotal ?? data.booking?.totalAmount;
+      showToast(`${editing.guest?.name || 'Booking'} updated${typeof newTotal === 'number' ? `. The total is now ${formatCurrency(newTotal)}` : ''}`, 'success', 6000);
+    } catch {
+      setEditError('Could not reach the server. Check your connection and try again.');
     } finally {
       setSaving(false);
     }
@@ -367,7 +423,7 @@ export default function BookingsPage() {
                   {rows.map(([k, v]) => (<div key={k} className="contents"><dt className="text-ink-muted">{k}</dt><dd className="font-medium text-ink break-words">{v}</dd></div>))}
                 </dl>
               </div>
-              {(next || selected.bill || selected.invoice || selected.status === 'pending' || selected.status === 'confirmed') && (
+              {(next || selected.bill || selected.invoice || ACTIVE.includes(selected.status)) && (
                 <footer className="grid gap-2.5 px-6 py-4 border-t border-stone-200">
                   {selected.invoice && (
                     <Link href={`/dashboard/billing/hotel/invoice/${selected.invoice.billId}`} className="inline-flex items-center justify-center h-[46px] rounded-lg border border-stone-200 text-ink-soft font-medium hover:bg-stone-100 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber">
@@ -380,6 +436,9 @@ export default function BookingsPage() {
                     </Link>
                   )}
                   {next && <Button className="w-full h-[46px]" disabled={saving} onClick={() => updateBookingAction(selected, next.action)}>{next.label}</Button>}
+                  {ACTIVE.includes(selected.status) && !selected.invoice && (
+                    <Button variant="ghost" className="w-full h-[46px]" onClick={() => openEdit(selected)}>Change dates or room</Button>
+                  )}
                   {(selected.status === 'pending' || selected.status === 'confirmed') && (
                     <Button variant="ghost" className="w-full h-[46px] text-terra hover:bg-terra-pale" onClick={() => { setSelectedId(null); setCancelling(selected); }}>
                       {selected.status === 'pending' ? 'Decline request' : 'Cancel booking'}
@@ -390,6 +449,54 @@ export default function BookingsPage() {
             </>
           );
         })()}
+      </Dialog>
+
+      {/* Change dates or room */}
+      <Dialog open={!!editing} onClose={() => setEditing(null)} labelledBy="edit-booking-title" dismissible={!saving} className="p-6 md:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        {editing && (
+          <>
+            <div className="flex items-center justify-between mb-6">
+              <h2 id="edit-booking-title" className="text-2xl font-bold">Change booking</h2>
+              <button onClick={() => setEditing(null)} aria-label="Close" className="text-ink-muted hover:text-ink rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"><X className="w-5 h-5" aria-hidden="true" /></button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-ink-muted">{editing.guest?.name}, room {editing.room?.roomNumber}, {stay(editing)}</p>
+              <div className="grid grid-cols-2 gap-4">
+                {editing.status === 'checked_in' ? (
+                  <Input label="Check-in" value={format(new Date(editing.checkInDate), 'd MMM yyyy')} readOnly disabled />
+                ) : (
+                  <DatePicker
+                    label="Check-in"
+                    required
+                    value={editForm.checkInDate}
+                    onChange={(v) => setEditForm({ ...editForm, checkInDate: v, checkOutDate: editForm.checkOutDate > v ? editForm.checkOutDate : dayAfter(v) ?? '' })}
+                  />
+                )}
+                <DatePicker label="Check-out" required min={dayAfter(editForm.checkInDate)} value={editForm.checkOutDate} onChange={(v) => setEditForm({ ...editForm, checkOutDate: v })} />
+              </div>
+              <Select
+                label="Room"
+                value={editForm.roomId}
+                onChange={(e) => setEditForm({ ...editForm, roomId: e.target.value })}
+                options={editRooms.map(r => ({ value: r.id, label: `Room ${r.roomNumber} · ${r.roomType.name} · ${formatCurrency(Number(r.roomType.basePrice))}/night` }))}
+              />
+              <Input label="Number of guests" type="number" inputMode="numeric" min={1} value={editForm.numGuests} onChange={(e) => setEditForm({ ...editForm, numGuests: e.target.value })} />
+
+              <p className="rounded-xl bg-stone-50 border border-stone-200 px-4 py-3 text-sm text-ink-muted">
+                {editNights > 0 ? `${editNights} ${editNights === 1 ? 'night' : 'nights'}. ` : ''}
+                The price and the bill are updated when you save. The same kind of room keeps the nightly rate that was booked; a different kind of room is charged at its own rate.
+                {editing.status === 'checked_in' && ' The guest has arrived, so the check-in date stays as it is.'}
+              </p>
+
+              {editError && <p role="alert" className="rounded-lg bg-terra-pale px-4 py-3 text-sm text-terra">{editError}</p>}
+
+              <div className="flex gap-3 pt-2">
+                <Button variant="ghost" className="flex-1" onClick={() => setEditing(null)} disabled={saving}>Keep as it is</Button>
+                <Button className="flex-1" onClick={handleEditBooking} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</Button>
+              </div>
+            </div>
+          </>
+        )}
       </Dialog>
 
       {/* New booking */}

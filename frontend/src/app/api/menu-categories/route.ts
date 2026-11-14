@@ -5,9 +5,9 @@ import { db } from '@/db';
 import { menuCategories } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { assertUuid, badRequest, handleError, notFound, parseJson } from '@/lib/http';
-import { firstOutlet } from '@/lib/tenant-scope';
+import { firstOutlet, ownedOutlet } from '@/lib/tenant-scope';
 
-const createSchema = z.object({ name: z.string().trim().min(1).max(80) });
+const createSchema = z.object({ name: z.string().trim().min(1).max(80), outletId: z.string().uuid().optional() });
 
 export async function GET() {
   try {
@@ -25,9 +25,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const { tenantId } = await requireTenant(ROLES.manage);
-    const { name } = await parseJson(request, createSchema);
+    const { name, outletId } = await parseJson(request, createSchema);
 
-    const outlet = await firstOutlet(tenantId);
+    const outlet = outletId ? await ownedOutlet(tenantId, outletId) : await firstOutlet(tenantId);
     if (!outlet) throw badRequest('No outlet found. Create a restaurant outlet first.');
 
     const [category] = await db.insert(menuCategories).values({ tenantId, outletId: outlet.id, name }).returning();

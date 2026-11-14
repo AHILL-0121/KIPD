@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { HttpError, handleError, parseJson } from '@/lib/http';
 import { sendEmail } from '@/lib/email';
+import { enforceRateLimit } from '@/lib/rate-limit';
 
 const schema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -16,10 +17,12 @@ const esc = (v: string) =>
 /**
  * Public "request access" form. Sends the request to CONTACT_ADMIN_EMAIL.
  * Before this, the message was only printed to the server log and then discarded while the visitor was told it was sent.
- * TODO: rate limit this route (checklist section 1). It is public.
+ * Open to signed-out visitors, so it is rate limited per caller: 3 requests in 10 minutes, 10 in a day.
  */
 export async function POST(request: NextRequest) {
   try {
+    await enforceRateLimit(request, 'contact-admin', 3, 600);
+    await enforceRateLimit(request, 'contact-admin-day', 10, 86400);
     const { name, email, company, message } = await parseJson(request, schema);
 
     const to = process.env.CONTACT_ADMIN_EMAIL;
