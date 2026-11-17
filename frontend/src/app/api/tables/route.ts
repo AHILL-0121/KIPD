@@ -9,9 +9,23 @@ import { firstOutlet, ownedOutlet, ownedTable } from '@/lib/tenant-scope';
 
 const tableNumber = z.coerce.string().trim().min(1).max(20);
 const capacity = z.coerce.number().int().min(1).max(100);
+const section = z.string().trim().max(50).nullish();
+const tags = z.array(z.string().trim().max(30)).nullish();
 
-const createSchema = z.object({ tableNumber, capacity: capacity.optional().default(4), outletId: z.string().uuid().optional() });
-const patchSchema = z.object({ tableId: z.string().uuid(), tableNumber: tableNumber.optional(), capacity: capacity.optional() });
+const createSchema = z.object({
+  tableNumber,
+  capacity: capacity.optional().default(4),
+  section: section.optional(),
+  tags: tags.optional(),
+  outletId: z.string().uuid().optional(),
+});
+const patchSchema = z.object({
+  tableId: z.string().uuid(),
+  tableNumber: tableNumber.optional(),
+  capacity: capacity.optional(),
+  section: section.optional(),
+  tags: tags.optional(),
+});
 
 export async function GET() {
   try {
@@ -43,6 +57,8 @@ export async function POST(request: NextRequest) {
       outletId: outlet.id,
       tableNumber: body.tableNumber,
       capacity: body.capacity,
+      section: body.section ? body.section.trim() : null,
+      tags: body.tags ?? [],
       qrCode: `/menu/${outlet.slug}/${id}`,
     }).returning();
 
@@ -61,6 +77,8 @@ export async function PATCH(request: NextRequest) {
     const updates: Partial<typeof tables.$inferInsert> = {};
     if (body.tableNumber !== undefined) updates.tableNumber = body.tableNumber;
     if (body.capacity !== undefined) updates.capacity = body.capacity;
+    if (body.section !== undefined) updates.section = body.section ? body.section.trim() : null;
+    if (body.tags !== undefined) updates.tags = body.tags ?? [];
     if (Object.keys(updates).length === 0) throw badRequest('Nothing to update');
 
     const [updated] = await db.update(tables)

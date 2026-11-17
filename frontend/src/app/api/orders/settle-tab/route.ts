@@ -9,8 +9,11 @@ import { broadcastOrderUpdate } from '@/lib/realtime';
 import { ownedTable } from '@/lib/tenant-scope';
 
 const schema = z.object({
-  tableId: z.string().uuid(),
+  tableId: z.string().uuid().optional(),
+  orderId: z.string().uuid().optional(),
   paymentMethod: z.enum(['cash', 'upi']).optional(),
+}).refine(data => data.tableId || data.orderId, {
+  message: 'Either tableId or orderId is required',
 });
 
 const GST_HALF = 0.025; // 2.5% CGST + 2.5% SGST. Hard-coded for now (checklist section 7).
@@ -19,16 +22,26 @@ export async function POST(request: NextRequest) {
   try {
     const context = await requireTenant(ROLES.settleTab);
     const { tenantId } = context;
-    const { tableId } = await parseJson(request, schema);
+    const body = await parseJson(request, schema);
 
-    // The table must belong to this tenant. Everything below hangs off it.
-    const table = await ownedTable(tenantId, tableId);
+    let openOrders: Array<typeof orders.$inferSelect & { orderItems: Array<{ price: string; quantity: number; menuItem?: { name: string } | null }> }> = [];
 
-    const openOrders = await db.query.orders.findMany({
-      where: and(eq(orders.tenantId, tenantId), eq(orders.tableId, table.id), notInArray(orders.status, ['cancelled', 'closed'])),
-      with: { orderItems: { with: { menuItem: true } } },
-    });
-    if (openOrders.length === 0) throw badRequest('No active tickets on this table to settle.');
+    if (body.tableId) {
+      // The table must belong to this tenant. Everything below hangs off it.
+      const table = await ownedTable(tenantId, body.tableId);
+      openOrders = await db.query.orders.findMany({
+        where: and(eq(orders.tenantId, tenantId), eq(orders.tableId, table.id), notInArray(orders.status, ['cancelled', 'closed'])),
+        with: { orderItems: { with: { menuItem: true } } },
+      }) as typeof openOrders;
+      if (openOrders.length === 0) throw badRequest('No active tickets on this table to settle.');
+    } else if (body.orderId) {
+      const order = await db.query.orders.findFirst({
+        where: and(eq(orders.tenantId, tenantId), eq(orders.id, body.orderId), notInArray(orders.status, ['cancelled', 'closed'])),
+        with: { orderItems: { with: { menuItem: true } } },
+      });
+      if (!order) throw badRequest('Order not found or already settled.');
+      openOrders = [order] as typeof openOrders;
+    }
 
     // Recalculate from line items rather than trusting stored order totals.
     let subtotal = 0;

@@ -290,10 +290,10 @@ export default function DashboardPage() {
                     <div key={order.id ?? index} className="flex items-center justify-between gap-3 p-3 bg-cream rounded-xl">
                       <div className="min-w-0">
                         <div className="font-medium text-ink">
-                          {order.tableId ? `Table ${order.table?.tableNumber}` : `Room ${order.room?.roomNumber}`}
+                          {order.type === 'take_away' ? 'Takeaway' : order.tableId ? `Table ${order.table?.tableNumber}` : `Room ${order.room?.roomNumber}`}
                         </div>
                         <div className="text-sm text-ink-muted">
-                          {order.type === 'room_service' ? 'Room service' : 'Dine-in'} • {formatCurrency(order.totalAmount)}
+                          {order.type === 'take_away' ? 'Takeaway' : order.type === 'room_service' ? 'Room service' : 'Dine-in'} • {formatCurrency(order.totalAmount)}
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">

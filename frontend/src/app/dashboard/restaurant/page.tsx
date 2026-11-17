@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { LoadingState } from '@/components/ui/loading-state';
-import { Plus, UtensilsCrossed, Coffee, Edit, Eye, EyeOff, Trash2, X, QrCode, Users, Copy, Check } from 'lucide-react';
+import { Plus, UtensilsCrossed, Coffee, Edit, Eye, EyeOff, Trash2, X, QrCode, Users, Copy, Check, Search } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 import { confirmDialog } from '@/components/ui/confirm';
 import { formatCurrency } from '@/lib/currency';
@@ -36,6 +36,8 @@ interface Table {
   id: string;
   tableNumber: string;
   capacity: number;
+  section?: string | null;
+  tags?: string[] | null;
   qrCode?: string;
   outlet?: { name: string; slug: string };
 }
@@ -65,8 +67,14 @@ export default function RestaurantPage() {
   const [tablesList, setTablesList] = useState<Table[]>([]);
   const [showAddTable, setShowAddTable] = useState(false);
   const [showEditTable, setShowEditTable] = useState<Table | null>(null);
-  const [tableForm, setTableForm] = useState({ tableNumber: '', capacity: '4' });
+  const [tableForm, setTableForm] = useState({ tableNumber: '', capacity: '4', section: '', tags: '' });
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Table filtering state
+  const [tableSearch, setTableSearch] = useState('');
+  const [tableSectionFilter, setTableSectionFilter] = useState('all');
+  const [tableCapacityFilter, setTableCapacityFilter] = useState('all');
+  const [tableTagFilter, setTableTagFilter] = useState('all');
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -243,17 +251,26 @@ export default function RestaurantPage() {
     }
     setSaving(true);
     try {
+      const parsedTags = tableForm.tags
+        .split(',')
+        .map(t => t.trim())
+        .filter(Boolean);
       const res = await fetch('/api/tables', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tableNumber: tableForm.tableNumber, capacity: parseInt(tableForm.capacity) || 4 }),
+        body: JSON.stringify({
+          tableNumber: tableForm.tableNumber,
+          capacity: parseInt(tableForm.capacity) || 4,
+          section: tableForm.section.trim() || undefined,
+          tags: parsedTags,
+        }),
       });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || 'Failed');
       }
       setShowAddTable(false);
-      setTableForm({ tableNumber: '', capacity: '4' });
+      setTableForm({ tableNumber: '', capacity: '4', section: '', tags: '' });
       fetchTables();
       showToast('Table created', 'success');
     } catch (e: any) {
@@ -267,12 +284,23 @@ export default function RestaurantPage() {
     if (!showEditTable) return;
     setSaving(true);
     try {
+      const parsedTags = tableForm.tags
+        .split(',')
+        .map(t => t.trim())
+        .filter(Boolean);
       await fetch('/api/tables', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tableId: showEditTable.id, tableNumber: tableForm.tableNumber, capacity: parseInt(tableForm.capacity) || 4 }),
+        body: JSON.stringify({
+          tableId: showEditTable.id,
+          tableNumber: tableForm.tableNumber,
+          capacity: parseInt(tableForm.capacity) || 4,
+          section: tableForm.section.trim() || null,
+          tags: parsedTags,
+        }),
       });
       setShowEditTable(null);
+      setTableForm({ tableNumber: '', capacity: '4', section: '', tags: '' });
       fetchTables();
       showToast('Table updated', 'success');
     } catch {
@@ -304,6 +332,30 @@ export default function RestaurantPage() {
     const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || item.categoryId === categoryFilter;
     return matchesSearch && matchesCategory;
+  });
+
+  const availableTableSections = Array.from(
+    new Set(tablesList.map(t => t.section).filter((s): s is string => Boolean(s?.trim())))
+  );
+
+  const availableTableTags = Array.from(
+    new Set(tablesList.flatMap(t => t.tags || []).filter((tg): tg is string => Boolean(tg?.trim())))
+  );
+
+  const filteredTables = tablesList.filter(t => {
+    if (tableSearch.trim()) {
+      const q = tableSearch.toLowerCase().trim();
+      const numMatch = t.tableNumber.toLowerCase().includes(q);
+      const secMatch = t.section?.toLowerCase().includes(q) ?? false;
+      const tagMatch = t.tags?.some(tag => tag.toLowerCase().includes(q)) ?? false;
+      if (!numMatch && !secMatch && !tagMatch) return false;
+    }
+    if (tableSectionFilter !== 'all' && t.section !== tableSectionFilter) return false;
+    if (tableCapacityFilter === '2' && t.capacity !== 2) return false;
+    if (tableCapacityFilter === '4' && t.capacity !== 4) return false;
+    if (tableCapacityFilter === '6+' && t.capacity < 6) return false;
+    if (tableTagFilter !== 'all' && !(t.tags || []).includes(tableTagFilter)) return false;
+    return true;
   });
 
   if (loading) return <LoadingState />;
@@ -338,7 +390,7 @@ export default function RestaurantPage() {
           )}
           {activeTab === 'tables' && (
             <Button onClick={() => {
-              setTableForm({ tableNumber: '', capacity: '4' });
+              setTableForm({ tableNumber: '', capacity: '4', section: '', tags: '' });
               setShowAddTable(true);
             }}>
               <Plus className="w-4 h-4" />
@@ -470,60 +522,204 @@ export default function RestaurantPage() {
               description="Add tables to enable QR code ordering for dine-in guests."
               actionLabel="Add First Table"
               onAction={() => {
-                setTableForm({ tableNumber: '', capacity: '4' });
+                setTableForm({ tableNumber: '', capacity: '4', section: '', tags: '' });
                 setShowAddTable(true);
               }}
             />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {tablesList.map((table) => (
-                <Card key={table.id} hover className="overflow-hidden">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-lg text-ink">Table {table.tableNumber}</h3>
-                      <div className="flex items-center gap-2 mt-1 text-sm text-ink-muted">
-                        <Users className="w-3.5 h-3.5" />
-                        <span>Seats {table.capacity}</span>
-                      </div>
-                    </div>
-                    <Badge variant="sage" className="text-xs">
-                      <QrCode className="w-3 h-3 mr-1" />
-                      QR Ready
-                    </Badge>
+            <div className="space-y-6">
+              {/* Tables Filter Bar */}
+              <div className="space-y-3 bg-stone-50/70 p-4 rounded-2xl border border-stone-200">
+                {/* Search row */}
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
+                    <input
+                      type="text"
+                      placeholder="Search table #, section, or tag..."
+                      value={tableSearch}
+                      onChange={(e) => setTableSearch(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-stone-200 rounded-xl text-ink placeholder:text-ink-muted focus:outline-none focus:border-amber"
+                    />
+                    {tableSearch && (
+                      <button
+                        onClick={() => setTableSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
+                        aria-label="Clear search"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
+                  <span className="text-xs text-ink-muted self-end sm:self-center font-medium">
+                    Showing {filteredTables.length} of {tablesList.length} tables
+                  </span>
+                </div>
 
-                  {table.qrCode && (
-                    <div className="bg-stone-50 rounded-lg p-3 mb-4">
-                      <p className="text-xs text-ink-muted mb-1">QR Menu Link</p>
-                      <p className="text-sm text-ink font-mono truncate">{table.qrCode}</p>
-                    </div>
+                {/* Section & Capacity & Tag Filters */}
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-200/60 text-xs">
+                  <span className="font-semibold text-ink-muted mr-1">Section:</span>
+                  <button
+                    type="button"
+                    onClick={() => setTableSectionFilter('all')}
+                    className={`px-2.5 py-1 rounded-md transition-colors ${
+                      tableSectionFilter === 'all'
+                        ? 'bg-ink text-white font-semibold'
+                        : 'bg-white text-ink-soft border border-stone-200 hover:bg-stone-100'
+                    }`}
+                  >
+                    All sections
+                  </button>
+                  {availableTableSections.map((sec) => (
+                    <button
+                      key={sec}
+                      type="button"
+                      onClick={() => setTableSectionFilter(sec === tableSectionFilter ? 'all' : sec)}
+                      className={`px-2.5 py-1 rounded-md transition-colors ${
+                        tableSectionFilter === sec
+                          ? 'bg-amber text-white font-semibold'
+                          : 'bg-white text-ink-soft border border-stone-200 hover:bg-stone-100'
+                      }`}
+                    >
+                      {sec}
+                    </button>
+                  ))}
+
+                  <span className="font-semibold text-ink-muted ml-3 mr-1">Seats:</span>
+                  {['all', '2', '4', '6+'].map((cap) => (
+                    <button
+                      key={cap}
+                      type="button"
+                      onClick={() => setTableCapacityFilter(cap)}
+                      className={`px-2.5 py-1 rounded-md transition-colors ${
+                        tableCapacityFilter === cap
+                          ? 'bg-ink text-white font-semibold'
+                          : 'bg-white text-ink-soft border border-stone-200 hover:bg-stone-100'
+                      }`}
+                    >
+                      {cap === 'all' ? 'Any size' : cap === '6+' ? '6+ seats' : `${cap} seats`}
+                    </button>
+                  ))}
+
+                  {availableTableTags.length > 0 && (
+                    <>
+                      <span className="font-semibold text-ink-muted ml-3 mr-1">Tag:</span>
+                      <button
+                        type="button"
+                        onClick={() => setTableTagFilter('all')}
+                        className={`px-2.5 py-1 rounded-md transition-colors ${
+                          tableTagFilter === 'all'
+                            ? 'bg-ink text-white font-semibold'
+                            : 'bg-white text-ink-soft border border-stone-200 hover:bg-stone-100'
+                        }`}
+                      >
+                        All
+                      </button>
+                      {availableTableTags.map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setTableTagFilter(tag === tableTagFilter ? 'all' : tag)}
+                          className={`px-2.5 py-1 rounded-md transition-colors ${
+                            tableTagFilter === tag
+                              ? 'bg-amber text-white font-semibold'
+                              : 'bg-white text-ink-soft border border-stone-200 hover:bg-stone-100'
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </>
                   )}
+                </div>
+              </div>
 
-                  <div className="flex gap-2 pt-3 border-t border-stone-200">
-                    {table.qrCode && (
-                      <Link href="/dashboard/restaurant/qr" className="flex-1">
-                        <Button size="sm" variant="ghost" className="w-full"><QrCode className="w-4 h-4" /> Print QR</Button>
-                      </Link>
-                    )}
-                    {table.qrCode && (
-                      <Button size="sm" variant="ghost" className="flex-1" onClick={() => copyQrLink(table)}>
-                        {copiedId === table.id ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                        {copiedId === table.id ? 'Copied!' : 'Copy Link'}
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" className="flex-1" onClick={() => {
-                      setShowEditTable(table);
-                      setTableForm({ tableNumber: table.tableNumber, capacity: String(table.capacity) });
-                    }}>
-                      <Edit className="w-4 h-4" />
-                      Edit
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-red-500" onClick={() => handleDeleteTable(table.id)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </Card>
-              ))}
+              {filteredTables.length === 0 ? (
+                <EmptyState
+                  title="No Matching Tables"
+                  description="Try adjusting your filters or search query."
+                  actionLabel="Reset filters"
+                  onAction={() => {
+                    setTableSearch('');
+                    setTableSectionFilter('all');
+                    setTableCapacityFilter('all');
+                    setTableTagFilter('all');
+                  }}
+                />
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredTables.map((table) => (
+                    <Card key={table.id} hover className="overflow-hidden">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-semibold text-lg text-ink">Table {table.tableNumber}</h3>
+                            {table.section && (
+                              <Badge variant="stone" className="text-xs font-semibold">
+                                {table.section}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 text-sm text-ink-muted">
+                            <Users className="w-3.5 h-3.5" />
+                            <span>Seats {table.capacity}</span>
+                          </div>
+                        </div>
+                        <Badge variant="sage" className="text-xs shrink-0">
+                          <QrCode className="w-3 h-3 mr-1" />
+                          QR Ready
+                        </Badge>
+                      </div>
+
+                      {table.tags && table.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                          {table.tags.map((tag, idx) => (
+                            <span key={idx} className="text-[11px] px-2 py-0.5 rounded-md bg-stone-100 text-ink-soft font-medium">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {table.qrCode && (
+                        <div className="bg-stone-50 rounded-lg p-3 mb-4">
+                          <p className="text-xs text-ink-muted mb-1">QR Menu Link</p>
+                          <p className="text-sm text-ink font-mono truncate">{table.qrCode}</p>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 pt-3 border-t border-stone-200">
+                        {table.qrCode && (
+                          <Link href="/dashboard/restaurant/qr" className="flex-1">
+                            <Button size="sm" variant="ghost" className="w-full"><QrCode className="w-4 h-4" /> Print QR</Button>
+                          </Link>
+                        )}
+                        {table.qrCode && (
+                          <Button size="sm" variant="ghost" className="flex-1" onClick={() => copyQrLink(table)}>
+                            {copiedId === table.id ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                            {copiedId === table.id ? 'Copied!' : 'Copy Link'}
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" className="flex-1" onClick={() => {
+                          setShowEditTable(table);
+                          setTableForm({
+                            tableNumber: table.tableNumber,
+                            capacity: String(table.capacity),
+                            section: table.section || '',
+                            tags: (table.tags || []).join(', '),
+                          });
+                        }}>
+                          <Edit className="w-4 h-4" />
+                          Edit
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-red-500" onClick={() => handleDeleteTable(table.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </>
@@ -628,6 +824,8 @@ export default function RestaurantPage() {
               <div className="space-y-4">
                 <Input label="Table Number" placeholder="1, 2, A1..." value={tableForm.tableNumber} onChange={(e) => setTableForm({ ...tableForm, tableNumber: e.target.value })} />
                 <Input label="Seating Capacity" type="number" placeholder="4" value={tableForm.capacity} onChange={(e) => setTableForm({ ...tableForm, capacity: e.target.value })} />
+                <Input label="Section / Area (optional)" placeholder="e.g. AC Dine-in, Outdoor Patio, Main Hall" value={tableForm.section} onChange={(e) => setTableForm({ ...tableForm, section: e.target.value })} />
+                <Input label="Tags (comma-separated, optional)" placeholder="e.g. Window, Booth, Garden View" value={tableForm.tags} onChange={(e) => setTableForm({ ...tableForm, tags: e.target.value })} />
                 <p className="text-xs text-ink-muted">A QR code link will be automatically generated for this table, allowing guests to scan and order directly.</p>
                 <div className="flex gap-3 pt-4">
                   <Button variant="ghost" className="flex-1" onClick={() => setShowAddTable(false)} disabled={saving}>Cancel</Button>
@@ -651,6 +849,8 @@ export default function RestaurantPage() {
               <div className="space-y-4">
                 <Input label="Table Number" value={tableForm.tableNumber} onChange={(e) => setTableForm({ ...tableForm, tableNumber: e.target.value })} />
                 <Input label="Seating Capacity" type="number" value={tableForm.capacity} onChange={(e) => setTableForm({ ...tableForm, capacity: e.target.value })} />
+                <Input label="Section / Area (optional)" placeholder="e.g. AC Dine-in, Outdoor Patio, Main Hall" value={tableForm.section} onChange={(e) => setTableForm({ ...tableForm, section: e.target.value })} />
+                <Input label="Tags (comma-separated, optional)" placeholder="e.g. Window, Booth, Garden View" value={tableForm.tags} onChange={(e) => setTableForm({ ...tableForm, tags: e.target.value })} />
                 <div className="flex gap-3 pt-4">
                   <Button variant="ghost" className="flex-1" onClick={() => setShowEditTable(null)} disabled={saving}>Cancel</Button>
                   <Button variant="terra" className="flex-1" onClick={handleEditTable} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</Button>

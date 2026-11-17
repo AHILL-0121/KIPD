@@ -11,7 +11,7 @@ export type Role = 'owner' | 'manager' | 'front_desk' | 'waiter' | 'kitchen';
 export const ROLES = {
   manage: ['owner', 'manager'] as Role[],
   frontDesk: ['owner', 'manager', 'front_desk'] as Role[],
-  orders: ['owner', 'manager', 'waiter'] as Role[],
+  orders: ['owner', 'manager', 'waiter', 'front_desk'] as Role[],
   kitchen: ['owner', 'manager', 'waiter', 'kitchen'] as Role[],
   // Taking money and seeing payment settings. Waiters are not included (decided 2026-11-14).
   billing: ['owner', 'manager', 'front_desk'] as Role[],
