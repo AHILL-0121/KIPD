@@ -186,7 +186,7 @@ export default function OrdersPage() {
       if (['closed', 'cancelled'].includes(o.status)) return; // Only ignore physically paid/settled tickets
       if (!o.tableId) return;
 
-      const table = tableOptions.find(t => t.id === o.tableId);
+      const table = tableOptions.find(t => t.id === o.tableId) || (o.table ? { id: o.tableId, tableNumber: o.table.tableNumber, capacity: 4 } : undefined);
       if (!table) return;
 
       if (!tabs[o.tableId]) {
@@ -629,7 +629,12 @@ export default function OrdersPage() {
                     type="button"
                     onClick={() => {
                       if (isOccupied && tab) {
-                        setViewingTableId(table.id);
+                        const el = document.getElementById(`table-tab-${table.id}`);
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        } else {
+                          setViewingTableId(table.id);
+                        }
                       } else {
                         openNewOrder(table.id);
                       }
@@ -703,6 +708,83 @@ export default function OrdersPage() {
                   </button>
                 );
               })}
+            </div>
+          )}
+
+          {/* Active Table Tabs (Running Sessions) */}
+          {activeTabs.length > 0 && (
+            <div className="pt-6 border-t border-stone-200/80 space-y-4">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-amber-deep" aria-hidden="true" />
+                <h3 className="text-lg font-bold text-ink">Active Table Tabs</h3>
+                <span className="text-xs font-semibold bg-stone-200 text-ink-muted rounded-full px-2 py-0.5">
+                  {activeTabs.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {activeTabs.map((tab) => (
+                  <div key={tab.table.id} id={`table-tab-${tab.table.id}`}>
+                    <Card hover={false}>
+                    <div className="flex items-center justify-between mb-4 border-b border-stone-100 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div aria-hidden="true" className="h-12 w-12 rounded-full bg-amber-pale text-amber-deep flex items-center justify-center font-bold text-xl">
+                          {tab.table.tableNumber}
+                        </div>
+                        <div>
+                          <h2 className="text-xl font-bold text-ink">Table {tab.table.tableNumber}</h2>
+                          <p className="text-sm text-ink-muted">{tab.tickets.length} {tab.tickets.length === 1 ? 'ticket' : 'tickets'} sent to the kitchen</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-medium text-ink-muted">Tab total</div>
+                        <div className="text-2xl font-bold text-ink">{formatCurrency(tab.total)}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 mb-4">
+                      {tab.tickets.map((ticket, i) => (
+                        <div key={ticket.id} className="bg-stone-50 rounded-xl p-4 border border-stone-200">
+                          <div className="flex items-center justify-between mb-3 border-b border-stone-200 pb-2">
+                            <span className="text-sm font-semibold text-ink-soft">
+                              Ticket {i + 1} <span className="font-normal text-ink-muted">· {formatDistanceToNow(new Date(ticket.createdAt), { addSuffix: true })}</span>
+                              {ticket.source === 'guest' && <span className="font-normal text-amber-deep"> · Ordered by guest (QR)</span>}
+                            </span>
+                            <Badge variant={orderStatus(ticket.status).tone} dot>
+                              {orderStatus(ticket.status).label}
+                            </Badge>
+                          </div>
+                          <div className="space-y-2">
+                            {(ticket.orderItems || []).map((item, idx) => (
+                              <div key={idx} className="flex justify-between text-sm">
+                                <span className="text-ink">
+                                  <span className="font-semibold text-amber-deep mr-2">{item.quantity}×</span>
+                                  {item.menuItem?.name || 'Item'}
+                                </span>
+                                <span className="text-ink-muted">{formatCurrency(Number(item.price) * item.quantity)}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {ticket.status === 'ready' && (
+                            <Button size="sm" variant="sage" className="w-full mt-3" onClick={() => updateOrderStatus(ticket.id, 'served')}>
+                              Mark as served
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-3 pt-4 border-t border-stone-200">
+                      <Button variant="ghost" className="flex-1 bg-stone-100 hover:bg-stone-200" onClick={() => openNewOrder(tab.table.id)}>
+                        <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Add more items
+                      </Button>
+                      <Button className="flex-1" onClick={() => setCheckoutTable(tab)}>
+                        <Receipt className="w-4 h-4 mr-2" aria-hidden="true" /> Settle bill
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
+              ))}
+              </div>
             </div>
           )}
         </div>
@@ -920,11 +1002,7 @@ export default function OrdersPage() {
               <div className="flex justify-between items-center mb-6 shrink-0">
                 <div>
                   <h2 id="send-title" className="text-2xl font-bold text-ink">
-                    {orderMode === 'take_away'
-                      ? 'New take-away'
-                      : selectedTableId && activeTabs.some(t => t.table.id === selectedTableId)
-                        ? `Add to Table ${tableOptions.find(t => t.id === selectedTableId)?.tableNumber ?? ''}`
-                        : 'Seat new table'}
+                    Send to kitchen
                   </h2>
                   <p className="text-sm text-ink-muted">
                     {orderMode === 'take_away'

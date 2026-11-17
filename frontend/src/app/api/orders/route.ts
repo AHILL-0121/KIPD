@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { orderItems, orders } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
-import { badRequest, handleError, parseJson } from '@/lib/http';
+import { badRequest, forbidden, handleError, parseJson } from '@/lib/http';
 import { publishOrder } from '@/lib/order-events';
 import { ownedMenuItems, ownedOutlet, ownedRoom, ownedTable } from '@/lib/tenant-scope';
 
@@ -27,8 +27,14 @@ const createSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.orders);
+    const session = await requireTenant([...ROLES.orders, 'front_desk']);
     const body = await parseJson(request, createSchema);
+
+    // Front desk is only permitted to create take-away orders, not dine-in or table orders
+    if (session.role === 'front_desk' && body.type !== 'take_away') {
+      throw forbidden();
+    }
+    const tenantId = session.tenantId;
 
     // 1. Every item must be on this tenant's menu. Prices come from the DB.
     const ids = [...new Set(body.items.map((i) => i.menuItemId))];
@@ -100,7 +106,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const { tenantId } = await requireTenant(ROLES.orders);
+    const { tenantId } = await requireTenant([...ROLES.orders, 'front_desk']);
     const all = await db.query.orders.findMany({
       where: and(eq(orders.tenantId, tenantId), notInArray(orders.status, ['closed', 'cancelled'])),
       with: { orderItems: { with: { menuItem: true } }, table: true },
