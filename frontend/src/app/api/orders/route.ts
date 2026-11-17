@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { orderItems, orders } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
-import { badRequest, handleError, parseJson } from '@/lib/http';
+import { badRequest, forbidden, handleError, parseJson } from '@/lib/http';
 import { publishOrder } from '@/lib/order-events';
 import { ownedMenuItems, ownedOutlet, ownedRoom, ownedTable } from '@/lib/tenant-scope';
 
@@ -12,11 +12,12 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const createSchema = z.object({
-  type: z.enum(['dine_in', 'room_service']).optional(),
+  type: z.enum(['dine_in', 'room_service', 'take_away']).optional(),
   tableId: z.string().uuid().nullish(),
   roomId: z.string().uuid().nullish(),
   outletId: z.string().uuid().nullish(),
   specialInstructions: z.string().max(500).nullish(),
+  customerName: z.string().max(100).nullish(), // optional label for take-away orders
   items: z.array(z.object({
     menuItemId: z.string().uuid(),
     quantity: z.number().int().min(1).max(99),
@@ -26,17 +27,23 @@ const createSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.orders);
+    const session = await requireTenant([...ROLES.orders, 'front_desk']);
     const body = await parseJson(request, createSchema);
+
+    // Front desk is only permitted to create take-away orders, not dine-in or table orders
+    if (session.role === 'front_desk' && body.type !== 'take_away') {
+      throw forbidden();
+    }
+    const tenantId = session.tenantId;
 
     // 1. Every item must be on this tenant's menu. Prices come from the DB.
     const ids = [...new Set(body.items.map((i) => i.menuItemId))];
     const found = await ownedMenuItems(tenantId, ids);
     const byId = new Map(found.map((m) => [m.id, m]));
 
-    // 2. Where does the order go? A table fixes the outlet. Without one (room service), it is the outlet the
-    //    dishes are from, so a business with two kitchens sends the ticket to the right one. An outlet named in
-    //    the request must agree.
+    // 2. Where does the order go? A table fixes the outlet. Without one (room service / take-away),
+    //    it is the outlet the dishes are from, so a business with two kitchens sends the ticket to
+    //    the right one. An outlet named in the request must agree.
     let outletId: string | undefined;
     if (body.tableId) outletId = (await ownedTable(tenantId, body.tableId)).outletId;
     else if (body.outletId) outletId = (await ownedOutlet(tenantId, body.outletId)).id;
@@ -54,7 +61,19 @@ export async function POST(request: NextRequest) {
     // 4. Total in whole paise so floats can't drift.
     const paise = body.items.reduce((sum, i) => sum + Math.round(Number(byId.get(i.menuItemId)!.price) * 100) * i.quantity, 0);
 
-    // 5. Order and its items are written together or not at all.
+    // 5. Determine order type. take_away needs neither a table nor a room.
+    const resolvedType: 'dine_in' | 'room_service' | 'take_away' =
+      body.type === 'take_away'
+        ? 'take_away'
+        : body.type ?? (body.tableId ? 'dine_in' : 'room_service');
+
+    // 6. Append customer name to special instructions for take-away orders if provided.
+    const instructions = [
+      body.customerName ? `Customer: ${body.customerName}` : '',
+      body.specialInstructions ?? '',
+    ].filter(Boolean).join(' · ') || null;
+
+    // 7. Order and its items are written together or not at all.
     const orderId = crypto.randomUUID();
     await db.batch([
       db.insert(orders).values({
@@ -63,10 +82,10 @@ export async function POST(request: NextRequest) {
         outletId,
         tableId: body.tableId ?? null,
         roomId: body.roomId ?? null,
-        type: body.type ?? (body.tableId ? 'dine_in' : 'room_service'),
+        type: resolvedType,
         status: 'new',
         totalAmount: (paise / 100).toFixed(2),
-        specialInstructions: body.specialInstructions ?? null,
+        specialInstructions: instructions,
       }),
       db.insert(orderItems).values(body.items.map((i) => ({
         tenantId,
@@ -87,7 +106,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const { tenantId } = await requireTenant(ROLES.kitchen);
+    const { tenantId } = await requireTenant([...ROLES.orders, 'front_desk']);
     const all = await db.query.orders.findMany({
       where: and(eq(orders.tenantId, tenantId), notInArray(orders.status, ['closed', 'cancelled'])),
       with: { orderItems: { with: { menuItem: true } }, table: true },

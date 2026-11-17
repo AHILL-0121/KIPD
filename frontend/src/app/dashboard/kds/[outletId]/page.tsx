@@ -4,12 +4,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLive } from '@/lib/use-live';
 import { HoldButton } from '@/components/ui/hold-button';
 import { Button } from '@/components/ui/button';
-import { Clock, MapPin, AlertCircle, Volume2, VolumeX, ChefHat } from 'lucide-react';
+import { Clock, MapPin, AlertCircle, Volume2, VolumeX, ChefHat, Package } from 'lucide-react';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 
 interface KDSOrder {
   id: string;
-  type: 'dine_in' | 'room_service';
+  type: 'dine_in' | 'room_service' | 'take_away';
   /** 'guest' when the guest ordered from the QR menu themselves; 'staff' when a waiter entered it */
   source?: 'staff' | 'guest';
   tableNumber?: string;
@@ -83,7 +83,11 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
     try {
       await send(order.id, newStatus);
       if (newStatus === 'ready') {
-        const label = order.type === 'dine_in' ? `Table ${order.tableNumber}` : `Room ${order.roomNumber}`;
+        const label = order.type === 'dine_in'
+          ? `Table ${order.tableNumber}`
+          : order.type === 'take_away'
+            ? 'Takeaway'
+            : `Room ${order.roomNumber}`;
         setUndo({ id: order.id, label });
         if (undoTimer.current) clearTimeout(undoTimer.current);
         undoTimer.current = setTimeout(() => setUndo(null), 8000);
@@ -130,7 +134,11 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
           const minutesAgo = differenceInMinutes(new Date(), new Date(order.createdAt));
           const late = minutesAgo >= 15;
           const timeAgo = formatDistanceToNow(new Date(order.createdAt), { addSuffix: true });
-          const where = order.type === 'dine_in' ? `Table ${order.tableNumber}` : `Room ${order.roomNumber}`;
+          const where = order.type === 'dine_in'
+            ? `Table ${order.tableNumber ?? ''}`
+            : order.type === 'take_away'
+              ? 'Takeaway'
+              : `Room ${order.roomNumber ?? ''}`;
           const isNew = order.status === 'new' || order.status === 'acknowledged';
 
           return (
@@ -142,7 +150,11 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1.5">
-                    <MapPin className="w-5 h-5 text-ink-muted" aria-hidden="true" />
+                    {order.type === 'take_away' ? (
+                      <Package className="w-5 h-5 text-amber-deep" aria-hidden="true" />
+                    ) : (
+                      <MapPin className="w-5 h-5 text-ink-muted" aria-hidden="true" />
+                    )}
                     <h2 className="font-bold text-2xl text-ink">{where}</h2>
                   </div>
                   {order.source === 'guest' && <p className="text-xs font-semibold uppercase tracking-wide text-amber-deep mb-1">Ordered by guest (QR)</p>}

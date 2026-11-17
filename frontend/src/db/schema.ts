@@ -228,6 +228,8 @@ export const tables = pgTable('tables', {
   tableNumber: text('table_number').notNull(),
   qrCode: text('qr_code'),
   capacity: integer('capacity').default(4),
+  section: text('section'), // e.g. 'AC Dine-in', 'Main Hall', 'Outdoor Patio'
+  tags: jsonb('tags').$type<string[]>().default(sql`'[]'::jsonb`), // e.g. ['Window', 'Booth']
   createdAt: tstz('created_at').defaultNow().notNull(),
 }, (t) => [
   unique('tables_tenant_id_uq').on(t.tenantId, t.id),
@@ -244,7 +246,7 @@ export const orders = pgTable('orders', {
   roomId: uuid('room_id'),
   guestId: uuid('guest_id'),
   billId: uuid('bill_id'), // set when the table is settled
-  type: text('type').notNull().default('dine_in'), // dine_in, room_service
+  type: text('type').notNull().default('dine_in'), // dine_in, room_service, take_away
   source: text('source').notNull().default('staff'), // staff (entered by the team) or guest (QR menu)
   // new -> acknowledged -> preparing -> ready -> served -> closed (billed). cancelled at any point.
   status: text('status').notNull().default('new'),
@@ -264,7 +266,7 @@ export const orders = pgTable('orders', {
   index('idx_orders_table').on(t.tableId),
   index('idx_orders_bill').on(t.billId),
   check('orders_status_check', sql`${t.status} in ('new','acknowledged','preparing','ready','served','cancelled','closed')`),
-  check('orders_type_check', sql`${t.type} in ('dine_in','room_service')`),
+  check('orders_type_check', sql`${t.type} in ('dine_in','room_service','take_away')`),
   check('orders_source_check', sql`${t.source} in ('staff','guest')`),
   check('orders_total_check', sql`${t.totalAmount} >= 0`),
 ]);

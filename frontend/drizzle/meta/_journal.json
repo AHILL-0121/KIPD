@@ -64,6 +64,20 @@
       "when": 1794649643780,
       "tag": "0008_razorpay_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794650000000,
+      "tag": "0009_take_away_order_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794651000000,
+      "tag": "0010_table_section_and_tags",
+      "breakpoints": true
     }
   ]
 }
