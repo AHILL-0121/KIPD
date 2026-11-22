@@ -25,7 +25,7 @@ const createSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const { tenantId, timezone } = await requireTenant(ROLES.frontDesk);
+    const { tenantId, timezone } = await requireTenant(ROLES.frontDesk, 'hotel');
     const parsed = await parseJson(request, createSchema);
     const checkInDate = toCheckIn(parsed.checkInDate, timezone);
     const checkOutDate = toCheckOut(parsed.checkOutDate, timezone);
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const { tenantId } = await requireTenant(ROLES.frontDesk);
+    const { tenantId } = await requireTenant(ROLES.frontDesk, 'hotel');
     const all = await db.query.bookings.findMany({
       where: eq(bookings.tenantId, tenantId),
       with: { guest: true, room: { with: { roomType: true } }, bills: true },

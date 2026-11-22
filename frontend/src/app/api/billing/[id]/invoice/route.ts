@@ -32,7 +32,7 @@ function documentOf(bill: Awaited<ReturnType<typeof loadBill>>) {
 /** The issued invoice for a stay bill, with its payments as they stand now. 404 until one has been issued. */
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { tenantId } = await requireTenant(ROLES.frontDesk);
+    const { tenantId } = await requireTenant(ROLES.frontDesk, 'hotel');
     const doc = documentOf(await loadBill(tenantId, params.id));
     if (!doc) throw notFound('Invoice');
     return NextResponse.json(doc);
@@ -48,7 +48,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { tenantId } = await requireTenant(ROLES.frontDesk);
+    const { tenantId } = await requireTenant(ROLES.frontDesk, 'hotel');
     let buyer: BuyerInput = {};
     const raw = await request.text();
     if (raw.trim()) {

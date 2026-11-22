@@ -34,6 +34,9 @@ vi.mock('@clerk/backend', () => ({
       createUser: (args: unknown) => g.__clerkCreateUser!(args),
       updateUser: async () => ({}),
     },
+    invitations: {
+      createInvitation: vi.fn(async (args: unknown) => ({ id: 'inv_test', ...(typeof args === 'object' && args !== null ? args : {}) })),
+    },
   }),
 }));
 

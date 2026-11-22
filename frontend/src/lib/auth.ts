@@ -29,6 +29,20 @@ export interface TenantContext {
   tenantStatus: 'active' | 'suspended' | 'deleted' | 'missing';
   /** IANA time zone of the tenant. Decides what "today" means. */
   timezone: string;
+  /** Which areas the user has access to. Owners and managers always have both. */
+  areas: 'hotel' | 'restaurant' | 'both';
+}
+
+/**
+ * Throws 403 if the user's areas don't include the requested area.
+ * Only applies to front_desk, waiter and kitchen roles — owners and managers always pass.
+ */
+export function requireArea(ctx: TenantContext, area: 'hotel' | 'restaurant'): void {
+  const restricted: Role[] = ['front_desk', 'waiter', 'kitchen'];
+  if (!restricted.includes(ctx.role as Role)) return; // owner/manager: always allowed
+  if (ctx.areas === 'both') return;
+  if (ctx.areas === area) return;
+  throw new HttpError(403, `You do not have access to the ${area} area`);
 }
 
 /** Looks up the tenant row. A stale Clerk profile can point at a tenant that no longer exists. */
@@ -88,14 +102,22 @@ export async function getTenantContext(): Promise<TenantContext | null> {
         isPlatformAdmin: true,
         tenantStatus: 'active',
         timezone: DEFAULT_TZ,
+        areas: 'both',
       };
     } else if (tenantId) {
+      // Owner path: tenantId from Clerk metadata. Always do staff lookup to get real role + areas.
+      const staffRecord = await db.query.staff.findFirst({
+        where: eq(staff.clerkId, userId),
+      });
+      const role = staffRecord?.role ?? 'owner';
+      const areas = (staffRecord?.areas as 'hotel' | 'restaurant' | 'both' | undefined) ?? 'both';
       contextData = {
         tenantId,
         userId,
-        role: 'owner',
-        userName,
+        role,
+        userName: staffRecord?.name || userName,
         isPlatformAdmin: false,
+        areas,
         ...(await tenantStateOf(tenantId)),
       };
     }
@@ -105,7 +127,7 @@ export async function getTenantContext(): Promise<TenantContext | null> {
       return contextData;
     }
 
-    // Get staff record to find tenant and role
+    // Get staff record to find tenant and role (non-owner staff)
     const staffRecord = await db.query.staff.findFirst({
       where: eq(staff.clerkId, userId),
     });
@@ -114,12 +136,13 @@ export async function getTenantContext(): Promise<TenantContext | null> {
       return null;
     }
 
-    const newContext = {
+    const newContext: TenantContext = {
       tenantId: staffRecord.tenantId,
       userId,
       role: staffRecord.role,
       userName: staffRecord.name || userName,
       isPlatformAdmin: false,
+      areas: (staffRecord.areas as 'hotel' | 'restaurant' | 'both' | undefined) ?? 'both',
       ...(await tenantStateOf(staffRecord.tenantId)),
     };
 
@@ -148,12 +171,13 @@ export async function requireTenantContext(): Promise<TenantContext> {
  *   or their role isn't in `allowed` (a status change takes effect within about a minute: roles are cached)
  * The returned `tenantId` is always a non-empty, trusted value from the session.
  */
-export async function requireTenant(allowed?: Role[]): Promise<TenantContext> {
+export async function requireTenant(allowed?: Role[], area?: 'hotel' | 'restaurant'): Promise<TenantContext> {
   const context = await requireTenantContext();
   if (!context.tenantId) throw new HttpError(403, 'No tenant is selected for this account');
   if (context.tenantStatus === 'suspended') throw new HttpError(403, 'This account is suspended. Please contact support.');
   if (context.tenantStatus !== 'active') throw new HttpError(403, 'This account no longer exists. Please contact support.');
   if (allowed && !allowed.includes(context.role as Role)) throw forbidden();
+  if (area) requireArea(context, area);
   return context;
 }
 
@@ -200,6 +224,7 @@ export async function requirePlatformAdmin(): Promise<TenantContext> {
       isPlatformAdmin: true,
       tenantStatus: 'active',
       timezone: DEFAULT_TZ,
+      areas: 'both',
     };
     globalAny.platformAdminCache.set(userId, { data, expiresAt: Date.now() + 60000 });
     return data;

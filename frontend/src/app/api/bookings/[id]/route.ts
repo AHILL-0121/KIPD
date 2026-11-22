@@ -160,7 +160,7 @@ async function editBooking(tenantId: string, timezone: string, booking: typeof b
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { tenantId, timezone } = await requireTenant(ROLES.frontDesk);
+    const { tenantId, timezone } = await requireTenant(ROLES.frontDesk, 'hotel');
     const body = await parseJson(request, schema);
 
     // 404 if the booking isn't in this tenant's properties.

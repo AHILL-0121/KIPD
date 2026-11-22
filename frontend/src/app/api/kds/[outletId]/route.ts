@@ -11,7 +11,7 @@ export const revalidate = 0;
 
 export async function GET(_request: Request, { params }: { params: { outletId: string } }) {
   try {
-    const { tenantId } = await requireTenant(ROLES.kitchen);
+    const { tenantId } = await requireTenant(ROLES.kitchen, 'restaurant');
     // 404 unless this outlet belongs to the caller's tenant (previously any outlet id worked).
     const outlet = await ownedOutlet(tenantId, params.outletId);
 

@@ -12,12 +12,13 @@ const schema = z.object({
   email: z.string().trim().toLowerCase().email().max(200),
   role: z.enum(['manager', 'front_desk', 'waiter', 'kitchen']),
   password: z.string().min(10, 'Password must be at least 10 characters').max(128),
+  areas: z.enum(['hotel', 'restaurant', 'both']).optional().default('both'),
 });
 
 export async function POST(request: NextRequest) {
   try {
     const { tenantId } = await requireTenant(ROLES.manage);
-    const { name, email, role, password } = await parseJson(request, schema);
+    const { name, email, role, password, areas } = await parseJson(request, schema);
 
     // 0. A login with this email may already exist (an earlier staff account, or someone who signed up
     //    themselves). Do NOT attach it to this team on a typed email: a typo would hand a stranger access.
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     // 2. Record them against this tenant. If that fails, don't leave an orphan login behind.
     try {
       const [member] = await db.insert(staff).values({
-        tenantId, clerkId: clerkUserId, name, email, role, isActive: true,
+        tenantId, clerkId: clerkUserId, name, email, role, areas, isActive: true,
       }).returning();
       return NextResponse.json({ success: true, staffMember: { ...member, clerkId: undefined } });
     } catch (error) {

@@ -32,7 +32,7 @@ const patchSchema = z.object({
 
 export async function GET() {
   try {
-    const { tenantId } = await requireTenant();
+    const { tenantId } = await requireTenant(undefined, 'restaurant');
     const items = await db.query.menuItems.findMany({
       where: eq(menuItems.tenantId, tenantId),
       with: { category: true },
@@ -46,7 +46,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'restaurant');
     const body = await parseJson(request, createSchema);
 
     // The item lives in the same outlet as its category (and the category must be ours).
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'restaurant');
     const { menuItemId, price: newPrice, categoryId, ...rest } = await parseJson(request, patchSchema);
 
     const updates: Partial<typeof menuItems.$inferInsert> = {};
@@ -100,7 +100,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'restaurant');
     const id = assertUuid(new URL(request.url).searchParams.get('id'), 'Menu item');
 
     const rows = await db.delete(menuItems)

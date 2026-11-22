@@ -11,7 +11,7 @@ const createSchema = z.object({ name: z.string().trim().min(1).max(80), outletId
 
 export async function GET() {
   try {
-    const { tenantId } = await requireTenant();
+    const { tenantId } = await requireTenant(undefined, 'restaurant');
     const categories = await db.query.menuCategories.findMany({
       where: eq(menuCategories.tenantId, tenantId),
       orderBy: (c, { asc }) => [asc(c.sortOrder), asc(c.createdAt)], // newest last, so the order is the order they were created in
@@ -24,7 +24,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'restaurant');
     const { name, outletId } = await parseJson(request, createSchema);
 
     const outlet = outletId ? await ownedOutlet(tenantId, outletId) : await firstOutlet(tenantId);
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'restaurant');
     const id = assertUuid(new URL(request.url).searchParams.get('id'), 'Category');
 
     const rows = await db.delete(menuCategories)

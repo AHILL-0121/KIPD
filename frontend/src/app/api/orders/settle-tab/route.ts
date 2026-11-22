@@ -20,7 +20,7 @@ const GST_HALF = 0.025; // 2.5% CGST + 2.5% SGST. Hard-coded for now (checklist 
 
 export async function POST(request: NextRequest) {
   try {
-    const context = await requireTenant(ROLES.settleTab);
+    const context = await requireTenant(ROLES.settleTab, 'restaurant');
     const { tenantId } = context;
     const body = await parseJson(request, schema);
 

@@ -12,12 +12,13 @@ const schema = z.object({
   name: z.string().trim().min(1).max(100),
   email: z.string().trim().toLowerCase().email().max(200),
   role: z.enum(['manager', 'front_desk', 'waiter', 'kitchen']),
+  areas: z.enum(['hotel', 'restaurant', 'both']).optional().default('both'),
 });
 
 export async function POST(request: NextRequest) {
   try {
     const { tenantId, userId } = await requireTenant(ROLES.manage);
-    const { name, email, role } = await parseJson(request, schema);
+    const { name, email, role, areas } = await parseJson(request, schema);
 
     const [already] = await db.select({ id: staff.id }).from(staff)
       .where(and(eq(staff.tenantId, tenantId), sql`lower(${staff.email}) = ${email}`)).limit(1);
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
         eq(staffInvites.tenantId, tenantId), sql`lower(${staffInvites.email}) = ${email}`, isNull(staffInvites.acceptedAt),
       )),
       db.insert(staffInvites).values({
-        id: inviteId, tenantId, email, name, role,
+        id: inviteId, tenantId, email, name, role, areas,
         tokenHash: hashInviteToken(token),
         expiresAt: new Date(Date.now() + INVITE_TTL_MS),
         invitedBy: userId,

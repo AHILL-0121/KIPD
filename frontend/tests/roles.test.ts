@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import * as menu from '@/app/api/menu/route';
 import * as rooms from '@/app/api/rooms/route';
 import * as orders from '@/app/api/orders/route';
@@ -11,7 +12,9 @@ import * as sse from '@/app/api/sse/kds/[outletId]/route';
 import * as staffList from '@/app/api/staff/route';
 import * as staffDirect from '@/app/api/staff/direct/route';
 import * as notification from '@/app/api/payments/notification-match/route';
-import { call, ids, loginAs, resetAndSeed, type Persona } from './helpers/harness';
+import { call, ids, loginAs, resetAndSeed, staffIds, personas, type Persona } from './helpers/harness';
+import { testDb } from './helpers/db';
+import { staff } from '@/db/schema';
 
 const A = ids.A;
 const validOrder = { tableId: A.table, items: [{ menuItemId: A.item, quantity: 1 }] };
@@ -101,5 +104,86 @@ describe('platform admin has no tenant', () => {
     loginAs('platformAdmin');
     expect((await call(menu.GET, 'GET', '/api/menu')).status).toBe(403);
     expect((await call(orders.GET, 'GET', '/api/orders')).status).toBe(403);
+  });
+});
+
+describe('per-person area access', () => {
+  beforeEach(resetAndSeed);
+
+  it('front desk with hotel area can access hotel routes but not restaurant routes', async () => {
+    await testDb.update(staff).set({ areas: 'hotel' }).where(eq(staff.id, staffIds.frontA));
+    loginAs('frontA');
+
+    // hotel routes allowed
+    expect((await call(rooms.GET, 'GET', '/api/rooms')).status).toBe(200);
+    expect((await call(bookings.GET, 'GET', '/api/bookings')).status).toBe(200);
+
+    // restaurant routes refused
+    expect((await call(orders.GET, 'GET', '/api/orders')).status).toBe(403);
+    expect((await call(billing.GET, 'GET', '/api/billing?kind=restaurant')).status).toBe(403);
+  });
+
+  it('front desk with restaurant area can access restaurant orders but not hotel rooms', async () => {
+    await testDb.update(staff).set({ areas: 'restaurant' }).where(eq(staff.id, staffIds.frontA));
+    loginAs('frontA');
+
+    expect((await call(orders.GET, 'GET', '/api/orders')).status).toBe(200);
+    expect((await call(rooms.GET, 'GET', '/api/rooms')).status).toBe(403);
+    expect((await call(bookings.GET, 'GET', '/api/bookings')).status).toBe(403);
+  });
+
+  it('waiter with hotel area cannot access restaurant orders', async () => {
+    await testDb.update(staff).set({ areas: 'hotel' }).where(eq(staff.id, staffIds.waiterA));
+    loginAs('waiterA');
+
+    expect((await call(orders.GET, 'GET', '/api/orders')).status).toBe(403);
+  });
+
+  it('waiter with both or restaurant area can access restaurant orders', async () => {
+    await testDb.update(staff).set({ areas: 'restaurant' }).where(eq(staff.id, staffIds.waiterA));
+    loginAs('waiterA');
+    expect((await call(orders.GET, 'GET', '/api/orders')).status).toBe(200);
+
+    await testDb.update(staff).set({ areas: 'both' }).where(eq(staff.id, staffIds.waiterA));
+    loginAs('waiterA');
+    expect((await call(orders.GET, 'GET', '/api/orders')).status).toBe(200);
+  });
+
+  it('owner and manager always bypass area restrictions', async () => {
+    loginAs('ownerA');
+    expect((await call(rooms.GET, 'GET', '/api/rooms')).status).toBe(200);
+    expect((await call(orders.GET, 'GET', '/api/orders')).status).toBe(200);
+
+    loginAs('managerA');
+    expect((await call(rooms.GET, 'GET', '/api/rooms')).status).toBe(200);
+    expect((await call(orders.GET, 'GET', '/api/orders')).status).toBe(200);
+  });
+});
+
+describe('single source of truth for role and tenant', () => {
+  beforeEach(resetAndSeed);
+
+  it('staff table is the source of truth for role even when Clerk metadata exists', async () => {
+    // personas.ownerA has tenant_id in Clerk metadata.
+    // Insert a staff row for personas.ownerA saying role is 'waiter':
+    await testDb.insert(staff).values({
+      id: '00000000-0000-4000-8000-000000000199',
+      tenantId: ids.A.tenant,
+      clerkId: personas.ownerA,
+      email: 'owner@a.test',
+      name: 'Owner A Staff Row',
+      role: 'waiter',
+      areas: 'both',
+      isActive: true,
+    });
+
+    loginAs('ownerA');
+    // As a waiter, cannot list staff (only owner/manager can)
+    expect((await call(staffList.GET, 'GET', '/api/staff')).status).toBe(403);
+
+    // Update staff table to manager:
+    await testDb.update(staff).set({ role: 'manager' }).where(eq(staff.clerkId, personas.ownerA));
+    loginAs('ownerA'); // clears authCache
+    expect((await call(staffList.GET, 'GET', '/api/staff')).status).toBe(200);
   });
 });
