@@ -14,6 +14,7 @@ import {
 
 export type TenantType = 'hotel' | 'restaurant' | 'both';
 export type StaffRole = 'owner' | 'manager' | 'front_desk' | 'waiter' | 'kitchen';
+export type AccessArea = 'hotel' | 'restaurant' | 'both';
 
 /** The areas of the dashboard. Hotel and Restaurant are the two businesses; Manage is shared. */
 export type Area = 'home' | 'hotel' | 'restaurant' | 'manage';
@@ -49,7 +50,13 @@ export const navigation: NavItem[] = [
 export const AREA_LABEL: Record<Area, string> = { home: 'Home', hotel: 'Hotel', restaurant: 'Restaurant', manage: 'Manage' };
 const AREA_ORDER: Area[] = ['home', 'hotel', 'restaurant', 'manage'];
 
-export const visibleNav = (type: TenantType, role: StaffRole) => navigation.filter(i => i.types.includes(type) && i.roles.includes(role));
+export const visibleNav = (type: TenantType, role: StaffRole, areas: AccessArea = 'both') =>
+  navigation.filter((i) => {
+    if (!i.types.includes(type) || !i.roles.includes(role)) return false;
+    if (areas === 'both' || role === 'owner' || role === 'manager') return true;
+    if (i.area === 'home' || i.area === 'manage') return true;
+    return i.area === areas;
+  });
 
 /** The visible items in sidebar order, grouped by area. An area with nothing visible is left out. */
 export function navGroups(items: NavItem[]) {
@@ -59,15 +66,16 @@ export function navGroups(items: NavItem[]) {
 }
 
 /** Where this person starts: owner, manager and front desk on Home, a waiter on Orders, kitchen on the Kitchen Display. */
-export const landingFor = (type: TenantType, role: StaffRole) => visibleNav(type, role)[0]?.href ?? '/dashboard';
+export const landingFor = (type: TenantType, role: StaffRole, areas: AccessArea = 'both') =>
+  visibleNav(type, role, areas)[0]?.href ?? '/dashboard';
 
 /** A page this person has no menu entry for is not theirs to open. Pages that are not in the menu are left alone. */
-export function canOpen(pathname: string, type: TenantType, role: StaffRole) {
+export function canOpen(pathname: string, type: TenantType, role: StaffRole, areas: AccessArea = 'both') {
   const home = navigation[0];
   const item = pathname === home.href
     ? home
     : navigation.slice(1).find(i => pathname === i.href || pathname.startsWith(`${i.href}/`));
-  return !item || visibleNav(type, role).includes(item);
+  return !item || visibleNav(type, role, areas).includes(item);
 }
 
 const CRUMB_LABELS: Record<string, string> = { qr: 'Table QR codes' };
@@ -77,8 +85,8 @@ const UUID_START = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
  * "/dashboard/rooms" is Home > Hotel > Rooms, and "/dashboard/restaurant/qr" is Home > Restaurant > Menu > Table QR codes.
  * Hotel and Restaurant link to the first page of that area this person can open. IDs in the path are skipped.
  */
-export function crumbsFor(pathname: string | null, type: TenantType, role: StaffRole) {
-  const visible = visibleNav(type, role);
+export function crumbsFor(pathname: string | null, type: TenantType, role: StaffRole, areas: AccessArea = 'both') {
+  const visible = visibleNav(type, role, areas);
   const crumbs = [{ label: 'Home', href: landingFor(type, role) }];
   const path = pathname ?? '/dashboard';
   if (path === '/dashboard' || path === '/dashboard/') return crumbs;

@@ -23,7 +23,7 @@ export async function GET() {
 
     const pending = invites.map((i) => ({
       id: i.id, tenantId: i.tenantId, propertyId: null, clerkId: 'pending',
-      email: i.email, name: i.name, role: i.role, isActive: false, createdAt: i.createdAt,
+      email: i.email, name: i.name, role: i.role, areas: i.areas ?? 'both', isActive: false, createdAt: i.createdAt,
     }));
     return NextResponse.json([...pending, ...members].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)));
   } catch (error) {

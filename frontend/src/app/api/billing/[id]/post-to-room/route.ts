@@ -30,7 +30,7 @@ async function loadBill(tenantId: string, id: string, what: string) {
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { tenantId, userName } = await requireTenant(ROLES.frontDesk);
+    const { tenantId, userName } = await requireTenant(ROLES.frontDesk, 'hotel');
     const { stayBillId } = await parseJson(request, schema);
 
     const food = await loadBill(tenantId, params.id, 'Bill');

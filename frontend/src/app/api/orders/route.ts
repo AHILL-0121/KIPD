@@ -27,7 +27,7 @@ const createSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await requireTenant([...ROLES.orders, 'front_desk']);
+    const session = await requireTenant([...ROLES.orders, 'front_desk'], 'restaurant');
     const body = await parseJson(request, createSchema);
 
     // Front desk is only permitted to create take-away orders, not dine-in or table orders
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const { tenantId } = await requireTenant([...ROLES.orders, 'front_desk']);
+    const { tenantId } = await requireTenant([...ROLES.orders, 'front_desk'], 'restaurant');
     const all = await db.query.orders.findMany({
       where: and(eq(orders.tenantId, tenantId), notInArray(orders.status, ['closed', 'cancelled'])),
       with: { orderItems: { with: { menuItem: true } }, table: true },

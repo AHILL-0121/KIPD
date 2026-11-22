@@ -26,7 +26,7 @@ const patchSchema = z.object({
 
 export async function GET() {
   try {
-    const { tenantId } = await requireTenant();
+    const { tenantId } = await requireTenant(undefined, 'hotel');
     const allRooms = await db.query.rooms.findMany({
       where: eq(rooms.tenantId, tenantId),
       with: { roomType: true },
@@ -40,7 +40,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'hotel');
     const body = await parseJson(request, createSchema);
 
     // The room belongs to the same property as its room type (and the type must be ours).
@@ -66,7 +66,7 @@ export async function PATCH(request: NextRequest) {
     // Front desk and housekeeping flows change room status; structural edits are managers' only.
     const body = await parseJson(request, patchSchema);
     const structural = body.roomNumber !== undefined || body.roomTypeId !== undefined || body.floor !== undefined;
-    const { tenantId } = await requireTenant(structural ? ROLES.manage : ROLES.frontDesk);
+    const { tenantId } = await requireTenant(structural ? ROLES.manage : ROLES.frontDesk, 'hotel');
 
     const updates: Partial<typeof rooms.$inferInsert> = {};
     if (body.status) updates.status = body.status;

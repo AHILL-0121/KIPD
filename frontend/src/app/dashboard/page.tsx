@@ -12,6 +12,7 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { formatCurrency } from '@/lib/currency';
 import { useLive } from '@/lib/use-live';
 import { orderStatus } from '@/lib/order-status';
+import { useTenantInfo } from '@/contexts/tenant-context';
 
 type TenantType = 'hotel' | 'restaurant' | 'both';
 
@@ -58,6 +59,8 @@ function StatCard({ href, icon, tone, value, label, note }: {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { info, isLoading: isTenantLoading } = useTenantInfo();
   const [stats, setStats] = useState<DashboardStats>(EMPTY);
   const [tenantType, setTenantType] = useState<TenantType>('both');
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -67,7 +70,6 @@ export default function DashboardPage() {
 
   const showHotel = tenantType === 'hotel' || tenantType === 'both';
   const showRestaurant = tenantType === 'restaurant' || tenantType === 'both';
-  const router = useRouter();
 
   const loadStats = useCallback(async () => {
     try {
@@ -85,21 +87,17 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Fetch the tenant type and the user's role first: kitchen and waiter staff have their own home screen.
-    fetch('/api/tenant/info')
-      .then(res => res.json())
-      .then(data => {
-        if (data.role === 'kitchen') { router.replace('/dashboard/kds'); return; }
-        if (data.role === 'waiter') { router.replace('/dashboard/orders'); return; }
-        if (data.type) setTenantType(data.type);
-        if (data.id) setTenantId(data.id);
-        loadStats();
-      })
-      .catch((err) => {
-        console.error(err);
-        setIsReady(true);
-      });
-  }, [router, loadStats]);
+    if (isTenantLoading) return;
+    if (!info) {
+      setIsReady(true);
+      return;
+    }
+    if (info.role === 'kitchen') { router.replace('/dashboard/kds'); return; }
+    if (info.role === 'waiter') { router.replace('/dashboard/orders'); return; }
+    if (info.type) setTenantType(info.type);
+    if (info.id) setTenantId(info.id);
+    loadStats();
+  }, [info, isTenantLoading, router, loadStats]);
 
   // The "Live updates" badge below is only true if the figures really refresh.
   useLive(loadStats, tenantId);

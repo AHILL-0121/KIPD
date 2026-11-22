@@ -138,11 +138,6 @@ export function BillingView({ kind }: { kind: BillKind }) {
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data && Array.isArray(data.manualMethods)) setPaySettings({ ...DEFAULT_PAY, ...data }); })
       .catch(() => { }); // keep the defaults: staff can still record every manual way
-
-    fetch('/api/tenant/info')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data?.id) setChannel(data.id); })
-      .catch(() => { });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
 

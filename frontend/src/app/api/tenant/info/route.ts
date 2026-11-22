@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
       status: tenant.status,
       role: context.role,
       userName: context.userName,
+      areas: context.areas ?? 'both',
       outlets: tenantOutlets.map(o => ({ id: o.id, name: o.name })),
     });
   } catch (error) {

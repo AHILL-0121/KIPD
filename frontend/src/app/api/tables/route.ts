@@ -29,7 +29,7 @@ const patchSchema = z.object({
 
 export async function GET() {
   try {
-    const { tenantId } = await requireTenant();
+    const { tenantId } = await requireTenant(undefined, 'restaurant');
     const all = await db.query.tables.findMany({
       where: eq(tables.tenantId, tenantId),
       with: { outlet: true },
@@ -43,7 +43,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'restaurant');
     const body = await parseJson(request, createSchema);
 
     const outlet = body.outletId ? await ownedOutlet(tenantId, body.outletId) : await firstOutlet(tenantId);
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'restaurant');
     const body = await parseJson(request, patchSchema);
     await ownedTable(tenantId, body.tableId);
 
@@ -95,7 +95,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'restaurant');
     const id = assertUuid(new URL(request.url).searchParams.get('id'), 'Table');
     await ownedTable(tenantId, id);
 

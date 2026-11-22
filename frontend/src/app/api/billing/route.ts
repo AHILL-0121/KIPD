@@ -3,7 +3,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db';
 import { bills, guests } from '@/db/schema';
-import { ROLES, requireTenant } from '@/lib/auth';
+import { ROLES, requireTenant, requireArea } from '@/lib/auth';
 import { HttpError, badRequest, handleError, parseJson } from '@/lib/http';
 import { ownedBill, ownedBooking } from '@/lib/tenant-scope';
 import { nightsBetween } from '@/lib/stay-bill';
@@ -40,9 +40,12 @@ const rupees = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionD
 
 export async function GET(request: NextRequest) {
   try {
-    const { tenantId, timezone } = await requireTenant(ROLES.frontDesk);
+    const ctx = await requireTenant(ROLES.frontDesk);
+    const { tenantId, timezone } = ctx;
     const kind = request.nextUrl.searchParams.get('kind');
     if (kind && kind !== 'stay' && kind !== 'restaurant') throw badRequest('kind must be stay or restaurant');
+    if (kind === 'stay') requireArea(ctx, 'hotel');
+    if (kind === 'restaurant') requireArea(ctx, 'restaurant');
 
     // Scoped in SQL: only bills of this tenant ever leave the database. Voided bills (cancelled bookings) are not listed.
     const tenantBills = await db.query.bills.findMany({
@@ -83,7 +86,7 @@ export async function GET(request: NextRequest) {
 // Raises a stay bill by hand. Bills for stays normally open on their own when a booking is confirmed.
 export async function POST(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.frontDesk);
+    const { tenantId } = await requireTenant(ROLES.frontDesk, 'hotel');
     const { bookingId, items } = await parseJson(request, createSchema);
 
     // The booking must be in one of this tenant's properties.
@@ -109,10 +112,13 @@ export async function POST(request: NextRequest) {
 // Record a payment against a bill. A part payment leaves the bill open as "partial"; paying the last of it closes it.
 export async function PATCH(request: NextRequest) {
   try {
-    const { tenantId, userId, userName } = await requireTenant(ROLES.frontDesk);
+    const ctx = await requireTenant(ROLES.frontDesk);
+    const { tenantId, userId, userName } = ctx;
     const { billId, paymentMethod, amount, reference, note } = await parseJson(request, paySchema);
 
     const bill = await ownedBill(tenantId, billId);
+    if (bill.kind === 'stay') requireArea(ctx, 'hotel');
+    if (bill.kind === 'restaurant') requireArea(ctx, 'restaurant');
     if (bill.status === 'paid') throw new HttpError(409, 'This bill is already paid');
     if (bill.status === 'void') throw new HttpError(409, 'This bill was cancelled with its booking');
 

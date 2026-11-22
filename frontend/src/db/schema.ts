@@ -399,6 +399,7 @@ export const staff = pgTable('staff', {
   email: text('email').notNull(),
   name: text('name').notNull(),
   role: text('role').notNull(), // owner, manager, front_desk, waiter, kitchen
+  areas: text('areas').notNull().default('both'), // hotel, restaurant, both
   isActive: boolean('is_active').default(true),
   createdAt: tstz('created_at').defaultNow().notNull(),
   updatedAt: tstz('updated_at').defaultNow().notNull(),
@@ -406,6 +407,7 @@ export const staff = pgTable('staff', {
   unique('staff_tenant_id_uq').on(t.tenantId, t.id),
   foreignKey({ name: 'fk_staff_property', columns: [t.tenantId, t.propertyId], foreignColumns: [properties.tenantId, properties.id] }),
   check('staff_role_check', sql`${t.role} in ('owner','manager','front_desk','waiter','kitchen')`),
+  check('staff_areas_check', sql`${t.areas} in ('hotel','restaurant','both')`),
 ]);
 
 /**
@@ -418,6 +420,7 @@ export const staffInvites = pgTable('staff_invites', {
   email: text('email').notNull(),
   name: text('name').notNull(),
   role: text('role').notNull(), // an invitation can never grant 'owner'
+  areas: text('areas').notNull().default('both'), // hotel, restaurant, both
   tokenHash: text('token_hash').notNull().unique(),
   expiresAt: tstz('expires_at').notNull(),
   acceptedAt: tstz('accepted_at'),
@@ -428,6 +431,7 @@ export const staffInvites = pgTable('staff_invites', {
   // At most one open invitation per email per tenant; re-inviting replaces it.
   uniqueIndex('staff_invites_open_email_uq').on(t.tenantId, sql`lower(${t.email})`).where(sql`${t.acceptedAt} is null`),
   check('staff_invites_role_check', sql`${t.role} in ('manager','front_desk','waiter','kitchen')`),
+  check('staff_invites_areas_check', sql`${t.areas} in ('hotel','restaurant','both')`),
 ]);
 
 // ============= WEBHOOKS =============

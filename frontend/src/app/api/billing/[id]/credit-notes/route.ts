@@ -29,7 +29,7 @@ async function loadBill(tenantId: string, id: string) {
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { tenantId } = await requireTenant(ROLES.frontDesk);
+    const { tenantId } = await requireTenant(ROLES.frontDesk, 'hotel');
     const bill = await loadBill(tenantId, params.id);
     return NextResponse.json(bill.creditNotes
       .slice().sort((a, b) => a.issuedAt.getTime() - b.issuedAt.getTime())
@@ -49,7 +49,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { tenantId, userName } = await requireTenant(ROLES.frontDesk);
+    const { tenantId, userName } = await requireTenant(ROLES.frontDesk, 'hotel');
     const body = await parseJson(request, schema);
     const bill = await loadBill(tenantId, params.id);
 

@@ -6,6 +6,7 @@ import QRCode from 'qrcode';
 import { ArrowLeft, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/loading-state';
+import { useTenantInfo } from '@/contexts/tenant-context';
 
 interface Table { id: string; tableNumber: string; qrCode?: string }
 interface Card { id: string; tableNumber: string; url: string; image: string }
@@ -15,17 +16,17 @@ interface Card { id: string; tableNumber: string; url: string; image: string }
  * Codes are drawn in the browser; nothing about the tables leaves this page.
  */
 export default function QrSheetPage() {
+  const { info } = useTenantInfo();
   const [cards, setCards] = useState<Card[] | null>(null);
-  const [name, setName] = useState('');
+  const name = info?.name ?? '';
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const [tablesRes, infoRes] = await Promise.all([fetch('/api/tables', { cache: 'no-store' }), fetch('/api/tenant/info')]);
+        const tablesRes = await fetch('/api/tables', { cache: 'no-store' });
         if (!tablesRes.ok) throw new Error('Could not load your tables.');
         const tables: Table[] = await tablesRes.json();
-        if (infoRes.ok) setName((await infoRes.json()).name ?? '');
         const withLink = tables.filter((t) => t.qrCode);
         setCards(await Promise.all(withLink.map(async (t) => {
           const url = `${window.location.origin}${t.qrCode}`;

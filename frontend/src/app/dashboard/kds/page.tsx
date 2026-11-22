@@ -1,37 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChefHat } from 'lucide-react';
 import { LoadingState } from '@/components/ui/loading-state';
-
-interface Outlet {
-  id: string;
-  name: string;
-}
+import { useTenantInfo } from '@/contexts/tenant-context';
 
 export default function KDSLandingPage() {
   const router = useRouter();
-  const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { info, isLoading } = useTenantInfo();
+  const outlets = info?.outlets ?? [];
+  const singleOutletId = outlets.length === 1 ? outlets[0].id : null;
 
   useEffect(() => {
-    fetch('/api/tenant/info')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data?.outlets) {
-          setOutlets(data.outlets);
-          if (data.outlets.length === 1) {
-            router.replace(`/dashboard/kds/${data.outlets[0].id}`);
-          }
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [router]);
+    if (!isLoading && singleOutletId) {
+      router.replace(`/dashboard/kds/${singleOutletId}`);
+    }
+  }, [isLoading, singleOutletId, router]);
 
-  if (loading) {
+  if (isLoading) {
     return <LoadingState message="Loading kitchen displays..." />;
   }
 

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { randomBytes } from 'crypto';
 import { createClerkClient } from '@clerk/backend';
 import { eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db';
-import { outlets, platformAuditLog, properties, tenants } from '@/db/schema';
+import { outlets, platformAuditLog, properties, staff, tenants } from '@/db/schema';
 import { requirePlatformAdmin } from '@/lib/auth';
 import { HttpError, handleError, parseJson } from '@/lib/http';
 import { isValidTimeZone } from '@/lib/tz';
@@ -17,12 +16,6 @@ const schema = z.object({
   timezone: z.string().refine(isValidTimeZone, 'Unknown time zone').optional().default('Asia/Kolkata'),
 });
 
-/** 16 random characters from an unambiguous alphabet, plus a suffix that satisfies common password rules. */
-function generatePassword() {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  const bytes = randomBytes(16);
-  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('') + '-9a';
-}
 
 export async function GET() {
   try {
@@ -76,16 +69,26 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // New owner: one-time password, shown once to the platform admin to pass on. It is NOT logged anywhere.
-      const password = generatePassword();
-      await clerk.users.createUser({
-        emailAddress: [ownerEmail], password, publicMetadata: { tenant_id: tenant.id },
-      });
-      return NextResponse.json({
-        success: true, tenant,
-        credentials: { email: ownerEmail, password },
-        message: `Tenant created. Share these one-time credentials with ${ownerEmail} securely and ask them to change the password.`,
-      });
+      // New owner: send a Clerk invitation so they set their own password.
+      try {
+        await clerk.invitations.createInvitation({
+          emailAddress: ownerEmail,
+          publicMetadata: { tenant_id: tenant.id },
+          redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://sa-kipd.vercel.app'}/dashboard`,
+          notify: true, // Clerk sends the email
+        });
+        return NextResponse.json({
+          success: true, tenant,
+          message: `Tenant created. An invitation email has been sent to ${ownerEmail}. They can sign up and get straight to their dashboard.`,
+        });
+      } catch (clerkError) {
+        const detail = (clerkError as { errors?: { message?: string }[] }).errors?.[0]?.message;
+        console.error('Owner invitation failed for tenant', tenant.id);
+        return NextResponse.json({
+          success: true, tenant,
+          warning: `Tenant created, but the owner invitation could not be sent${detail ? `: ${detail}` : ''}. Use the Clerk dashboard to invite the owner manually.`,
+        });
+      }
     } catch (clerkError) {
       const detail = (clerkError as { errors?: { message?: string }[] }).errors?.[0]?.message;
       console.error('Owner login setup failed for tenant', tenant.id);

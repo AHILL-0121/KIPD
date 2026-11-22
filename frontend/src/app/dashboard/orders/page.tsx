@@ -15,6 +15,7 @@ import { orderStatus } from '@/lib/order-status';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
+import { useTenantInfo } from '@/contexts/tenant-context';
 
 interface OrderItem {
   id: string;
@@ -109,7 +110,11 @@ export default function OrdersPage() {
   };
   const [stale, setStale] = useState(false);
 
+  const { info } = useTenantInfo();
   const [channel, setChannel] = useState<string | null>(null);
+  useEffect(() => {
+    if (info?.id) setChannel(info.id);
+  }, [info?.id]);
 
   const fetchOrders = useCallback(() => {
     fetch('/api/orders', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
@@ -140,11 +145,6 @@ export default function OrdersPage() {
     fetch('/api/tables')
       .then(res => res.json())
       .then(data => setTableOptions(Array.isArray(data) ? data : []))
-      .catch(() => { });
-
-    fetch('/api/tenant/info')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data?.id) setChannel(data.id); })
       .catch(() => { });
   }, [fetchOrders]);
 

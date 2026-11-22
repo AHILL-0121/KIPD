@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     await db.batch([
       db.insert(staff).values({
-        tenantId: invite.tenantId, clerkId: userId, email: invite.email, name: invite.name, role: invite.role, isActive: true,
+        tenantId: invite.tenantId, clerkId: userId, email: invite.email, name: invite.name, role: invite.role, areas: invite.areas ?? 'both', isActive: true,
       }),
       db.update(staffInvites).set({ acceptedAt: new Date() }).where(eq(staffInvites.id, invite.id)),
     ]);

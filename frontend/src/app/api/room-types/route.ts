@@ -35,7 +35,7 @@ const updateSchema = z.object({
 
 export async function GET() {
   try {
-    const { tenantId } = await requireTenant();
+    const { tenantId } = await requireTenant(undefined, 'hotel');
     const all = await db.query.roomTypes.findMany({
       where: eq(roomTypes.tenantId, tenantId),
       orderBy: (t, { asc }) => [asc(t.name)],
@@ -48,7 +48,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'hotel');
     const body = await parseJson(request, createSchema);
 
     const property = await firstProperty(tenantId);
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'hotel');
     const { id, basePrice: price, ...rest } = await parseJson(request, updateSchema);
 
     const updates: Partial<typeof roomTypes.$inferInsert> = {};
@@ -96,7 +96,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.manage);
+    const { tenantId } = await requireTenant(ROLES.manage, 'hotel');
     const id = assertUuid(new URL(request.url).searchParams.get('id'), 'Room type');
 
     const rows = await db.delete(roomTypes)
