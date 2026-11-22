@@ -319,18 +319,17 @@ describe('platform admin: creating a tenant', () => {
     expect((await q(`select action from platform_audit_log where target_id = '${t.id}'`))[0]).toEqual({ action: 'tenant.create' });
   });
 
-  it('generates a strong random password and never writes it to any log', async () => {
+  it('sends an invitation email for new owners and does not expose passwords in the response', async () => {
     spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => {}));
     loginAs('platformAdmin');
     const r = await create();
-    const password: string = r.json.credentials.password;
-    expect(password.length).toBeGreaterThanOrEqual(16);
-    const second = await create({ slug: 'sea-view-2' });
-    expect(second.json.credentials.password).not.toBe(password);
+    expect(r.status).toBe(200);
+    expect(r.json.success).toBe(true);
+    expect(r.json.message).toContain('An invitation email has been sent');
+    expect(r.json.credentials).toBeUndefined();
 
     const everything = spies.flatMap((s) => s.mock.calls).map((c) => JSON.stringify(c)).join('\n');
-    expect(everything).not.toContain(password);
-    expect(everything).not.toContain(second.json.credentials.password);
+    expect(everything).not.toContain('password');
   });
 });
 

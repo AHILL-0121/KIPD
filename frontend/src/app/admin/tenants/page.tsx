@@ -34,7 +34,7 @@ export default function TenantsPage() {
   });
   const [isCreating, setIsCreating] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/admin/tenants')
@@ -90,11 +90,11 @@ export default function TenantsPage() {
       setFormData({ name: '', slug: '', ownerEmail: '', type: 'both' });
       setShowNewModal(false);
       
-      // Show credentials if new user was created
-      if (result.credentials) {
-        setCredentials(result.credentials);
+      // Show invitation success banner or fallback toast
+      if (result.message) {
+        setInviteMessage(result.message);
       } else {
-        setToast({ message: result.message || 'Tenant created successfully', type: 'success' });
+        setToast({ message: result.warning || 'Tenant created successfully', type: 'success' });
         setTimeout(() => setToast(null), 5000);
       }
     } catch (error) {
@@ -304,8 +304,8 @@ export default function TenantsPage() {
                   onChange={(e) => setFormData({ ...formData, ownerEmail: e.target.value })}
                 />
                 
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
-                  <p className="text-amber-900">💡 An account will be created with a secure password. Login credentials will be displayed after creation.</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                  <p className="text-blue-900">📧 An invitation email will be sent to the owner so they can set their own password and access their dashboard.</p>
                 </div>
                 
                 <div className="flex gap-3 pt-4">
@@ -322,15 +322,15 @@ export default function TenantsPage() {
         )}
       </AnimatePresence>
 
-      {/* Credentials Modal */}
+      {/* Invitation Success Banner */}
       <AnimatePresence>
-        {credentials && (
+        {inviteMessage && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-            onClick={() => setCredentials(null)}
+            onClick={() => setInviteMessage(null)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
@@ -340,60 +340,20 @@ export default function TenantsPage() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
                 </div>
-                <h2 className="font-serif text-2xl font-bold text-ink mb-2">Tenant Created!</h2>
-                <p className="text-ink-muted">Save these login credentials and share them with the tenant owner</p>
+                <h2 className="font-serif text-2xl font-bold text-ink mb-2">Invitation Sent!</h2>
+                <p className="text-ink-muted">{inviteMessage}</p>
               </div>
 
-              <div className="space-y-4">
-                <div className="bg-stone-50 border border-stone-200 rounded-lg p-4">
-                  <label className="text-sm font-medium text-ink-muted block mb-2">Email</label>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-ink font-mono text-sm">{credentials.email}</code>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(credentials.email);
-                        setToast({ message: 'Email copied!', type: 'success' });
-                        setTimeout(() => setToast(null), 2000);
-                      }}
-                      className="px-3 py-1 text-xs bg-white border border-stone-300 rounded hover:bg-stone-50"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-stone-50 border border-stone-200 rounded-lg p-4">
-                  <label className="text-sm font-medium text-ink-muted block mb-2">Password</label>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-ink font-mono text-sm">{credentials.password}</code>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(credentials.password);
-                        setToast({ message: 'Password copied!', type: 'success' });
-                        setTimeout(() => setToast(null), 2000);
-                      }}
-                      className="px-3 py-1 text-xs bg-white border border-stone-300 rounded hover:bg-stone-50"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
-                  <p className="text-amber-900">⚠️ Make sure to save these credentials! They won&apos;t be shown again.</p>
-                </div>
-              </div>
-
-              <Button 
-                variant="terra" 
-                className="w-full mt-6"
+              <Button
+                variant="terra"
+                className="w-full mt-2"
                 onClick={() => {
-                  setCredentials(null);
+                  setInviteMessage(null);
                   setToast({ message: 'Tenant created successfully', type: 'success' });
                   setTimeout(() => setToast(null), 5000);
                 }}
