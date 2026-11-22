@@ -21,9 +21,7 @@ interface TenantContextValue {
   reload: () => void;
 }
 
-const TenantContext = createContext<TenantContextValue>({
-  info: null, isLoading: true, error: null, reload: () => {},
-});
+const TenantContext = createContext<TenantContextValue | null>(null);
 
 export function TenantProvider({ children }: { children: ReactNode }) {
   const [info, setInfo] = useState<TenantInfo | null>(null);
@@ -47,4 +45,30 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export const useTenantInfo = () => useContext(TenantContext);
+export function useTenantInfo(): TenantContextValue {
+  const ctx = useContext(TenantContext);
+  const [localInfo, setLocalInfo] = useState<TenantInfo | null>(null);
+  const [localLoading, setLocalLoading] = useState(true);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (ctx) return;
+    let active = true;
+    setLocalLoading(true);
+    fetch('/api/tenant/info')
+      .then(res => res.ok ? res.json() : Promise.reject(res.status))
+      .then(data => { if (active) { setLocalInfo(data); setLocalError(null); } })
+      .catch(err => { if (active) setLocalError(String(err)); })
+      .finally(() => { if (active) setLocalLoading(false); });
+    return () => { active = false; };
+  }, [ctx]);
+
+  if (ctx) return ctx;
+
+  return {
+    info: localInfo,
+    isLoading: localLoading,
+    error: localError,
+    reload: () => {},
+  };
+}

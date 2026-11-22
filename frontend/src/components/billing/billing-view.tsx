@@ -15,7 +15,6 @@ import { formatCurrency } from '@/lib/currency';
 import { billStatus } from '@/lib/bill-status';
 import { suggestedDeposit } from '@/lib/deposit';
 import { GST_STATES, splitGst } from '@/lib/gst';
-import { useTenantInfo } from '@/contexts/tenant-context';
 
 type BillKind = 'stay' | 'restaurant';
 
@@ -95,11 +94,7 @@ export function BillingView({ kind }: { kind: BillKind }) {
     footer: 'WE ARE HAPPY TO SERVE YOU'
   });
 
-  const { info } = useTenantInfo();
   const [channel, setChannel] = useState<string | null>(null);
-  useEffect(() => {
-    if (info?.id) setChannel(info.id);
-  }, [info?.id]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [notice, setNotice] = useState('');
 
