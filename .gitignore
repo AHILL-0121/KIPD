@@ -9,6 +9,8 @@ out/
 frontend/out/
 dist/
 frontend/dist/
+.vite/
+frontend/.vite/
 
 # ─── Python / Backend ─────────────────────────────────────────────────────────
 __pycache__/

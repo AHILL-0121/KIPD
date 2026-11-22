@@ -15,6 +15,7 @@ import { formatCurrency } from '@/lib/currency';
 import { billStatus } from '@/lib/bill-status';
 import { suggestedDeposit } from '@/lib/deposit';
 import { GST_STATES, splitGst } from '@/lib/gst';
+import { useTenantInfo } from '@/contexts/tenant-context';
 
 type BillKind = 'stay' | 'restaurant';
 
@@ -94,7 +95,11 @@ export function BillingView({ kind }: { kind: BillKind }) {
     footer: 'WE ARE HAPPY TO SERVE YOU'
   });
 
+  const { info } = useTenantInfo();
   const [channel, setChannel] = useState<string | null>(null);
+  useEffect(() => {
+    if (info?.id) setChannel(info.id);
+  }, [info?.id]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [notice, setNotice] = useState('');
 
@@ -138,11 +143,6 @@ export function BillingView({ kind }: { kind: BillKind }) {
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data && Array.isArray(data.manualMethods)) setPaySettings({ ...DEFAULT_PAY, ...data }); })
       .catch(() => { }); // keep the defaults: staff can still record every manual way
-
-    fetch('/api/tenant/info')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data?.id) setChannel(data.id); })
-      .catch(() => { });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
 

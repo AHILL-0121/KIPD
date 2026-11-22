@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { canOpen, crumbsFor, landingFor, navGroups, visibleNav } from '@/lib/dashboard-nav';
 
-const labels = (type: Parameters<typeof visibleNav>[0], role: Parameters<typeof visibleNav>[1]) => navGroups(visibleNav(type, role)).map(g => `${g.label}: ${g.items.map(i => i.name).join(', ')}`);
+const labels = (type: Parameters<typeof visibleNav>[0], role: Parameters<typeof visibleNav>[1], areas: Parameters<typeof visibleNav>[2] = 'both') => navGroups(visibleNav(type, role, areas)).map(g => `${g.label}: ${g.items.map(i => i.name).join(', ')}`);
 const trail = (path: string, type: Parameters<typeof visibleNav>[0] = 'both', role: Parameters<typeof visibleNav>[1] = 'owner') => crumbsFor(path, type, role).map(c => c.label).join(' > ');
 
 describe('sidebar groups', () => {
@@ -27,6 +27,20 @@ describe('sidebar groups', () => {
     expect(labels('both', 'kitchen')).toEqual(['Restaurant: Kitchen Display']);
     expect(labels('both', 'manager')).toEqual(labels('both', 'owner'));
   });
+
+  it('per-person area access restricts visible pages for staff', () => {
+    // front desk assigned hotel only
+    expect(labels('both', 'front_desk', 'hotel')).toEqual(['Home: Home', 'Hotel: Rooms, Bookings, Billing']);
+    // front desk assigned restaurant only
+    expect(labels('both', 'front_desk', 'restaurant')).toEqual(['Home: Home', 'Restaurant: Billing']);
+    // waiter assigned hotel only has no restaurant items
+    expect(labels('both', 'waiter', 'hotel')).toEqual([]);
+    // waiter assigned restaurant has restaurant items
+    expect(labels('both', 'waiter', 'restaurant')).toEqual(['Restaurant: Orders, Kitchen Display']);
+    // owners and managers always see both areas regardless of assigned area parameter
+    expect(labels('both', 'owner', 'hotel')).toEqual(labels('both', 'owner', 'both'));
+    expect(labels('both', 'manager', 'restaurant')).toEqual(labels('both', 'manager', 'both'));
+  });
 });
 
 describe('where each role starts, and what it may open', () => {
@@ -47,6 +61,20 @@ describe('where each role starts, and what it may open', () => {
     expect(canOpen('/dashboard/orders', 'both', 'waiter')).toBe(true);
     expect(canOpen('/dashboard/kds/3f2b8c1e-0000-4000-8000-000000000000', 'both', 'kitchen')).toBe(true);
     expect(canOpen('/dashboard/something-new', 'both', 'waiter')).toBe(true);
+  });
+
+  it('respects per-person area access for opening pages', () => {
+    // front desk with hotel area can open rooms, but cannot open restaurant billing
+    expect(canOpen('/dashboard/rooms', 'both', 'front_desk', 'hotel')).toBe(true);
+    expect(canOpen('/dashboard/billing/restaurant', 'both', 'front_desk', 'hotel')).toBe(false);
+
+    // front desk with restaurant area cannot open rooms, but can open restaurant billing
+    expect(canOpen('/dashboard/rooms', 'both', 'front_desk', 'restaurant')).toBe(false);
+    expect(canOpen('/dashboard/billing/restaurant', 'both', 'front_desk', 'restaurant')).toBe(true);
+
+    // waiter with hotel area cannot open orders
+    expect(canOpen('/dashboard/orders', 'both', 'waiter', 'hotel')).toBe(false);
+    expect(canOpen('/dashboard/orders', 'both', 'waiter', 'restaurant')).toBe(true);
   });
 });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -8,7 +8,10 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { confirmDialog } from '@/components/ui/confirm';
 import { toast } from '@/components/ui/toaster';
-import { Plus, Mail, MoreVertical, UserCog } from 'lucide-react';
+import { LoadingState } from '@/components/ui/loading-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { useQuery } from '@/hooks/use-query';
+import { Plus, Mail, MoreVertical } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface StaffMember {
@@ -16,24 +19,26 @@ interface StaffMember {
   name: string;
   email: string;
   role: 'owner' | 'manager' | 'front_desk' | 'waiter' | 'kitchen';
+  areas?: 'hotel' | 'restaurant' | 'both';
   isActive: boolean;
   createdAt: string;
 }
 
 export default function StaffPage() {
-  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const { data: staffList, isLoading, error: loadError, refetch } = useQuery<StaffMember[]>('/api/staff');
+  const staff = staffList ?? [];
+
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [creationMode, setCreationMode] = useState<'invite' | 'direct'>('invite');
-  const [inviteData, setInviteData] = useState({ name: '', email: '', role: 'front_desk', password: '' });
+  const [inviteData, setInviteData] = useState({
+    name: '',
+    email: '',
+    role: 'front_desk',
+    areas: 'both' as 'hotel' | 'restaurant' | 'both',
+    password: '',
+  });
   const [loading, setLoading] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch('/api/staff')
-      .then(res => res.json())
-      .then(data => setStaff(data))
-      .catch(console.error);
-  }, []);
 
   const roleConfig = {
     owner: { badge: 'amber', label: 'Owner' },
@@ -58,12 +63,8 @@ export default function StaffPage() {
       if (!res.ok) throw new Error(data.error);
 
       setShowInviteModal(false);
-      setInviteData({ name: '', email: '', role: 'front_desk', password: '' });
-
-      // Refresh staff list
-      const response = await fetch('/api/staff');
-      const staffList = await response.json();
-      setStaff(staffList);
+      setInviteData({ name: '', email: '', role: 'front_desk', areas: 'both', password: '' });
+      refetch();
     } catch (e: any) {
       toast('error', e.message || 'Could not create the account');
     } finally {
@@ -76,7 +77,7 @@ export default function StaffPage() {
 
     try {
       await fetch(`/api/staff/${id}`, { method: 'DELETE' });
-      setStaff(staff.filter(s => s.id !== id));
+      refetch();
       setActiveMenu(null);
     } catch (e) {
       console.error(e);
@@ -99,70 +100,83 @@ export default function StaffPage() {
       </div>
 
       {/* Staff Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {staff.map((member) => {
-          const config = roleConfig[member.role];
+      {isLoading ? (
+        <LoadingState message="Loading staff members..." />
+      ) : loadError ? (
+        <ErrorState message={loadError} reset={refetch} />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {staff.map((member) => {
+            const config = roleConfig[member.role];
 
-          return (
-            <Card key={member.id} hover>
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber to-terra flex items-center justify-center text-white font-bold text-lg">
-                    {member.name.charAt(0)}
+            return (
+              <Card key={member.id} hover>
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber to-terra flex items-center justify-center text-white font-bold text-lg">
+                      {member.name.charAt(0)}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-ink">{member.name}</h3>
+                      <p className="text-sm text-ink-muted">{member.email}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-ink">{member.name}</h3>
-                    <p className="text-sm text-ink-muted">{member.email}</p>
-                  </div>
-                </div>
 
-                <div className="relative">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveMenu(activeMenu === member.id ? null : member.id);
-                    }}
-                    className="text-ink-muted hover:text-ink p-2 rounded-full hover:bg-stone-100 transition-colors"
-                  >
-                    <MoreVertical className="w-5 h-5" />
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveMenu(activeMenu === member.id ? null : member.id);
+                      }}
+                      className="text-ink-muted hover:text-ink p-2 rounded-full hover:bg-stone-100 transition-colors"
+                    >
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
 
-                  <AnimatePresence>
-                    {activeMenu === member.id && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-stone-200 py-1 z-10 overflow-hidden"
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteStaff(member.id, member.name);
-                          }}
-                          className="w-full text-left px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+                    <AnimatePresence>
+                      {activeMenu === member.id && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-stone-200 py-1 z-10 overflow-hidden"
                         >
-                          Cancel / Delete Staff
-                        </button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteStaff(member.id, member.name);
+                            }}
+                            className="w-full text-left px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+                          >
+                            Cancel / Delete Staff
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-stone-200">
-                <Badge variant={config.badge as any}>
-                  {config.label}
-                </Badge>
+                <div className="flex items-center justify-between pt-4 border-t border-stone-200">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant={config.badge as any}>
+                      {config.label}
+                    </Badge>
+                    {member.areas && member.areas !== 'both' && (
+                      <Badge variant="stone">
+                        {member.areas === 'hotel' ? 'Hotel only' : 'Restaurant only'}
+                      </Badge>
+                    )}
+                  </div>
 
-                <Badge variant={member.isActive ? 'sage' : 'stone'} dot>
-                  {member.isActive ? 'Active' : 'Inactive'}
-                </Badge>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
+                  <Badge variant={member.isActive ? 'sage' : 'stone'} dot>
+                    {member.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* Invite Modal */}
       <AnimatePresence>
@@ -245,6 +259,17 @@ export default function StaffPage() {
                     { value: 'front_desk', label: 'Front Desk' },
                     { value: 'waiter', label: 'Waiter' },
                     { value: 'kitchen', label: 'Kitchen Staff' },
+                  ]}
+                />
+
+                <Select
+                  label="Area Access"
+                  value={inviteData.areas}
+                  onChange={(e) => setInviteData({ ...inviteData, areas: e.target.value as any })}
+                  options={[
+                    { value: 'both', label: 'Both (Hotel & Restaurant)' },
+                    { value: 'hotel', label: 'Hotel Only' },
+                    { value: 'restaurant', label: 'Restaurant Only' },
                   ]}
                 />
 

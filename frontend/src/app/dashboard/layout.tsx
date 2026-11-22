@@ -13,7 +13,8 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { LoadingState } from '@/components/ui/loading-state';
-import { canOpen, crumbsFor, landingFor, navGroups, visibleNav, type StaffRole, type TenantType } from '@/lib/dashboard-nav';
+import { canOpen, crumbsFor, landingFor, navGroups, visibleNav, type StaffRole, type TenantType, type AccessArea } from '@/lib/dashboard-nav';
+import { TenantProvider, useTenantInfo } from '@/contexts/tenant-context';
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Owner',
@@ -23,13 +24,18 @@ const ROLE_LABELS: Record<string, string> = {
   kitchen: 'Kitchen Staff',
 };
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [tenantType, setTenantType] = useState<TenantType>('both');
-  const [tenantName, setTenantName] = useState('');
-  const [userRole, setUserRole] = useState<StaffRole>('kitchen'); // least privilege until the server says otherwise
-  const [userName, setUserName] = useState('');
-  const [isNavReady, setIsNavReady] = useState(false);
+  const router = useRouter();
+  const { signOut } = useClerk();
+  const { info, isLoading } = useTenantInfo();
+
+  const tenantType: TenantType = (info?.type as TenantType) || 'both';
+  const tenantName = info?.name || '';
+  const userRole: StaffRole = (info?.role as StaffRole) || 'kitchen';
+  const userAreas: AccessArea = (info?.areas as AccessArea) || 'both';
+  const userName = info?.userName || '';
+
   const [isCollapsed, setIsCollapsed] = useState(false);
   useEffect(() => {
     try { setIsCollapsed(localStorage.getItem('kipd-sidebar') === 'collapsed'); } catch { /* storage blocked: stay expanded */ }
@@ -40,8 +46,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       return !c;
     });
   };
-  const router = useRouter();
-  const { signOut } = useClerk();
 
   // Mobile Pull-to-Refresh State
   const [startY, setStartY] = useState(0);
@@ -71,39 +75,31 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     setPullY(0);
   };
 
-  useEffect(() => {
-    fetch('/api/tenant/info')
-      .then(res => {
-        if (res.status === 401) return res.json().then(data => data) // maybe it has role?
-        return res.ok ? res.json() : null;
-      })
-      .then(data => {
-        if (data && data.error && (data.error === 'No tenant')) {
-          // If no tenant but user is active, they are an admin or orphaned
-          router.push('/admin/tenants');
-        } else if (data) {
-          setTenantType(data.type || 'both');
-          setTenantName(data.name || '');
-          if (data.role) setUserRole(data.role);
-          setUserName(data.userName || '');
-        }
-      })
-      .catch(() => { })
-      .finally(() => setIsNavReady(true));
-  }, [router]);
-
   // The server refuses these requests anyway; this just stops someone landing on a page that is not theirs.
-  const allowed = canOpen(pathname ?? '', tenantType, userRole);
-  const start = landingFor(tenantType, userRole);
-  useEffect(() => {
-    if (isNavReady && !allowed && pathname !== start) router.replace(start);
-  }, [isNavReady, allowed, pathname, start, router]);
+  const allowed = canOpen(pathname ?? '', tenantType, userRole, userAreas);
+  const start = landingFor(tenantType, userRole, userAreas);
 
-  if (!isNavReady) {
+  useEffect(() => {
+    if (isLoading) return;
+    if (!info) {
+      router.replace('/sign-in');
+      return;
+    }
+    // Handle "No tenant" error — redirect admins/orphaned users to admin
+    if ((info as any).error === 'No tenant') {
+      router.push('/admin/tenants');
+      return;
+    }
+    if (!allowed && pathname !== start) {
+      router.replace(start);
+    }
+  }, [isLoading, info, allowed, pathname, start, router]);
+
+  if (isLoading) {
     return <LoadingState message="Verifying your dashboard permissions..." />;
   }
 
-  const filteredNav = visibleNav(tenantType, userRole);
+  const filteredNav = visibleNav(tenantType, userRole, userAreas);
   const groups = navGroups(filteredNav);
 
   return (
@@ -215,7 +211,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div style={pullY > 0 ? { transform: `translateY(${pullY * 0.5}px)` } : undefined}>
           <nav aria-label="Breadcrumb" className="hidden md:block sticky top-0 z-30 bg-cream/95 backdrop-blur border-b border-stone-200 px-8 py-2.5">
             <ol className="flex items-center flex-wrap text-sm">
-              {crumbsFor(pathname, tenantType, userRole).map((c, i, all) => {
+              {crumbsFor(pathname, tenantType, userRole, userAreas).map((c, i, all) => {
                 const last = i === all.length - 1;
                 return (
                   <li key={`${c.href}-${i}`} className="flex items-center">
@@ -275,5 +271,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </button>
       </nav>
     </div>
+  );
+}
+
+export default function DashboardLayout({ children }: { children: ReactNode }) {
+  return (
+    <TenantProvider>
+      <DashboardShell>{children}</DashboardShell>
+    </TenantProvider>
   );
 }

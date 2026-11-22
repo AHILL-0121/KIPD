@@ -6,6 +6,7 @@ import { HoldButton } from '@/components/ui/hold-button';
 import { Button } from '@/components/ui/button';
 import { Clock, MapPin, AlertCircle, Volume2, VolumeX, ChefHat, Package } from 'lucide-react';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
+import { useTenantInfo } from '@/contexts/tenant-context';
 
 interface KDSOrder {
   id: string;
@@ -25,20 +26,12 @@ interface KDSOrder {
 }
 
 export default function KDSPage({ params }: { params: { outletId: string } }) {
+  const { info } = useTenantInfo();
   const [orders, setOrders] = useState<KDSOrder[]>([]);
-  const [userRole, setUserRole] = useState<string>('');
+  const userRole = info?.role || '';
   const [undo, setUndo] = useState<{ id: string; label: string } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    // Fetch User Role to determine if KDS is Read-Only
-    fetch('/api/tenant/info')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data?.role) setUserRole(data.role); })
-      .catch(() => { });
-
-  }, []);
 
   // Orders already on screen, so only genuinely new tickets make a sound.
   const seen = useRef<Set<string> | null>(null);
