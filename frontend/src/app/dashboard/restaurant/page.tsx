@@ -1,55 +1,39 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { LoadingState } from '@/components/ui/loading-state';
-import { Plus, UtensilsCrossed, Coffee, Edit, Eye, EyeOff, Trash2, X, QrCode, Users, Copy, Check, Search } from 'lucide-react';
-import { Select } from '@/components/ui/select';
+import { Plus, UtensilsCrossed, Coffee, QrCode, Search, X } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/confirm';
-import { formatCurrency } from '@/lib/currency';
 import { motion, AnimatePresence } from 'framer-motion';
-
-interface MenuCategory {
-  id: string;
-  name: string;
-  sortOrder: number;
-}
-
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: string;
-  categoryId: string;
-  category?: MenuCategory;
-  tags: string[];
-  isAvailable: boolean;
-  imageUrl?: string;
-}
-
-interface Table {
-  id: string;
-  tableNumber: string;
-  capacity: number;
-  section?: string | null;
-  tags?: string[] | null;
-  qrCode?: string;
-  outlet?: { name: string; slug: string };
-}
+import { useQuery } from '@/hooks/use-query';
+import type { MenuCategory, MenuItem, Table } from '@/components/restaurant/types';
+import { MenuItemCard } from '@/components/restaurant/menu-item-card';
+import { MenuItemModal } from '@/components/restaurant/menu-item-modal';
+import { CategoryModal } from '@/components/restaurant/category-modal';
+import { TableCard } from '@/components/restaurant/table-card';
+import { TableModal } from '@/components/restaurant/table-modal';
 
 export default function RestaurantPage() {
   const [activeTab, setActiveTab] = useState<'menu' | 'tables'>('menu');
-  const [items, setItems] = useState<MenuItem[]>([]);
-  const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Queries
+  const { data: rawItems, isLoading: itemsLoading, refetch: refetchItems } = useQuery<MenuItem[]>('/api/menu');
+  const { data: rawCategories, refetch: refetchCategories } = useQuery<MenuCategory[]>('/api/menu-categories');
+  const { data: rawTables, refetch: refetchTables } = useQuery<Table[]>('/api/tables');
+
+  const [items, setItems] = useState<MenuItem[]>([]);
+  useEffect(() => {
+    if (rawItems) setItems(rawItems);
+  }, [rawItems]);
+
+  const categories = Array.isArray(rawCategories) ? rawCategories : [];
+  const tablesList = Array.isArray(rawTables) ? rawTables : [];
 
   // Modals
   const [showAddItem, setShowAddItem] = useState(false);
@@ -64,7 +48,6 @@ export default function RestaurantPage() {
   const LAST_CATEGORY_KEY = 'kipd.menu.lastCategoryId';
 
   // Table management state
-  const [tablesList, setTablesList] = useState<Table[]>([]);
   const [showAddTable, setShowAddTable] = useState(false);
   const [showEditTable, setShowEditTable] = useState<Table | null>(null);
   const [tableForm, setTableForm] = useState({ tableNumber: '', capacity: '4', section: '', tags: '' });
@@ -81,45 +64,25 @@ export default function RestaurantPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchItems = () => {
-    fetch('/api/menu')
-      .then(res => res.json())
-      .then(data => setItems(Array.isArray(data) ? data : []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  };
-
-  const fetchCategories = () => {
-    fetch('/api/menu-categories')
-      .then(res => res.json())
-      .then(data => setCategories(Array.isArray(data) ? data : []))
-      .catch(console.error);
-  };
-
-  const fetchTables = () => {
-    fetch('/api/tables')
-      .then(res => res.json())
-      .then(data => setTablesList(Array.isArray(data) ? data : []))
-      .catch(console.error);
-  };
-
   useEffect(() => {
-    fetchItems();
-    fetchCategories();
-    fetchTables();
     try {
       setLastCategoryId(localStorage.getItem(LAST_CATEGORY_KEY) || '');
-    } catch { /* storage can be blocked; the form then just starts on the first category */ }
+    } catch {
+      // storage can be blocked; the form then just starts on the first category
+    }
   }, []);
 
-  // New items start on the category used last time (if it still exists), else the first category.
   const rememberCategory = (id: string) => {
     setLastCategoryId(id);
-    try { localStorage.setItem(LAST_CATEGORY_KEY, id); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(LAST_CATEGORY_KEY, id);
+    } catch {
+      // ignore
+    }
   };
 
   const startAddItem = () => {
-    const categoryId = categories.some(c => c.id === lastCategoryId) ? lastCategoryId : categories[0]?.id || '';
+    const categoryId = categories.some((c) => c.id === lastCategoryId) ? lastCategoryId : categories[0]?.id || '';
     setItemForm({ name: '', description: '', price: '', categoryId, tags: '' });
     setShowAddItem(true);
   };
@@ -139,14 +102,14 @@ export default function RestaurantPage() {
           description: itemForm.description,
           price: parseFloat(itemForm.price),
           categoryId: itemForm.categoryId,
-          tags: itemForm.tags ? itemForm.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+          tags: itemForm.tags ? itemForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
         }),
       });
       if (!res.ok) throw new Error('Failed');
       rememberCategory(itemForm.categoryId);
       setShowAddItem(false);
       setItemForm({ name: '', description: '', price: '', categoryId: itemForm.categoryId, tags: '' });
-      fetchItems();
+      refetchItems();
       showToast('Menu item created', 'success');
     } catch {
       showToast('Failed to create menu item', 'error');
@@ -168,11 +131,11 @@ export default function RestaurantPage() {
           description: itemForm.description,
           price: itemForm.price,
           categoryId: itemForm.categoryId,
-          tags: itemForm.tags ? itemForm.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+          tags: itemForm.tags ? itemForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
         }),
       });
       setShowEditItem(null);
-      fetchItems();
+      refetchItems();
       showToast('Menu item updated', 'success');
     } catch {
       showToast('Failed to update', 'error');
@@ -195,7 +158,7 @@ export default function RestaurantPage() {
       });
       if (!res.ok) throw new Error('Failed');
       setCategoryName('');
-      fetchCategories();
+      refetchCategories();
       showToast('Category created', 'success');
     } catch {
       showToast('Failed to create category', 'error');
@@ -204,39 +167,49 @@ export default function RestaurantPage() {
     }
   };
 
-  const toggleAvailability = async (itemId: string, currentStatus: boolean) => {
+  const handleDeleteCategory = async (catId: string) => {
+    try {
+      await fetch(`/api/menu-categories?id=${catId}`, { method: 'DELETE' });
+      refetchCategories();
+    } catch {
+      showToast('Failed to delete category', 'error');
+    }
+  };
+
+  const toggleAvailability = async (item: MenuItem) => {
     try {
       await fetch('/api/menu', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ menuItemId: itemId, isAvailable: !currentStatus }),
+        body: JSON.stringify({ menuItemId: item.id, isAvailable: !item.isAvailable }),
       });
-      setItems(items.map(item => item.id === itemId ? { ...item, isAvailable: !currentStatus } : item));
+      setItems((prev) =>
+        prev.map((it) => (it.id === item.id ? { ...it, isAvailable: !item.isAvailable } : it))
+      );
     } catch {
       showToast('Failed to update', 'error');
     }
   };
 
-  const handleDeleteItem = async (itemId: string) => {
+  const handleDeleteItem = async (item: MenuItem) => {
     if (!(await confirmDialog({ title: 'Delete this menu item?', confirmLabel: 'Delete item', danger: true }))) return;
     try {
-      const res = await fetch(`/api/menu?id=${itemId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/menu?id=${item.id}`, { method: 'DELETE' });
       if (res.status === 409) {
-        // Past orders and bills refer to this item, so it can't be erased. Hiding it keeps the history intact.
         if (await confirmDialog({ title: 'Hide it from the menu instead?', message: 'This item is on past orders, so it cannot be deleted.', confirmLabel: 'Hide item' })) {
           const patch = await fetch('/api/menu', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ menuItemId: itemId, isAvailable: false }),
+            body: JSON.stringify({ menuItemId: item.id, isAvailable: false }),
           });
           if (!patch.ok) throw new Error('hide failed');
-          fetchItems();
+          refetchItems();
           showToast('Item hidden from the menu', 'success');
         }
         return;
       }
       if (!res.ok) throw new Error('delete failed');
-      fetchItems();
+      refetchItems();
       showToast('Item deleted', 'success');
     } catch {
       showToast('Failed to delete', 'error');
@@ -251,10 +224,7 @@ export default function RestaurantPage() {
     }
     setSaving(true);
     try {
-      const parsedTags = tableForm.tags
-        .split(',')
-        .map(t => t.trim())
-        .filter(Boolean);
+      const parsedTags = tableForm.tags.split(',').map((t) => t.trim()).filter(Boolean);
       const res = await fetch('/api/tables', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -271,10 +241,10 @@ export default function RestaurantPage() {
       }
       setShowAddTable(false);
       setTableForm({ tableNumber: '', capacity: '4', section: '', tags: '' });
-      fetchTables();
+      refetchTables();
       showToast('Table created', 'success');
-    } catch (e: any) {
-      showToast(e.message || 'Failed to create table', 'error');
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'Failed to create table', 'error');
     } finally {
       setSaving(false);
     }
@@ -284,10 +254,7 @@ export default function RestaurantPage() {
     if (!showEditTable) return;
     setSaving(true);
     try {
-      const parsedTags = tableForm.tags
-        .split(',')
-        .map(t => t.trim())
-        .filter(Boolean);
+      const parsedTags = tableForm.tags.split(',').map((t) => t.trim()).filter(Boolean);
       await fetch('/api/tables', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -301,7 +268,7 @@ export default function RestaurantPage() {
       });
       setShowEditTable(null);
       setTableForm({ tableNumber: '', capacity: '4', section: '', tags: '' });
-      fetchTables();
+      refetchTables();
       showToast('Table updated', 'success');
     } catch {
       showToast('Failed to update table', 'error');
@@ -310,11 +277,19 @@ export default function RestaurantPage() {
     }
   };
 
-  const handleDeleteTable = async (tableId: string) => {
-    if (!(await confirmDialog({ title: 'Delete this table?', message: 'Its past orders are kept, but its QR code stops working.', confirmLabel: 'Delete table', danger: true }))) return;
+  const handleDeleteTable = async (table: Table) => {
+    if (
+      !(await confirmDialog({
+        title: 'Delete this table?',
+        message: 'Its past orders are kept, but its QR code stops working.',
+        confirmLabel: 'Delete table',
+        danger: true,
+      }))
+    )
+      return;
     try {
-      await fetch(`/api/tables?id=${tableId}`, { method: 'DELETE' });
-      fetchTables();
+      await fetch(`/api/tables?id=${table.id}`, { method: 'DELETE' });
+      refetchTables();
       showToast('Table deleted', 'success');
     } catch {
       showToast('Failed to delete table', 'error');
@@ -328,26 +303,26 @@ export default function RestaurantPage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const filteredItems = items.filter(item => {
+  const filteredItems = items.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || item.categoryId === categoryFilter;
     return matchesSearch && matchesCategory;
   });
 
   const availableTableSections = Array.from(
-    new Set(tablesList.map(t => t.section).filter((s): s is string => Boolean(s?.trim())))
+    new Set(tablesList.map((t) => t.section).filter((s): s is string => Boolean(s?.trim())))
   );
 
   const availableTableTags = Array.from(
-    new Set(tablesList.flatMap(t => t.tags || []).filter((tg): tg is string => Boolean(tg?.trim())))
+    new Set(tablesList.flatMap((t) => t.tags || []).filter((tg): tg is string => Boolean(tg?.trim())))
   );
 
-  const filteredTables = tablesList.filter(t => {
+  const filteredTables = tablesList.filter((t) => {
     if (tableSearch.trim()) {
       const q = tableSearch.toLowerCase().trim();
       const numMatch = t.tableNumber.toLowerCase().includes(q);
       const secMatch = t.section?.toLowerCase().includes(q) ?? false;
-      const tagMatch = t.tags?.some(tag => tag.toLowerCase().includes(q)) ?? false;
+      const tagMatch = t.tags?.some((tag) => tag.toLowerCase().includes(q)) ?? false;
       if (!numMatch && !secMatch && !tagMatch) return false;
     }
     if (tableSectionFilter !== 'all' && t.section !== tableSectionFilter) return false;
@@ -358,7 +333,7 @@ export default function RestaurantPage() {
     return true;
   });
 
-  if (loading) return <LoadingState />;
+  if (itemsLoading && !rawItems) return <LoadingState />;
 
   return (
     <div className="p-4 md:p-8 overflow-x-hidden">
@@ -375,24 +350,28 @@ export default function RestaurantPage() {
                 <Coffee className="w-4 h-4" />
                 Categories
               </Button>
-              <Button onClick={() => {
-                if (categories.length === 0) {
-                  showToast('Create a category first', 'error');
-                  setShowAddCategory(true);
-                  return;
-                }
-                startAddItem();
-              }}>
+              <Button
+                onClick={() => {
+                  if (categories.length === 0) {
+                    showToast('Create a category first', 'error');
+                    setShowAddCategory(true);
+                    return;
+                  }
+                  startAddItem();
+                }}
+              >
                 <Plus className="w-4 h-4" />
                 Add Menu Item
               </Button>
             </>
           )}
           {activeTab === 'tables' && (
-            <Button onClick={() => {
-              setTableForm({ tableNumber: '', capacity: '4', section: '', tags: '' });
-              setShowAddTable(true);
-            }}>
+            <Button
+              onClick={() => {
+                setTableForm({ tableNumber: '', capacity: '4', section: '', tags: '' });
+                setShowAddTable(true);
+              }}
+            >
               <Plus className="w-4 h-4" />
               Add Table
             </Button>
@@ -403,14 +382,18 @@ export default function RestaurantPage() {
       {/* Tabs */}
       <div className="flex gap-3 mb-6 border-b border-stone-200">
         <button
-          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'menu' ? 'border-amber text-ink' : 'border-transparent text-ink-muted hover:text-ink'}`}
+          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'menu' ? 'border-amber text-ink' : 'border-transparent text-ink-muted hover:text-ink'
+          }`}
           onClick={() => setActiveTab('menu')}
         >
           <UtensilsCrossed className="w-4 h-4 inline mr-2" />
           Menu Items ({items.length})
         </button>
         <button
-          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'tables' ? 'border-amber text-ink' : 'border-transparent text-ink-muted hover:text-ink'}`}
+          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'tables' ? 'border-amber text-ink' : 'border-transparent text-ink-muted hover:text-ink'
+          }`}
           onClick={() => setActiveTab('tables')}
         >
           <QrCode className="w-4 h-4 inline mr-2" />
@@ -419,99 +402,83 @@ export default function RestaurantPage() {
       </div>
 
       {/* ===== MENU TAB ===== */}
-      {activeTab === 'menu' && (<>
-        {/* Filters */}
-        <div className="flex gap-4 mb-6">
-          <div className="flex-1">
-            <Input
-              placeholder="Search menu items..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-md"
-            />
-          </div>
+      {activeTab === 'menu' && (
+        <>
+          {/* Filters */}
+          <div className="flex gap-4 mb-6">
+            <div className="flex-1">
+              <Input
+                placeholder="Search menu items..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="max-w-md"
+              />
+            </div>
 
-          <div className="flex gap-2">
-            <Button size="sm" variant={categoryFilter === 'all' ? 'primary' : 'ghost'} onClick={() => setCategoryFilter('all')}>
-              All
-            </Button>
-            {categories.map(cat => (
-              <Button key={cat.id} size="sm" variant={categoryFilter === cat.id ? 'primary' : 'ghost'} onClick={() => setCategoryFilter(cat.id)}>
-                {cat.name}
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={categoryFilter === 'all' ? 'primary' : 'ghost'}
+                onClick={() => setCategoryFilter('all')}
+              >
+                All
               </Button>
-            ))}
+              {categories.map((cat) => (
+                <Button
+                  key={cat.id}
+                  size="sm"
+                  variant={categoryFilter === cat.id ? 'primary' : 'ghost'}
+                  onClick={() => setCategoryFilter(cat.id)}
+                >
+                  {cat.name}
+                </Button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        {/* Menu Items Grid */}
-        {filteredItems.length === 0 ? (
-          <EmptyState
-            title={search || categoryFilter !== 'all' ? "No Results Found" : "No Menu Items Yet"}
-            description={
-              search || categoryFilter !== 'all'
-                ? "Try adjusting your filters."
-                : "Add your first menu item to get started."
-            }
-            actionLabel={!search && categoryFilter === 'all' ? "Add First Item" : undefined}
-            onAction={!search && categoryFilter === 'all' ? () => {
-              if (categories.length === 0) setShowAddCategory(true);
-              else startAddItem();
-            } : undefined}
-          />
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredItems.map((item) => (
-              <Card key={item.id} hover className="overflow-hidden">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-lg text-ink mb-1">{item.name}</h3>
-                    <p className="text-sm text-ink-muted line-clamp-2">{item.description}</p>
-                  </div>
-                  <div className="ml-3">
-                    <div className="font-bold text-xl text-amber">{formatCurrency(Number(item.price))}</div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 mb-4">
-                  <Badge variant="stone" className="text-xs">
-                    {item.category?.name || 'Uncategorized'}
-                  </Badge>
-                  {(item.tags || []).map(tag => (
-                    <Badge key={tag} variant="amber" className="text-xs">{tag}</Badge>
-                  ))}
-                  <Badge variant={item.isAvailable ? 'sage' : 'stone'} className="text-xs">
-                    {item.isAvailable ? 'Available' : 'Unavailable'}
-                  </Badge>
-                </div>
-
-                <div className="flex gap-2 pt-3 border-t border-stone-200">
-                  <Button size="sm" variant="ghost" className="flex-1" onClick={() => toggleAvailability(item.id, item.isAvailable)}>
-                    {item.isAvailable ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    {item.isAvailable ? 'Hide' : 'Show'}
-                  </Button>
-                  <Button size="sm" variant="ghost" className="flex-1" onClick={() => {
-                    setShowEditItem(item);
+          {/* Menu Items Grid */}
+          {filteredItems.length === 0 ? (
+            <EmptyState
+              title={search || categoryFilter !== 'all' ? 'No Results Found' : 'No Menu Items Yet'}
+              description={
+                search || categoryFilter !== 'all'
+                  ? 'Try adjusting your filters.'
+                  : 'Add your first menu item to get started.'
+              }
+              actionLabel={!search && categoryFilter === 'all' ? 'Add First Item' : undefined}
+              onAction={
+                !search && categoryFilter === 'all'
+                  ? () => {
+                      if (categories.length === 0) setShowAddCategory(true);
+                      else startAddItem();
+                    }
+                  : undefined
+              }
+            />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredItems.map((item) => (
+                <MenuItemCard
+                  key={item.id}
+                  item={item}
+                  onToggleAvailability={toggleAvailability}
+                  onEdit={(it) => {
+                    setShowEditItem(it);
                     setItemForm({
-                      name: item.name,
-                      description: item.description || '',
-                      price: item.price,
-                      categoryId: item.categoryId,
-                      tags: (item.tags || []).join(', '),
+                      name: it.name,
+                      description: it.description || '',
+                      price: it.price,
+                      categoryId: it.categoryId,
+                      tags: (it.tags || []).join(', '),
                     });
-                  }}>
-                    <Edit className="w-4 h-4" />
-                    Edit
-                  </Button>
-                  <Button size="sm" variant="ghost" className="text-red-500" onClick={() => handleDeleteItem(item.id)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-
-      </>)}
+                  }}
+                  onDelete={handleDeleteItem}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       {/* ===== TABLES TAB ===== */}
       {activeTab === 'tables' && (
@@ -649,74 +616,22 @@ export default function RestaurantPage() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredTables.map((table) => (
-                    <Card key={table.id} hover className="overflow-hidden">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-semibold text-lg text-ink">Table {table.tableNumber}</h3>
-                            {table.section && (
-                              <Badge variant="stone" className="text-xs font-semibold">
-                                {table.section}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 mt-1 text-sm text-ink-muted">
-                            <Users className="w-3.5 h-3.5" />
-                            <span>Seats {table.capacity}</span>
-                          </div>
-                        </div>
-                        <Badge variant="sage" className="text-xs shrink-0">
-                          <QrCode className="w-3 h-3 mr-1" />
-                          QR Ready
-                        </Badge>
-                      </div>
-
-                      {table.tags && table.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mb-3">
-                          {table.tags.map((tag, idx) => (
-                            <span key={idx} className="text-[11px] px-2 py-0.5 rounded-md bg-stone-100 text-ink-soft font-medium">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {table.qrCode && (
-                        <div className="bg-stone-50 rounded-lg p-3 mb-4">
-                          <p className="text-xs text-ink-muted mb-1">QR Menu Link</p>
-                          <p className="text-sm text-ink font-mono truncate">{table.qrCode}</p>
-                        </div>
-                      )}
-
-                      <div className="flex gap-2 pt-3 border-t border-stone-200">
-                        {table.qrCode && (
-                          <Link href="/dashboard/restaurant/qr" className="flex-1">
-                            <Button size="sm" variant="ghost" className="w-full"><QrCode className="w-4 h-4" /> Print QR</Button>
-                          </Link>
-                        )}
-                        {table.qrCode && (
-                          <Button size="sm" variant="ghost" className="flex-1" onClick={() => copyQrLink(table)}>
-                            {copiedId === table.id ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                            {copiedId === table.id ? 'Copied!' : 'Copy Link'}
-                          </Button>
-                        )}
-                        <Button size="sm" variant="ghost" className="flex-1" onClick={() => {
-                          setShowEditTable(table);
-                          setTableForm({
-                            tableNumber: table.tableNumber,
-                            capacity: String(table.capacity),
-                            section: table.section || '',
-                            tags: (table.tags || []).join(', '),
-                          });
-                        }}>
-                          <Edit className="w-4 h-4" />
-                          Edit
-                        </Button>
-                        <Button size="sm" variant="ghost" className="text-red-500" onClick={() => handleDeleteTable(table.id)}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </Card>
+                    <TableCard
+                      key={table.id}
+                      table={table}
+                      isCopied={copiedId === table.id}
+                      onCopyQrLink={copyQrLink}
+                      onEdit={(tbl) => {
+                        setShowEditTable(tbl);
+                        setTableForm({
+                          tableNumber: tbl.tableNumber,
+                          capacity: String(tbl.capacity),
+                          section: tbl.section || '',
+                          tags: (tbl.tags || []).join(', '),
+                        });
+                      }}
+                      onDelete={handleDeleteTable}
+                    />
                   ))}
                 </div>
               )}
@@ -725,147 +640,58 @@ export default function RestaurantPage() {
         </>
       )}
 
-      {/* Add Menu Item Modal */}
-      <AnimatePresence>
-        {showAddItem && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddItem(false)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-2xl p-8 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-serif text-2xl font-bold">Add Menu Item</h2>
-                <button onClick={() => setShowAddItem(false)} className="text-ink-muted hover:text-ink"><X className="w-5 h-5" /></button>
-              </div>
-              <div className="space-y-4">
-                <Input label="Item Name" placeholder="Butter Chicken" value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} />
-                <Input label="Description" placeholder="Creamy north Indian curry..." value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} />
-                <Input label="Price (₹)" type="number" placeholder="350" value={itemForm.price} onChange={(e) => setItemForm({ ...itemForm, price: e.target.value })} />
-                <Select label="Category" value={itemForm.categoryId} onChange={(e) => setItemForm({ ...itemForm, categoryId: e.target.value })} options={categories.map(c => ({ value: c.id, label: c.name }))} />
-                <Input label="Tags (comma separated)" placeholder="veg, spicy, popular" value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
-                <div className="flex gap-3 pt-4">
-                  <Button variant="ghost" className="flex-1" onClick={() => setShowAddItem(false)} disabled={saving}>Cancel</Button>
-                  <Button variant="terra" className="flex-1" onClick={handleCreateItem} disabled={saving}>{saving ? 'Creating...' : 'Add Item'}</Button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Add / Edit Menu Item Modal */}
+      <MenuItemModal
+        open={showAddItem || !!showEditItem}
+        onClose={() => {
+          setShowAddItem(false);
+          setShowEditItem(null);
+        }}
+        item={showEditItem}
+        categories={categories}
+        form={itemForm}
+        onFormChange={setItemForm}
+        saving={saving}
+        onSubmit={showEditItem ? handleEditItem : handleCreateItem}
+      />
 
-      {/* Edit Menu Item Modal */}
-      <AnimatePresence>
-        {showEditItem && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowEditItem(null)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-2xl p-8 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-serif text-2xl font-bold">Edit Menu Item</h2>
-                <button onClick={() => setShowEditItem(null)} className="text-ink-muted hover:text-ink"><X className="w-5 h-5" /></button>
-              </div>
-              <div className="space-y-4">
-                <Input label="Item Name" value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} />
-                <Input label="Description" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} />
-                <Input label="Price (₹)" type="number" value={itemForm.price} onChange={(e) => setItemForm({ ...itemForm, price: e.target.value })} />
-                <Select label="Category" value={itemForm.categoryId} onChange={(e) => setItemForm({ ...itemForm, categoryId: e.target.value })} options={categories.map(c => ({ value: c.id, label: c.name }))} />
-                <Input label="Tags (comma separated)" value={itemForm.tags} onChange={(e) => setItemForm({ ...itemForm, tags: e.target.value })} />
-                <div className="flex gap-3 pt-4">
-                  <Button variant="ghost" className="flex-1" onClick={() => setShowEditItem(null)} disabled={saving}>Cancel</Button>
-                  <Button variant="terra" className="flex-1" onClick={handleEditItem} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</Button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Categories Modal */}
+      <CategoryModal
+        open={showAddCategory}
+        onClose={() => setShowAddCategory(false)}
+        categories={categories}
+        categoryName={categoryName}
+        onCategoryNameChange={setCategoryName}
+        saving={saving}
+        onCreateCategory={handleCreateCategory}
+        onDeleteCategory={handleDeleteCategory}
+      />
 
-      {/* Add Category Modal */}
-      <AnimatePresence>
-        {showAddCategory && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddCategory(false)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-2xl p-8 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-serif text-2xl font-bold">Menu Categories</h2>
-                <button onClick={() => setShowAddCategory(false)} className="text-ink-muted hover:text-ink"><X className="w-5 h-5" /></button>
-              </div>
-              <div className="space-y-4">
-                {categories.length > 0 && (
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {categories.map(cat => (
-                      <div key={cat.id} className="flex items-center justify-between p-2 bg-stone-50 rounded-lg text-sm">
-                        <span className="font-medium">{cat.name}</span>
-                        <Button size="sm" variant="ghost" className="text-red-500 h-7" onClick={async () => {
-                          await fetch(`/api/menu-categories?id=${cat.id}`, { method: 'DELETE' });
-                          fetchCategories();
-                        }}>
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <hr />
-                <Input label="New Category Name" placeholder="Starters, Mains, Desserts..." value={categoryName} onChange={(e) => setCategoryName(e.target.value)} />
-                <div className="flex gap-3 pt-2">
-                  <Button variant="ghost" className="flex-1" onClick={() => setShowAddCategory(false)}>Close</Button>
-                  <Button variant="terra" className="flex-1" onClick={handleCreateCategory} disabled={saving}>{saving ? 'Creating...' : 'Add Category'}</Button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Add Table Modal */}
-      <AnimatePresence>
-        {showAddTable && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddTable(false)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-2xl p-8 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-serif text-2xl font-bold">Add Table</h2>
-                <button onClick={() => setShowAddTable(false)} className="text-ink-muted hover:text-ink"><X className="w-5 h-5" /></button>
-              </div>
-              <div className="space-y-4">
-                <Input label="Table Number" placeholder="1, 2, A1..." value={tableForm.tableNumber} onChange={(e) => setTableForm({ ...tableForm, tableNumber: e.target.value })} />
-                <Input label="Seating Capacity" type="number" placeholder="4" value={tableForm.capacity} onChange={(e) => setTableForm({ ...tableForm, capacity: e.target.value })} />
-                <Input label="Section / Area (optional)" placeholder="e.g. AC Dine-in, Outdoor Patio, Main Hall" value={tableForm.section} onChange={(e) => setTableForm({ ...tableForm, section: e.target.value })} />
-                <Input label="Tags (comma-separated, optional)" placeholder="e.g. Window, Booth, Garden View" value={tableForm.tags} onChange={(e) => setTableForm({ ...tableForm, tags: e.target.value })} />
-                <p className="text-xs text-ink-muted">A QR code link will be automatically generated for this table, allowing guests to scan and order directly.</p>
-                <div className="flex gap-3 pt-4">
-                  <Button variant="ghost" className="flex-1" onClick={() => setShowAddTable(false)} disabled={saving}>Cancel</Button>
-                  <Button variant="terra" className="flex-1" onClick={handleCreateTable} disabled={saving}>{saving ? 'Creating...' : 'Add Table'}</Button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Edit Table Modal */}
-      <AnimatePresence>
-        {showEditTable && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowEditTable(null)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-2xl p-8 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-serif text-2xl font-bold">Edit Table</h2>
-                <button onClick={() => setShowEditTable(null)} className="text-ink-muted hover:text-ink"><X className="w-5 h-5" /></button>
-              </div>
-              <div className="space-y-4">
-                <Input label="Table Number" value={tableForm.tableNumber} onChange={(e) => setTableForm({ ...tableForm, tableNumber: e.target.value })} />
-                <Input label="Seating Capacity" type="number" value={tableForm.capacity} onChange={(e) => setTableForm({ ...tableForm, capacity: e.target.value })} />
-                <Input label="Section / Area (optional)" placeholder="e.g. AC Dine-in, Outdoor Patio, Main Hall" value={tableForm.section} onChange={(e) => setTableForm({ ...tableForm, section: e.target.value })} />
-                <Input label="Tags (comma-separated, optional)" placeholder="e.g. Window, Booth, Garden View" value={tableForm.tags} onChange={(e) => setTableForm({ ...tableForm, tags: e.target.value })} />
-                <div className="flex gap-3 pt-4">
-                  <Button variant="ghost" className="flex-1" onClick={() => setShowEditTable(null)} disabled={saving}>Cancel</Button>
-                  <Button variant="terra" className="flex-1" onClick={handleEditTable} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</Button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Add / Edit Table Modal */}
+      <TableModal
+        open={showAddTable || !!showEditTable}
+        onClose={() => {
+          setShowAddTable(false);
+          setShowEditTable(null);
+        }}
+        table={showEditTable}
+        form={tableForm}
+        onFormChange={setTableForm}
+        saving={saving}
+        onSubmit={showEditTable ? handleEditTable : handleCreateTable}
+      />
 
       {/* Toast */}
       <AnimatePresence>
         {toast && (
-          <motion.div initial={{ opacity: 0, y: -50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -50 }}
-            className={`fixed top-8 right-8 z-50 px-6 py-4 rounded-lg shadow-lg ${toast.type === 'success' ? 'bg-green-50 border border-green-200 text-green-900' : 'bg-red-50 border border-red-200 text-red-900'}`}>
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className={`fixed top-8 right-8 z-50 px-6 py-4 rounded-lg shadow-lg ${
+              toast.type === 'success' ? 'bg-green-50 border border-green-200 text-green-900' : 'bg-red-50 border border-red-200 text-red-900'
+            }`}
+          >
             <span className="font-medium">{toast.message}</span>
           </motion.div>
         )}
