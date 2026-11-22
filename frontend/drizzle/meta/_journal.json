@@ -78,6 +78,13 @@
       "when": 1794651000000,
       "tag": "0010_table_section_and_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794652000000,
+      "tag": "0011_staff_areas",
+      "breakpoints": true
     }
   ]
 }
