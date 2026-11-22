@@ -24,10 +24,18 @@ export const paymentSettingsSchema = z.object({
   onlinePayments: z.boolean().default(false),
   /** Suggested deposit as a percentage of the stay. 0 = no suggestion. It only pre-fills an amount; nothing is blocked. */
   depositPercent: z.number().min(0).max(100).default(0),
+  /** Toggleable direct UPI QR code generation (zero-fee UPI) */
+  directUpiQr: z.boolean().default(false),
+  /** Payee Virtual Payment Address (UPI ID), e.g. business@bank */
+  upiId: z.string().trim().default(''),
+  /** Payee display name in UPI apps */
+  upiName: z.string().trim().default(''),
 });
 export type PaymentSettings = z.infer<typeof paymentSettingsSchema>;
 
 export const DEFAULT_PAYMENT_SETTINGS: PaymentSettings = paymentSettingsSchema.parse({});
+
+export * from './upi-qr';
 
 /** Reads stored settings, falling back to the defaults for anything missing or invalid. */
 export function parsePaymentSettings(stored: unknown): PaymentSettings {

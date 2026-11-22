@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Wallet, Save } from 'lucide-react';
+import { Wallet, Save, QrCode } from 'lucide-react';
 import { Card, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,15 @@ const MANUAL = [
   { value: 'bank_transfer', label: 'Bank transfer' },
 ];
 
-interface Loaded { manualMethods: string[]; onlinePayments: boolean; depositPercent: number; razorpayConfigured: boolean }
+interface Loaded {
+  manualMethods: string[];
+  onlinePayments: boolean;
+  depositPercent: number;
+  razorpayConfigured: boolean;
+  directUpiQr?: boolean;
+  upiId?: string;
+  upiName?: string;
+}
 
 /** Settings > Payments: how this property takes money. Saved on the server, so every staff member sees the same choices. */
 export function PaymentSettingsCard() {
@@ -23,6 +31,9 @@ export function PaymentSettingsCard() {
   const [online, setOnline] = useState(false);
   const [deposit, setDeposit] = useState('0');
   const [configured, setConfigured] = useState(false);
+  const [directUpiQr, setDirectUpiQr] = useState(false);
+  const [upiId, setUpiId] = useState('');
+  const [upiName, setUpiName] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -31,6 +42,9 @@ export function PaymentSettingsCard() {
     setOnline(d.onlinePayments);
     setDeposit(String(d.depositPercent));
     setConfigured(d.razorpayConfigured);
+    setDirectUpiQr(!!d.directUpiQr);
+    setUpiId(d.upiId ?? '');
+    setUpiName(d.upiName ?? '');
   };
 
   useEffect(() => {
@@ -51,13 +65,28 @@ export function PaymentSettingsCard() {
   const save = async () => {
     if (methods.length === 0) { setMessage({ ok: false, text: 'Keep at least one way to record a payment.' }); return; }
     if (!percentOk) { setMessage({ ok: false, text: 'The deposit must be a number from 0 to 100.' }); return; }
+    if (directUpiQr) {
+      if (!upiId.trim() || !upiId.includes('@')) {
+        setMessage({ ok: false, text: 'Please enter a valid UPI ID (e.g. hotel@okhdfcbank).' });
+        return;
+      }
+      if (!upiName.trim()) {
+        setMessage({ ok: false, text: 'Please enter the payee name for your UPI ID.' });
+        return;
+      }
+    }
     setSaving(true);
     setMessage(null);
     try {
       const res = await fetch('/api/settings/payments', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manualMethods: methods, onlinePayments: online, depositPercent: percent }),
+        body: JSON.stringify({
+          manualMethods: methods,
+          onlinePayments: online,
+          depositPercent: percent,
+          ...(directUpiQr ? { directUpiQr: true, upiId: upiId.trim(), upiName: upiName.trim() } : {}),
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -115,6 +144,49 @@ export function PaymentSettingsCard() {
             <p role="status" className="mt-3 rounded-lg bg-amber-pale px-4 py-3 text-sm text-amber-deep">
               Your Razorpay account is not connected yet, so links cannot be created. The owner connects it under Razorpay account, below.
             </p>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-stone-200 p-4 space-y-4 bg-stone-50/50">
+          <label className="flex items-start gap-3 text-sm text-ink cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-teal-700"
+              checked={directUpiQr}
+              onChange={(e) => { setMessage(null); setDirectUpiQr(e.target.checked); }}
+            />
+            <span>
+              <span className="font-semibold flex items-center gap-2">
+                <QrCode className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+                Direct UPI QR Code (Zero-fee UPI)
+              </span>
+              <span className="block text-ink-muted mt-0.5">
+                Staff can display a UPI QR code on the billing screen that guests scan with any UPI app (GPay, PhonePe, Paytm, BHIM, Cred) to pay straight into your bank account with no gateway fees.
+              </span>
+            </span>
+          </label>
+
+          {directUpiQr && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-stone-200">
+              <div>
+                <Input
+                  label="UPI ID / VPA *"
+                  placeholder="e.g. hotel@okhdfcbank"
+                  value={upiId}
+                  onChange={(e) => { setMessage(null); setUpiId(e.target.value); }}
+                />
+                <p className="mt-1 text-xs text-ink-muted">The Virtual Payment Address linked to your bank account.</p>
+              </div>
+              <div>
+                <Input
+                  label="Payee Name *"
+                  placeholder="e.g. Grand Hotel & Restaurant"
+                  value={upiName}
+                  onChange={(e) => { setMessage(null); setUpiName(e.target.value); }}
+                />
+                <p className="mt-1 text-xs text-ink-muted">Name displayed in the customer&apos;s UPI app when scanning.</p>
+              </div>
+            </div>
           )}
         </div>
 
