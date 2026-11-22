@@ -9,12 +9,14 @@ import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import Link from 'next/link';
-import { Receipt, IndianRupee, CheckCircle2, Printer, Link2, Copy, FileText, BedDouble, X } from 'lucide-react';
+import { Receipt, IndianRupee, CheckCircle2, Printer, Link2, Copy, FileText, BedDouble, X, QrCode } from 'lucide-react';
 import { format } from 'date-fns';
+import QRCode from 'qrcode';
 import { formatCurrency } from '@/lib/currency';
 import { billStatus } from '@/lib/bill-status';
 import { suggestedDeposit } from '@/lib/deposit';
 import { GST_STATES, splitGst } from '@/lib/gst';
+import { buildUpiNote, buildUpiPaymentUrl } from '@/lib/upi-qr';
 
 type BillKind = 'stay' | 'restaurant';
 
@@ -69,8 +71,17 @@ const isOnline = (method: string) => method === 'razorpay' || method === 'razorp
 const METHOD_LABEL: Record<string, string> = { ...Object.fromEntries(METHODS.map(m => [m.value, m.label])), razorpay: 'Online payment', razorpay_qr: 'Online payment', stripe: 'Card (online)' };
 
 /** What Settings > Payments allows. Until it loads, every manual way is offered and online payment is not. */
-interface PaySettings { manualMethods: string[]; onlinePayments: boolean; depositPercent: number; razorpayConfigured: boolean }
-const DEFAULT_PAY: PaySettings = { manualMethods: METHODS.map(m => m.value), onlinePayments: false, depositPercent: 0, razorpayConfigured: false };
+interface PaySettings {
+  manualMethods: string[];
+  onlinePayments: boolean;
+  depositPercent: number;
+  razorpayConfigured: boolean;
+  directUpiQr?: boolean;
+  upiId?: string;
+  upiName?: string;
+  tenantName?: string;
+}
+const DEFAULT_PAY: PaySettings = { manualMethods: METHODS.map(m => m.value), onlinePayments: false, depositPercent: 0, razorpayConfigured: false, directUpiQr: false, upiId: '', upiName: '' };
 const REFERENCE_LABEL: Record<string, string> = { upi: 'UPI transaction ID', card: 'Last 4 digits or slip number', bank_transfer: 'Bank reference' };
 
 const COPY: Record<BillKind, { title: string; sub: string; empty: string; chooseHint: string }> = {
@@ -108,6 +119,58 @@ export function BillingView({ kind }: { kind: BillKind }) {
   const [copied, setCopied] = useState(false);
   // Set once Razorpay refuses a QR for lack of UPI, so staff are not offered something that cannot work. Lasts for this tab.
   const [qrUnavailable, setQrUnavailable] = useState(false);
+  // Direct Zero-Fee UPI QR Code
+  const [showDirectUpiQr, setShowDirectUpiQr] = useState(false);
+  const [directUpiQrData, setDirectUpiQrData] = useState<{
+    imageUrl: string;
+    upiUrl: string;
+    amount: number;
+    note: string;
+    payeeName: string;
+    upiId: string;
+  } | null>(null);
+  const [generatingUpiQr, setGeneratingUpiQr] = useState(false);
+
+  const openDirectUpiQr = async (customAmount?: number) => {
+    if (!selected) return;
+    const amt = customAmount ?? (Number(form.amount) > 0 ? Number(form.amount) : owed);
+    if (!(amt > 0)) return;
+
+    setGeneratingUpiQr(true);
+    try {
+      const tenantName = paySettings.tenantName || receiptConfig.header || (kind === 'stay' ? 'Hotel' : 'Restaurant');
+      const nowDate = new Date();
+      const note = buildUpiNote(tenantName, nowDate);
+      const upiUrl = buildUpiPaymentUrl({
+        upiId: paySettings.upiId || '',
+        payeeName: paySettings.upiName || tenantName,
+        amount: amt,
+        tenantName,
+        date: nowDate,
+      });
+
+      const imageUrl = await QRCode.toDataURL(upiUrl, {
+        errorCorrectionLevel: 'M',
+        margin: 2,
+        width: 320,
+      });
+
+      setDirectUpiQrData({
+        imageUrl,
+        upiUrl,
+        amount: amt,
+        note,
+        payeeName: paySettings.upiName || tenantName,
+        upiId: paySettings.upiId || '',
+      });
+      setShowDirectUpiQr(true);
+    } catch (err) {
+      console.error('Failed to generate UPI QR', err);
+    } finally {
+      setGeneratingUpiQr(false);
+    }
+  };
+
   useEffect(() => { try { if (sessionStorage.getItem(QR_FLAG)) setQrUnavailable(true); } catch { /* storage blocked: the flag just resets */ } }, []);
   // A QR on screen, waiting for the guest to scan it. paidBefore is what the bill had received when it was made.
   const [qr, setQr] = useState<{ id: string; imageUrl: string; amount: number; expiresAt: number; paidBefore: number } | null>(null);
@@ -630,10 +693,23 @@ export function BillingView({ kind }: { kind: BillKind }) {
 
               <div className="space-y-3 print:hidden">
                 {selected.status !== 'paid' && (
-                  <Button className="w-full" onClick={openPay}>
-                    <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-                    Record payment
-                  </Button>
+                  <>
+                    <Button className="w-full" onClick={openPay}>
+                      <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+                      Record payment
+                    </Button>
+                    {paySettings.directUpiQr && paySettings.upiId && (
+                      <Button
+                        variant="ghost"
+                        className="w-full border border-stone-200 text-ink hover:bg-stone-50 flex items-center justify-center gap-2"
+                        onClick={() => openDirectUpiQr()}
+                        isLoading={generatingUpiQr}
+                      >
+                        <QrCode className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+                        Show UPI QR Code
+                      </Button>
+                    )}
+                  </>
                 )}
 
                 {kind === 'restaurant' && selected.status === 'open' && selected.payments.length === 0 && (
@@ -740,6 +816,16 @@ export function BillingView({ kind }: { kind: BillKind }) {
                 )}
               </div>
               <Select label="Paid by" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} options={methodOptions} />
+              {form.method === 'upi' && paySettings.directUpiQr && paySettings.upiId && (
+                <button
+                  type="button"
+                  onClick={() => openDirectUpiQr(Number(form.amount) > 0 ? Number(form.amount) : owed)}
+                  className="w-full py-2.5 px-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-medium hover:bg-emerald-100 flex items-center justify-center gap-2 transition-colors"
+                >
+                  <QrCode className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+                  Show UPI QR Code ({formatCurrency(Number(form.amount) > 0 ? Number(form.amount) : owed)})
+                </button>
+              )}
               {form.method !== 'cash' && !isOnline(form.method) && (
                 <Input label={`${REFERENCE_LABEL[form.method]} (optional)`} value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
               )}
@@ -818,6 +904,76 @@ export function BillingView({ kind }: { kind: BillKind }) {
               <Button variant="ghost" className="w-full" onClick={() => setShowInvoice(false)} disabled={issuing}>Cancel</Button>
             </div>
           </>
+        )}
+      </Dialog>
+
+      {/* Direct UPI QR Code Dialog */}
+      <Dialog
+        open={showDirectUpiQr && !!directUpiQrData}
+        onClose={() => setShowDirectUpiQr(false)}
+        labelledBy="upi-qr-title"
+        className="p-8 max-w-md w-full"
+      >
+        {directUpiQrData && (
+          <div className="space-y-4 text-center">
+            <div className="flex items-center justify-between pb-2 border-b border-stone-200 text-left">
+              <div>
+                <h2 id="upi-qr-title" className="text-xl font-bold text-ink">Scan & Pay via UPI</h2>
+                <p className="text-sm text-ink-muted">{selected?.guestName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDirectUpiQr(false)}
+                className="p-1 rounded-full text-stone-400 hover:text-stone-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 flex flex-col items-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={directUpiQrData.imageUrl}
+                alt={`UPI QR code to pay ${formatCurrency(directUpiQrData.amount)}`}
+                className="w-64 h-64 rounded-lg bg-white p-2 shadow-sm border border-stone-100 object-contain"
+              />
+              <div className="mt-3 text-2xl font-bold text-ink">
+                {formatCurrency(directUpiQrData.amount)}
+              </div>
+              <p className="text-xs text-ink-muted mt-1">
+                Scan with Google Pay, PhonePe, Paytm, BHIM, Cred, or any UPI app
+              </p>
+            </div>
+
+            <div className="text-left text-xs bg-stone-100/70 p-3 rounded-lg space-y-1 text-ink-soft">
+              <div><span className="font-semibold text-ink">Payee:</span> {directUpiQrData.payeeName} ({directUpiQrData.upiId})</div>
+              <div><span className="font-semibold text-ink">Transaction Note:</span> {directUpiQrData.note}</div>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <Button
+                className="w-full"
+                onClick={() => {
+                  setShowDirectUpiQr(false);
+                  setForm({
+                    ...form,
+                    method: 'upi',
+                    amount: plain(directUpiQrData.amount),
+                    reference: '',
+                    note: directUpiQrData.note,
+                  });
+                  setShowPay(true);
+                }}
+              >
+                <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+                Record payment received
+              </Button>
+              <Button variant="ghost" className="w-full" onClick={() => setShowDirectUpiQr(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
         )}
       </Dialog>
     </div>
