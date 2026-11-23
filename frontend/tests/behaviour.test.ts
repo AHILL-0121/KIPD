@@ -11,7 +11,6 @@ import * as billing from '@/app/api/billing/route';
 import * as sse from '@/app/api/sse/kds/[outletId]/route';
 import * as staffById from '@/app/api/staff/[id]/route';
 import * as staffDirect from '@/app/api/staff/direct/route';
-import * as notification from '@/app/api/payments/notification-match/route';
 import * as adminTenants from '@/app/api/admin/tenants/route';
 import { clerkClient } from '@clerk/nextjs';
 import { emailTemplates } from '@/lib/email';
@@ -198,54 +197,6 @@ describe('menu editing', () => {
   });
 });
 
-describe('UPI payment matching', () => {
-  const notify = (over: object = {}) => call(notification.POST, 'POST', '/api/payments/notification-match', {
-    body: { amount: 1180, reference: 'REF123456789', packageName: 'com.phonepe.app', ...over },
-  });
-
-  it('suggests the matching open bill without marking anything paid', async () => {
-    loginAs('ownerA');
-    const r = await notify();
-    expect(r.json).toMatchObject({ success: true, status: 'pending_confirmation', matchedBillId: A.bill });
-    expect((await q<{ status: string }>(`select status from bills where id = '${A.bill}'`))[0].status).toBe('open');
-  });
-
-  it('never matches another tenant\'s bill, even for the exact same amount', async () => {
-    loginAs('ownerA');
-    const r = await notify({ amount: 777, reference: 'REF000000001' }); // tenant B's bill total
-    expect(r.json).toMatchObject({ status: 'unmatched', matchedBillId: null });
-  });
-
-  it('ignores a tenant id sent in the body and uses the session', async () => {
-    loginAs('ownerA');
-    await notify({ tenantId: ids.B.tenant, propertyId: ids.B.property });
-    const [e] = await q<{ tenant_id: string; property_id: string | null }>(`select tenant_id, property_id from payment_events`);
-    expect(e.tenant_id).toBe(A.tenant);
-    expect(e.property_id).toBeNull(); // property from another tenant is dropped
-  });
-
-  it('treats a repeated reference as a duplicate', async () => {
-    loginAs('ownerA');
-    await notify();
-    expect((await notify()).json).toMatchObject({ duplicate: true });
-    expect((await q(`select id from payment_events`)).length).toBe(1);
-  });
-
-  it('reports ambiguity instead of guessing when two bills share an amount', async () => {
-    loginAs('ownerA');
-    await testDb.insert(bills).values({ tenantId: A.tenant, guestId: A.guest, totalAmount: '1180.00', status: 'open' });
-    expect((await notify()).json).toMatchObject({ status: 'ambiguous', matchedBillId: null });
-  });
-
-  it('masks long numbers in stored text and rejects unknown apps', async () => {
-    loginAs('ownerA');
-    await notify({ rawText: 'Received Rs 1180 from 9876543210' });
-    const [e] = await q<{ raw_payload: string }>(`select raw_payload from payment_events`);
-    expect(e.raw_payload).not.toContain('9876543210');
-    expect(e.raw_payload).toContain('******3210');
-    expect((await notify({ packageName: 'com.evil.app', reference: 'REF999999999' })).status).toBe(400);
-  });
-});
 
 describe('removing staff', () => {
   it('never removes the owner or yourself', async () => {

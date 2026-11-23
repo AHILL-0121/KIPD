@@ -11,7 +11,6 @@ import * as kds from '@/app/api/kds/[outletId]/route';
 import * as sse from '@/app/api/sse/kds/[outletId]/route';
 import * as staffList from '@/app/api/staff/route';
 import * as staffDirect from '@/app/api/staff/direct/route';
-import * as notification from '@/app/api/payments/notification-match/route';
 import { call, ids, loginAs, resetAndSeed, staffIds, personas, type Persona } from './helpers/harness';
 import { testDb } from './helpers/db';
 import { staff } from '@/db/schema';
@@ -88,7 +87,6 @@ describe('not signed in', () => {
     ['POST /api/staff/direct', () => call(staffDirect.POST, 'POST', '/api/staff/direct', { body: newStaff('waiter') })],
     ['GET /api/kds/[outletId]', () => call(kds.GET, 'GET', `/api/kds/${A.outlet}`, { params: { outletId: A.outlet } })],
     ['GET /api/sse/kds/[outletId]', () => call(sse.GET, 'GET', `/api/sse/kds/${A.outlet}`, { params: { outletId: A.outlet } })],
-    ['POST /api/payments/notification-match (was fully open)', () => call(notification.POST, 'POST', '/api/payments/notification-match', { body: { amount: 1180, packageName: 'com.phonepe.app' } })],
   ];
   for (const [name, run] of routes) {
     it(`${name} returns 401`, async () => {

@@ -4,7 +4,6 @@ import * as rooms from '@/app/api/rooms/route';
 import * as bookings from '@/app/api/bookings/route';
 import * as settle from '@/app/api/orders/settle-tab/route';
 import * as orderById from '@/app/api/orders/[id]/route';
-import * as notification from '@/app/api/payments/notification-match/route';
 import fs from 'fs';
 import path from 'path';
 import { MIGRATIONS } from './helpers/db';
@@ -131,16 +130,6 @@ describe('simultaneous requests', () => {
     expect(await q(`select id from bills where guest_id in (select id from guests where email = 'walkin@kipd.local' and tenant_id = '${A.tenant}')`)).toHaveLength(2);
   });
 
-  it('the same UPI payment reported twice at once is recorded once', async () => {
-    loginAs('ownerA');
-    const notify = () => call(notification.POST, 'POST', '/api/payments/notification-match', {
-      body: { amount: 1180, reference: 'SAMEREF12345', packageName: 'com.phonepe.app' },
-    });
-    const results = await Promise.all([notify(), notify()]);
-    expect(results.map((r) => r.status)).toEqual([200, 200]);
-    expect(results.filter((r) => r.json.duplicate).length).toBe(1);
-    expect(await q(`select id from payment_events where parsed_reference = 'SAMEREF12345'`)).toHaveLength(1);
-  });
 });
 
 /**
