@@ -55,4 +55,21 @@ describe('dashboard layout', () => {
     expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Home', 'Restaurant', 'Orders']);
     expect(replace).not.toHaveBeenCalled();
   });
+
+  it('shows human user name in mobile identity banner but hides email addresses', async () => {
+    pathname = '/dashboard/orders';
+    signedInAs('owner');
+    const { unmount } = render(<DashboardLayout><p>page</p></DashboardLayout>);
+    await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    // Both desktop sidebar and mobile banner render the human name
+    expect(screen.getAllByText('Meera Rao').length).toBe(2);
+    unmount();
+
+    // When userName is an email address fallback:
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 't1', name: 'Orchid Bay', type: 'both', role: 'owner', userName: 'sa.education5211@gmail.com' }))));
+    render(<DashboardLayout><p>page</p></DashboardLayout>);
+    await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    // Only desktop sidebar renders the email, mobile banner suppresses it
+    expect(screen.getAllByText('sa.education5211@gmail.com').length).toBe(1);
+  });
 });

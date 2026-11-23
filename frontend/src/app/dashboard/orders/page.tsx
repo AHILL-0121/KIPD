@@ -5,7 +5,7 @@ import { useLive } from '@/lib/use-live';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { LoadingState } from '@/components/ui/loading-state';
-import { MapPin, Plus, Package } from 'lucide-react';
+import { MapPin, Plus, Package, UtensilsCrossed } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTenantInfo } from '@/contexts/tenant-context';
 import { useQuery } from '@/hooks/use-query';
@@ -311,10 +311,10 @@ export default function OrdersPage() {
 
   return (
     <div className="p-4 md:p-8 overflow-x-hidden">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pr-2">
+      <div className="flex items-center justify-between gap-3 mb-4 pr-1">
         <div>
           <h1 className="section-title">Active orders</h1>
-          <p className="section-sub">
+          <p className="section-sub hidden sm:block">
             {activeSection === 'takeaway'
               ? 'Quick counter and takeaway orders. No table assignment needed.'
               : activeSection === 'tables'
@@ -323,20 +323,32 @@ export default function OrdersPage() {
           </p>
         </div>
 
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="ghost" className="bg-stone-100 hover:bg-stone-200" onClick={openNewTakeaway}>
-            <Package className="w-4 h-4" />
-            New take-away
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="ghost"
+            className="bg-stone-100 hover:bg-stone-200 min-h-[44px] min-w-[44px] p-2.5 sm:px-4"
+            onClick={openNewTakeaway}
+            title="New take-away"
+            aria-label="New take-away"
+          >
+            <Package className="w-5 h-5 sm:w-4 sm:h-4 text-ink" aria-hidden="true" />
+            <span className="hidden sm:inline ml-1.5">New take-away</span>
           </Button>
-          <Button onClick={() => openNewOrder()}>
-            <Plus className="w-4 h-4" />
-            Seat new table
+          <Button
+            className="min-h-[44px] min-w-[44px] p-2.5 sm:px-4"
+            onClick={() => openNewOrder()}
+            title="Seat new table"
+            aria-label="Seat new table"
+          >
+            <UtensilsCrossed className="w-5 h-5 sm:w-4 sm:h-4 sm:hidden" aria-hidden="true" />
+            <Plus className="w-4 h-4 hidden sm:inline mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Seat new table</span>
           </Button>
         </div>
       </div>
 
       {/* Section Switcher Tabs */}
-      <div role="tablist" aria-label="Order sections" className="inline-flex gap-1 p-1 rounded-xl bg-stone-100 mb-8 self-start flex-wrap">
+      <div role="tablist" aria-label="Order sections" className="inline-flex gap-1 p-1 rounded-xl bg-stone-100 mb-4 sm:mb-8 self-start flex-wrap">
         <button
           role="tab"
           aria-selected={activeSection === 'tables'}

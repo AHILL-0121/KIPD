@@ -191,38 +191,38 @@ export function NewOrderSheet({
               })}
             </div>
           )}
-          <div className="max-h-64 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 gap-2 border border-stone-200 rounded-xl p-3 bg-stone-50/50">
+          <div className="max-h-72 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 border border-stone-200 rounded-xl p-2.5 bg-stone-50/50">
             {menuItems
               .filter(i => (menuCategory === 'all' || i.category?.name === menuCategory) && i.name.toLowerCase().includes(menuSearch.toLowerCase()))
               .map(item => {
                 const inCart = cart.find(c => c.menuItemId === item.id);
                 return (
-                  <div key={item.id} className="aspect-square flex flex-col justify-between p-2 rounded-lg bg-white border border-stone-200 shadow-sm">
-                    <div className="min-w-0">
-                      <span className="font-semibold text-ink text-sm leading-tight block line-clamp-2">{item.name}</span>
-                      <span className="text-xs text-ink-muted">{formatCurrency(Number(item.price))}</span>
+                  <div key={item.id} className="min-h-[110px] flex flex-col justify-between p-3 rounded-xl bg-white border border-stone-200 shadow-sm">
+                    <div className="min-w-0 mb-2">
+                      <span className="font-semibold text-ink text-sm leading-tight block line-clamp-2" title={item.name}>{item.name}</span>
+                      <span className="text-xs text-ink-muted font-medium mt-0.5 block">{formatCurrency(Number(item.price))}</span>
                     </div>
                     {inCart ? (
-                      <div className="flex items-center justify-between bg-stone-100 rounded-lg p-1">
+                      <div className="flex items-center justify-between bg-stone-100 rounded-lg p-0.5 w-full">
                         <button
                           onClick={() => onRemoveFromCart(item.id)}
                           aria-label={`Remove one ${item.name}`}
-                          className="min-h-[40px] min-w-[40px] p-2 rounded bg-white shadow-sm text-ink-soft flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
+                          className="h-9 w-9 rounded-md bg-white shadow-sm text-ink-soft hover:text-ink flex items-center justify-center shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
                         >
                           <Minus className="w-4 h-4" aria-hidden="true" />
                         </button>
-                        <span className="font-bold text-sm text-center px-1" aria-live="polite">{inCart.quantity}</span>
+                        <span className="font-bold text-sm text-center px-1 truncate" aria-live="polite">{inCart.quantity}</span>
                         <button
                           onClick={() => onAddToCart(item)}
                           aria-label={`Add one more ${item.name}`}
-                          className="min-h-[40px] min-w-[40px] p-2 rounded bg-amber shadow-sm text-white flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber"
+                          className="h-9 w-9 rounded-md bg-amber shadow-sm text-white hover:bg-amber-deep flex items-center justify-center shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber"
                         >
                           <Plus className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>
                     ) : (
-                      <Button size="sm" variant="ghost" onClick={() => onAddToCart(item)} className="font-bold w-full min-h-[44px]">
-                        <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add<span className="sr-only"> {item.name}</span>
+                      <Button size="sm" variant="ghost" onClick={() => onAddToCart(item)} className="font-bold w-full h-9 text-xs sm:text-sm border border-stone-200 bg-stone-50 hover:bg-amber-pale hover:text-amber-deep hover:border-amber/40">
+                        <Plus className="w-3.5 h-3.5 mr-1" aria-hidden="true" /> Add<span className="sr-only"> {item.name}</span>
                       </Button>
                     )}
                   </div>

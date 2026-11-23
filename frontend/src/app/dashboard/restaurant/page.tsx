@@ -405,21 +405,35 @@ export default function RestaurantPage() {
       {activeTab === 'menu' && (
         <>
           {/* Filters */}
-          <div className="flex gap-4 mb-6">
-            <div className="flex-1">
-              <Input
+          <div className="space-y-3 mb-6">
+            <div className="relative max-w-md">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
+              <input
+                type="text"
                 placeholder="Search menu items..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="max-w-md"
+                className="w-full pl-10 pr-9 py-2.5 min-h-[44px] text-sm bg-white border border-stone-200 rounded-xl text-ink placeholder:text-ink-muted focus:outline-none focus:border-amber focus:ring-1 focus:ring-amber transition-colors"
+                aria-label="Search menu items"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink p-1"
+                  aria-label="Clear menu search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-1.5 -mx-1 px-1">
               <Button
                 size="sm"
                 variant={categoryFilter === 'all' ? 'primary' : 'ghost'}
                 onClick={() => setCategoryFilter('all')}
+                className="shrink-0 min-h-[40px] px-4 rounded-xl"
               >
                 All
               </Button>
@@ -429,6 +443,7 @@ export default function RestaurantPage() {
                   size="sm"
                   variant={categoryFilter === cat.id ? 'primary' : 'ghost'}
                   onClick={() => setCategoryFilter(cat.id)}
+                  className="shrink-0 min-h-[40px] px-4 rounded-xl"
                 >
                   {cat.name}
                 </Button>
