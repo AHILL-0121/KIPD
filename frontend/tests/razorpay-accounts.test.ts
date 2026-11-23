@@ -5,7 +5,6 @@ import * as billing from '@/app/api/billing/route';
 import * as settle from '@/app/api/orders/settle-tab/route';
 import * as orderById from '@/app/api/orders/[id]/route';
 import * as kds from '@/app/api/kds/[outletId]/route';
-import * as notification from '@/app/api/payments/notification-match/route';
 import * as appSettings from '@/app/api/settings/route';
 import * as paySettings from '@/app/api/settings/payments/route';
 import * as account from '@/app/api/settings/payments/razorpay/route';
@@ -240,7 +239,6 @@ describe('waiters: the kitchen board, not billing (decided 2026-11-14)', () => {
     expect((await call(billing.PATCH, 'PATCH', '/api/billing', { body: { billId: A.bill, paymentMethod: 'cash' } })).status).toBe(403);
     expect((await call(paySettings.GET, 'GET', '/api/settings/payments')).status).toBe(403);
     expect((await call(appSettings.GET, 'GET', '/api/settings')).status).toBe(403);
-    expect((await call(notification.POST, 'POST', '/api/payments/notification-match', { body: { amount: 100, packageName: 'com.phonepe.app' } })).status).toBe(403);
   });
 
   it('front desk still can', async () => {

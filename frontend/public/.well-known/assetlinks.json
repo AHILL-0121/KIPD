@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.kipd.android",
+      "sha256_cert_fingerprints": [
+        "14:6D:E9:7F:43:24:D3:5B:3C:96:D2:C0:7E:2C:19:D8:E5:6B:80:48:02:64:9F:8B:D8:1A:1C:CE:F6:42:0E:FB"
+      ]
+    }
+  }
+]

@@ -2,8 +2,7 @@
 
 Multi-tenant hotel and restaurant management. One deployment serves many properties; each property's data is isolated
 by tenant. Hotels get a booking calendar, stay billing and GST invoices. Restaurants get QR table ordering, a kitchen
-display and separate bills. An optional Android shell can read UPI payment notifications on a front-desk device and match
-them to open bills.
+display and separate bills. An optional Android Capacitor shell provides native printing, offline fallbacks, and verified deep links.
 
 This repository is a single Next.js application (`frontend/`) with a Capacitor Android project inside it
 (`frontend/android/`).
@@ -68,7 +67,7 @@ This repository is a single Next.js application (`frontend/`) with a Capacitor A
 | Email | SMTP (staff invitations, access requests) |
 | Rate limiting | Upstash Redis, with an in-memory fallback |
 | Observability | Structured logging, optional Sentry error tracking, `/api/health` SLA monitoring |
-| Android | Capacitor 8+, with a native Java notification listener |
+| Android | Capacitor 8+, with native print bridge, offline fallback, and verified deep links |
 | Tests | Vitest |
 | Hosting | Vercel |
 
@@ -78,7 +77,7 @@ This repository is a single Next.js application (`frontend/`) with a Capacitor A
 .
 ├── .github/workflows/        CI (types, lint, tests, build) and Android APK build
 └── frontend/
-    ├── android/              Capacitor Android project, including UPIListenerService.java
+    ├── android/              Capacitor Android project, including MainActivity with print bridge
     ├── drizzle/              SQL migrations, snapshots, and RUNBOOK.txt
     ├── scripts/              db-drift, db-reset, create-platform-admin
     ├── src/
@@ -179,9 +178,6 @@ Payments setting. Three payment paths exist:
    Settings) with the `payment_link.paid` and `qr_code.credited` events. That route is public in the Clerk middleware
    and instead verifies Razorpay's signature using that business's own webhook secret. A unique index on
    `payments.razorpay_payment_id` means a webhook delivered twice cannot count a payment twice.
-3. **UPI notification matching** from the Android app (see below), which posts to `/api/payments/notification-match`
-   and returns a suggested bill for staff to confirm.
-
 Razorpay and direct UPI QR are both optional. A business that has not connected an account works as before; staff can always record payments manually.
 
 ## Mobile UX & Touch Targets
@@ -215,16 +211,14 @@ to the deployed site, so the app loads the live web application:
   allow-lists the app's own origin (`capacitor://com.kipd.android`) and the deployed site as authorized parties.
   Local origins (`capacitor://localhost`, `http://localhost:3000`) are accepted only outside production.
 
-### UPI notification listener
+### Deep linking & offline fallback
 
-`UPIListenerService.java` is a notification listener service. After the user grants notification access, it reads
-incoming notifications from supported UPI apps, extracts the amount and bank reference with regular expressions, and
-passes them to the web layer, which posts them to `/api/payments/notification-match` to find a matching open bill.
-Only notifications from GPay, PhonePe and Paytm are accepted. The endpoint requires a signed-in staff session, takes the
-tenant from that session, and only matches bills of that tenant. It records the event and suggests a matching open bill;
-it never marks a bill paid, and a person confirms at the counter. It is intended for a dedicated device at the front
-desk. It depends on the wording of third-party notifications, so expect to adjust the patterns if an app changes its
-text. Device-registered, signed requests are not implemented yet.
+- **Digital Asset Links:** Deep linking for `/accept-invite` uses `autoVerify="true"` and is verified via `public/.well-known/assetlinks.json`. Replace `PLACEHOLDER_SHA256_FINGERPRINT` with your release or debug keystore SHA-256 fingerprint (`keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android`).
+- **Offline Fallback:** If device network drops while using the Android WebView or PWA, Capacitor redirects to `offline.html` locally with an automatic reconnect listener once connection is restored.
+
+### Native printing
+
+An `AndroidPrinter` Javascript bridge in `MainActivity.java` enables native thermal/system printing directly from the WebView for invoices, receipts, and order tickets.
 
 ### Building the APK
 
@@ -344,4 +338,3 @@ pushes to `main` and manual runs, after those checks pass.
   `GET /api/settings` returns empty lists for them.
 - **Receipt layout migration.** Receipt layouts that were saved only in a browser's `localStorage` before migration
   `0007` were not carried over and must be entered again.
-- **UPI matching** depends on third-party notification text and is best-effort.

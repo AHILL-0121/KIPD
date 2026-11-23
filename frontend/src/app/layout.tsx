@@ -4,6 +4,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 import { ConfirmHost } from '@/components/ui/confirm'
+import { NetworkBanner } from '@/components/ui/network-banner'
 
 // Bundled with the app (npm @fontsource) rather than fetched from Google at build time, so builds work offline and in CI.
 
@@ -30,6 +31,12 @@ const plexMono = localFont({
 export const metadata: Metadata = {
   title: 'Kipd | Hotel & Restaurant Management',
   description: 'Modern SaaS platform for boutique hotels and hospitality businesses',
+  manifest: '/manifest.webmanifest',
+  icons: {
+    icon: '/kipd-app-icon.svg',
+    apple: '/icons/icon-192.png',
+  },
+  themeColor: '#d97706',
 }
 
 export default function RootLayout({
@@ -41,6 +48,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
         <body className="font-sans bg-cream text-ink antialiased">
+          <NetworkBanner />
           {children}
           <Toaster />
           <ConfirmHost />
