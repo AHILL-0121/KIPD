@@ -59,16 +59,16 @@ This repository is a single Next.js application (`frontend/`) with a Capacitor A
 
 | Area | Choice |
 | --- | --- |
-| Application | Next.js 14 (App Router), React, TypeScript |
+| Application | Next.js 14 (App Router), React 18, TypeScript |
 | Styling | Tailwind CSS |
 | Database | PostgreSQL on Neon, Drizzle ORM, SQL migrations via drizzle-kit |
-| Authentication | Clerk |
+| Authentication | Clerk (with database `staff` table as single source of truth) |
 | Validation | zod |
-| Online payments | Razorpay payment links and webhooks |
+| Payments | Razorpay links & webhooks, plus Zero-fee Direct UPI QR (NPCI intent) |
 | Email | SMTP (staff invitations, access requests) |
 | Rate limiting | Upstash Redis, with an in-memory fallback |
-| File storage | Vercel Blob |
-| Android | Capacitor, with a native Java notification listener |
+| Observability | Structured logging, optional Sentry error tracking, `/api/health` SLA monitoring |
+| Android | Capacitor 8+, with a native Java notification listener |
 | Tests | Vitest |
 | Hosting | Vercel |
 
@@ -99,13 +99,19 @@ This repository is a single Next.js application (`frontend/`) with a Capacitor A
 
 Roles are enforced on the server in `src/lib/auth.ts` (`requireTenant(ROLES.x)`), not just hidden in the sidebar.
 
-| Role | Intended use |
-| --- | --- |
-| `owner` | Everything, including settings and staff |
-| `manager` | Everything, including settings and staff |
-| `front_desk` | Bookings, rooms, hotel billing and invoices |
-| `waiter` | Orders and billing for restaurant tables |
-| `kitchen` | Kitchen display and order status |
+### Single Source of Truth & Area Access Enforcement
+
+- **Database as source of truth:** Role and tenant assignments are resolved directly against the `staff` table, overriding any stale or untrusted Clerk `publicMetadata`. If a staff record does not exist for an authenticated user, they fall back to the owner role.
+- **Per-person area assignments:** When inviting or editing staff, an owner assigns them to `hotel`, `restaurant`, or `both` (`staff.areas`).
+- **Server-side area enforcement:** Route handlers check both role and operational area via `requireTenant(roles, area)`. For instance, a front-desk user restricted to `hotel` cannot access restaurant ordering or menu routes, even if their base role matches.
+
+| Role | Intended use | Allowed Areas |
+| --- | --- | --- |
+| `owner` | Everything, including settings and staff | `hotel`, `restaurant`, `both` |
+| `manager` | Everything, including settings and staff | `hotel`, `restaurant`, `both` |
+| `front_desk` | Bookings, rooms, hotel billing and invoices | `hotel`, `restaurant`, `both` |
+| `waiter` | Orders and tables | `restaurant`, `both` |
+| `kitchen` | Kitchen display and order status | `restaurant`, `both` |
 
 The groups used by the API:
 
@@ -159,19 +165,36 @@ menu category selected. No business configuration is stored there.
 ## Payments
 
 Staff can record payments manually (cash, UPI, card, bank transfer). Which methods are offered is controlled by the
-Payments setting. Two automated paths exist:
+Payments setting. Three payment paths exist:
 
-1. **Razorpay payment links and UPI QR codes**, for hotel and restaurant bills. Each business connects its **own**
+1. **Direct Zero-Fee UPI QR Code Generator**:
+   - Enables zero-gateway-fee, direct peer-to-merchant UPI payments directly into the property's bank account.
+   - Configured in **Settings > Payments** by enabling the Direct UPI QR toggle and entering the VPA (`upiId`, e.g. `merchant@okaxis`) and payee name (`upiName`).
+   - Generates standard NPCI deep links: `upi://pay?pa=...&pn=...&am=...&cu=INR&tn=...` with note format `{TenantName} DD-MM-YY-HH:mm` (e.g., `Grand Hotel 22-11-26-17:58`).
+   - Available on the Billing screen via the **Show UPI QR** button, featuring an instant-record confirmation workflow.
+2. **Razorpay payment links and dynamic UPI QR codes**, for hotel and restaurant bills. Each business connects its **own**
    Razorpay account in Settings > Payments (owner only), so the money settles to its own bank account and never passes
    through the platform. The Key Secret and the webhook secret are stored encrypted with `PAYMENT_KEYS_SECRET` and are
    never sent to a browser. Razorpay calls `POST /api/webhooks/razorpay/<tenant id>` (the exact address is shown in
    Settings) with the `payment_link.paid` and `qr_code.credited` events. That route is public in the Clerk middleware
    and instead verifies Razorpay's signature using that business's own webhook secret. A unique index on
    `payments.razorpay_payment_id` means a webhook delivered twice cannot count a payment twice.
-2. **UPI notification matching** from the Android app (see below), which posts to `/api/payments/notification-match`
+3. **UPI notification matching** from the Android app (see below), which posts to `/api/payments/notification-match`
    and returns a suggested bill for staff to confirm.
 
-Razorpay is optional. A business that has not connected an account works as before; online links are simply unavailable to it.
+Razorpay and direct UPI QR are both optional. A business that has not connected an account works as before; staff can always record payments manually.
+
+## Mobile UX & Touch Targets
+
+- **4-Tab Mobile Navigation:** On mobile viewports, the navigation collapses into an ergonomic 4-tab bar (`Home`, `Orders`, `Rooms/Bills`, and `More...`). Tapping **More...** reveals an accessible slide-up sheet containing secondary links (Menu, Tables, Staff, Analytics, Settings), identity info, and logout.
+- **Minimum 44px Touch Targets:** All POS item increment/decrement controls, order type selectors, category pills, KDS accept/ready buttons, and bottom nav links satisfy the WCAG 44px tap target guideline for comfortable touch operation on phones and POS tablets.
+
+## Observability & Error Tracking
+
+- **Structured Logging:** `src/lib/logger.ts` produces clean single-line JSON logs in production with timestamp, error stack, and sensitive key redaction (passwords, tokens, secrets).
+- **Health Checks & Uptime Monitoring:** `/api/health` performs a lightweight SQL database ping and responds with `200` (`status: 'ok', database: 'ok', ms: ...`) or `503` if degraded, safe for public uptime monitors (Pingdom, Better Uptime, UptimeRobot).
+- **Sentry Integration:** Setting `SENTRY_DSN` or `NEXT_PUBLIC_SENTRY_DSN` enables automatic reporting of uncaught API route and client exceptions to Sentry.
+- **Client Error Boundary:** `ErrorBoundary` catches rendering issues in dashboard modules, displays a recovery UI, and logs diagnostics.
 
 ## Real-time updates
 
@@ -239,7 +262,7 @@ Copy `frontend/.env.example` to `frontend/.env.local`.
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | No | Outgoing email |
 | `CONTACT_ADMIN_EMAIL` | No | Recipient of the public "request access" form |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Recommended in production | Shared rate limiting. Without it, limits are per server instance. |
-| `BLOB_READ_WRITE_TOKEN` | No | Vercel Blob storage |
+| `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` | No | Production error tracking (server and client) |
 
 Razorpay keys are not environment variables: each business enters its own in Settings > Payments, where its webhook address and secret are shown. `NEXT_PUBLIC_APP_URL` must be the public address of the deployment, because the webhook address is built from it.
 

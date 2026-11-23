@@ -84,7 +84,7 @@ export function TableTabCard({
               <Button
                 size="sm"
                 variant="sage"
-                className="w-full mt-3"
+                className="w-full mt-3 min-h-[44px]"
                 onClick={() => onUpdateStatus(ticket.id, 'served')}
               >
                 Mark as served
@@ -97,12 +97,12 @@ export function TableTabCard({
       <div className="flex gap-3 pt-4 border-t border-stone-200">
         <Button
           variant="ghost"
-          className="flex-1 bg-stone-100 hover:bg-stone-200"
+          className="flex-1 bg-stone-100 hover:bg-stone-200 min-h-[44px]"
           onClick={() => onAddMore(tab.table.id)}
         >
           <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Add more items
         </Button>
-        <Button className="flex-1" onClick={() => onSettle(tab)}>
+        <Button className="flex-1 min-h-[44px]" onClick={() => onSettle(tab)}>
           <Receipt className="w-4 h-4 mr-2" aria-hidden="true" /> Settle bill
         </Button>
       </div>

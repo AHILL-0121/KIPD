@@ -88,7 +88,7 @@ export function NewOrderSheet({
         <button
           onClick={onClose}
           aria-label="Close"
-          className="bg-stone-100 p-2 rounded-full hover:bg-stone-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
+          className="bg-stone-100 min-h-[44px] min-w-[44px] p-2.5 rounded-full hover:bg-stone-200 flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
         >
           <X className="w-5 h-5" aria-hidden="true" />
         </button>
@@ -99,7 +99,7 @@ export function NewOrderSheet({
         <div className="bg-stone-50 p-1 rounded-xl border border-stone-200 flex gap-1" role="group" aria-label="Order type">
           <button
             onClick={() => onOrderModeChange('dine_in')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 min-h-[44px] rounded-lg text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
               orderMode === 'dine_in' ? 'bg-white shadow text-ink' : 'text-ink-muted hover:text-ink'
             }`}
           >
@@ -110,7 +110,7 @@ export function NewOrderSheet({
               onOrderModeChange('take_away');
               onSelectTableId('');
             }}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 min-h-[44px] rounded-lg text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
               orderMode === 'take_away' ? 'bg-white shadow text-ink' : 'text-ink-muted hover:text-ink'
             }`}
           >
@@ -181,7 +181,7 @@ export function NewOrderSheet({
                     role="tab"
                     aria-selected={active}
                     onClick={() => onMenuCategoryChange(name)}
-                    className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-full border text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber ${
+                    className={`shrink-0 whitespace-nowrap px-4 py-2.5 min-h-[44px] rounded-full border text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber ${
                       active ? 'bg-amber text-white border-amber' : 'bg-white text-ink-soft border-stone-200 hover:bg-stone-50'
                     }`}
                   >
@@ -207,21 +207,21 @@ export function NewOrderSheet({
                         <button
                           onClick={() => onRemoveFromCart(item.id)}
                           aria-label={`Remove one ${item.name}`}
-                          className="p-1 rounded bg-white shadow-sm text-ink-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
+                          className="min-h-[40px] min-w-[40px] p-2 rounded bg-white shadow-sm text-ink-soft flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
                         >
-                          <Minus className="w-3.5 h-3.5" aria-hidden="true" />
+                          <Minus className="w-4 h-4" aria-hidden="true" />
                         </button>
-                        <span className="font-bold text-sm text-center" aria-live="polite">{inCart.quantity}</span>
+                        <span className="font-bold text-sm text-center px-1" aria-live="polite">{inCart.quantity}</span>
                         <button
                           onClick={() => onAddToCart(item)}
                           aria-label={`Add one more ${item.name}`}
-                          className="p-1 rounded bg-amber shadow-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber"
+                          className="min-h-[40px] min-w-[40px] p-2 rounded bg-amber shadow-sm text-white flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber"
                         >
-                          <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                          <Plus className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>
                     ) : (
-                      <Button size="sm" variant="ghost" onClick={() => onAddToCart(item)} className="font-bold w-full">
+                      <Button size="sm" variant="ghost" onClick={() => onAddToCart(item)} className="font-bold w-full min-h-[44px]">
                         <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add<span className="sr-only"> {item.name}</span>
                       </Button>
                     )}
