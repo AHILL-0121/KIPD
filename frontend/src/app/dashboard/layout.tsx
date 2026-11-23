@@ -49,6 +49,8 @@ function DashboardShell({ children }: { children: ReactNode }) {
   const userRole: StaffRole = (info?.role as StaffRole) || 'kitchen';
   const userAreas: AccessArea = (info?.areas as AccessArea) || 'both';
   const userName = info?.userName || '';
+  // Only display actual human names in the compact mobile banner; if it's an email address fallback, keep it blank
+  const mobileDisplayName = userName && !userName.includes('@') ? userName : '';
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showMoreNav, setShowMoreNav] = useState(false);
@@ -366,7 +368,9 @@ function DashboardShell({ children }: { children: ReactNode }) {
               <span className="w-1 h-1 rounded-full bg-stone-300" />
               <span className="text-amber font-semibold">{ROLE_LABELS[userRole] || userRole}</span>
             </div>
-            <span className="text-ink-muted text-[10px]">{userName}</span>
+            {mobileDisplayName ? (
+              <span className="text-ink-muted text-[10px] truncate max-w-[140px]">{mobileDisplayName}</span>
+            ) : null}
           </div>
 
           <ErrorBoundary>{children}</ErrorBoundary>

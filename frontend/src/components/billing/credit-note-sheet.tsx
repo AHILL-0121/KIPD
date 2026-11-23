@@ -11,7 +11,7 @@ export function CreditNoteSheet({ doc }: { doc: CreditNoteDocument }) {
   const label = 'text-[10px] font-semibold uppercase tracking-widest text-stone-500';
 
   return (
-    <article aria-label={`Credit note ${doc.number}`} className="w-[210mm] min-h-[297mm] bg-white p-[14mm] text-[12px] leading-relaxed text-ink">
+    <article aria-label={`Credit note ${doc.number}`} className="w-full max-w-[210mm] min-h-[297mm] bg-white p-4 sm:p-8 md:p-[14mm] text-[12px] leading-relaxed text-ink overflow-hidden">
       <header className="flex items-start justify-between gap-8 border-b-2 border-terra pb-5">
         <div className="min-w-0">
           <h1 className="text-xl font-bold leading-tight">{s.seller.name}</h1>
@@ -50,22 +50,24 @@ export function CreditNoteSheet({ doc }: { doc: CreditNoteDocument }) {
         </div>
       </section>
 
-      <table className="mt-6 w-full border-collapse">
-        <thead>
-          <tr className="border-y border-stone-300 bg-stone-100 text-left text-[10px] font-semibold uppercase tracking-wider text-stone-600">
-            <th className="px-2 py-2">Description</th>
-            <th className="w-36 px-2 py-2 text-right">Value credited (₹)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="border-b border-stone-200 align-top">
-            <td className="px-2 py-2.5">Credit against invoice {s.invoice.number}<span className="block text-stone-600">Reason: {s.reason}</span></td>
-            <td className="px-2 py-2.5 text-right tabular-nums">{inr(s.taxable)}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="mt-6 overflow-x-auto -mx-1 px-1">
+        <table className="w-full border-collapse min-w-[360px] sm:min-w-full">
+          <thead>
+            <tr className="border-y border-stone-300 bg-stone-100 text-left text-[10px] font-semibold uppercase tracking-wider text-stone-600">
+              <th className="px-2 py-2">Description</th>
+              <th className="w-36 px-2 py-2 text-right">Value credited (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-stone-200 align-top">
+              <td className="px-2 py-2.5">Credit against invoice {s.invoice.number}<span className="block text-stone-600">Reason: {s.reason}</span></td>
+              <td className="px-2 py-2.5 text-right tabular-nums">{inr(s.taxable)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-      <div className="mt-3 ml-auto w-[88mm] space-y-1">
+      <div className="mt-3 ml-auto w-full sm:w-[88mm] space-y-1">
         <div className="flex justify-between"><span className="text-stone-600">Taxable value</span><span className="tabular-nums">₹ {inr(s.taxable)}</span></div>
         {taxRows.map((r) => s.interState ? (
           <div key={r.rate} className="flex justify-between"><span className="text-stone-600">IGST @ {rate(r.rate)}%</span><span className="tabular-nums">₹ {inr(r.igst)}</span></div>

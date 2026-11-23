@@ -17,7 +17,7 @@ export function InvoiceSheet({ doc }: { doc: InvoiceDocument }) {
   const label = 'text-[10px] font-semibold uppercase tracking-widest text-stone-500';
 
   return (
-    <article aria-label={`${s.title} ${doc.number}`} className="w-[210mm] min-h-[297mm] bg-white p-[14mm] text-[12px] leading-relaxed text-ink">
+    <article aria-label={`${s.title} ${doc.number}`} className="w-full max-w-[210mm] min-h-[297mm] bg-white p-4 sm:p-8 md:p-[14mm] text-[12px] leading-relaxed text-ink overflow-hidden">
       <header className="flex items-start justify-between gap-8 border-b-2 border-amber pb-5">
         <div className="min-w-0">
           <h1 className="text-xl font-bold leading-tight">{s.seller.name}</h1>
@@ -60,30 +60,32 @@ export function InvoiceSheet({ doc }: { doc: InvoiceDocument }) {
         </div>
       </section>
 
-      <table className="mt-6 w-full border-collapse">
-        <thead>
-          <tr className="border-y border-stone-300 bg-stone-100 text-left text-[10px] font-semibold uppercase tracking-wider text-stone-600">
-            <th className="w-8 px-2 py-2">#</th>
-            <th className="px-2 py-2">Description</th>
-            <th className="w-16 px-2 py-2 text-right">Qty</th>
-            <th className="w-28 px-2 py-2 text-right">Rate (₹)</th>
-            <th className="w-32 px-2 py-2 text-right">Taxable value (₹)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {s.lines.map((l, i) => (
-            <tr key={i} className="border-b border-stone-200 align-top">
-              <td className="px-2 py-2.5 text-stone-500">{i + 1}</td>
-              <td className="px-2 py-2.5">{l.description}<span className="block text-[10px] text-stone-500">SAC {l.sac} · {SAC_LABEL[l.sac] ?? 'Service'}{l.gstRate ? ` · GST ${rate(l.gstRate)}%` : ''}</span></td>
-              <td className="px-2 py-2.5 text-right tabular-nums">{l.qty}</td>
-              <td className="px-2 py-2.5 text-right tabular-nums">{inr(l.rate)}</td>
-              <td className="px-2 py-2.5 text-right tabular-nums">{inr(l.taxable)}</td>
+      <div className="mt-6 overflow-x-auto -mx-1 px-1">
+        <table className="w-full border-collapse min-w-[480px] sm:min-w-full">
+          <thead>
+            <tr className="border-y border-stone-300 bg-stone-100 text-left text-[10px] font-semibold uppercase tracking-wider text-stone-600">
+              <th className="w-8 px-2 py-2">#</th>
+              <th className="px-2 py-2">Description</th>
+              <th className="w-16 px-2 py-2 text-right">Qty</th>
+              <th className="w-28 px-2 py-2 text-right">Rate (₹)</th>
+              <th className="w-32 px-2 py-2 text-right">Taxable value (₹)</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {s.lines.map((l, i) => (
+              <tr key={i} className="border-b border-stone-200 align-top">
+                <td className="px-2 py-2.5 text-stone-500">{i + 1}</td>
+                <td className="px-2 py-2.5">{l.description}<span className="block text-[10px] text-stone-500">SAC {l.sac} · {SAC_LABEL[l.sac] ?? 'Service'}{l.gstRate ? ` · GST ${rate(l.gstRate)}%` : ''}</span></td>
+                <td className="px-2 py-2.5 text-right tabular-nums">{l.qty}</td>
+                <td className="px-2 py-2.5 text-right tabular-nums">{inr(l.rate)}</td>
+                <td className="px-2 py-2.5 text-right tabular-nums">{inr(l.taxable)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      <div className="mt-3 ml-auto w-[88mm] space-y-1">
+      <div className="mt-3 ml-auto w-full sm:w-[88mm] space-y-1">
         <div className="flex justify-between"><span className="text-stone-600">Taxable value</span><span className="tabular-nums">₹ {inr(s.taxable)}</span></div>
         {taxRows.map((r) => s.interState ? (
           <div key={r.rate} className="flex justify-between"><span className="text-stone-600">IGST @ {rate(r.rate)}%</span><span className="tabular-nums">₹ {inr(r.igst)}</span></div>
