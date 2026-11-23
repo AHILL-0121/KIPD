@@ -113,7 +113,7 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
         <button
           onClick={toggleSound}
           aria-pressed={soundOn}
-          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${soundOn ? 'bg-stone-500/40 text-white' : 'bg-white text-ink'}`}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 min-h-[44px] text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${soundOn ? 'bg-stone-500/40 text-white' : 'bg-white text-ink'}`}
         >
           {soundOn ? <Volume2 className="w-4 h-4" aria-hidden="true" /> : <VolumeX className="w-4 h-4" aria-hidden="true" />}
           {soundOn ? 'Sound on' : 'Enable sound for new orders'}
@@ -179,9 +179,9 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
 
               {canAct ? (
                 isNew ? (
-                  <HoldButton className="w-full" onConfirm={() => updateStatus(order, 'preparing')}>Accept order</HoldButton>
+                  <HoldButton className="w-full min-h-[48px]" onConfirm={() => updateStatus(order, 'preparing')}>Accept order</HoldButton>
                 ) : order.status === 'preparing' ? (
-                  <Button className="w-full text-lg py-4" variant="sage" onClick={() => updateStatus(order, 'ready')}>Mark ready</Button>
+                  <Button className="w-full text-lg py-4 min-h-[48px]" variant="sage" onClick={() => updateStatus(order, 'ready')}>Mark ready</Button>
                 ) : null
               ) : (
                 <p className="text-center p-3 rounded-lg bg-stone-100 text-ink-soft text-sm">Your role can view this screen but not change orders.</p>
@@ -202,7 +202,7 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
       {undo && (
         <div role="status" className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-lg bg-white px-5 py-3 shadow-xl">
           <span className="text-ink font-medium">{undo.label} marked ready</span>
-          <button onClick={undoReady} className="font-semibold text-amber underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber">Undo</button>
+          <button onClick={undoReady} className="font-semibold text-amber underline underline-offset-4 min-h-[44px] min-w-[44px] flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber">Undo</button>
         </div>
       )}
     </div>

@@ -71,13 +71,13 @@ export function TakeawayCard({
           <Button
             size="sm"
             variant="sage"
-            className="flex-1"
+            className="flex-1 min-h-[44px]"
             onClick={() => onUpdateStatus(order.id, 'served')}
           >
             Mark handed over
           </Button>
         )}
-        <Button size="sm" className="flex-1" onClick={() => onSettle(order)}>
+        <Button size="sm" className="flex-1 min-h-[44px]" onClick={() => onSettle(order)}>
           <Receipt className="w-4 h-4 mr-1.5" aria-hidden="true" /> Settle bill
         </Button>
       </div>

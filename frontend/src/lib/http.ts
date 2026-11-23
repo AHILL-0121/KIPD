@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ZodError, type ZodType, type ZodTypeDef } from 'zod';
+import { logger } from './logger';
 
 /** An error that maps directly to an HTTP status. Safe to show the message to the client. */
 export class HttpError extends Error {
@@ -56,6 +57,6 @@ export function handleError(error: unknown, fallback: string) {
   if (code === '23505') {
     return NextResponse.json({ error: 'An item with these details already exists.' }, { status: 409 });
   }
-  console.error(fallback, error);
+  logger.error(fallback, error);
   return NextResponse.json({ error: fallback }, { status: 500 });
 }

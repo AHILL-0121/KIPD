@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,7 @@ export async function GET() {
     await db.execute(sql`select 1`);
     return NextResponse.json({ status: 'ok', database: 'ok', ms: Date.now() - started }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    console.error('Health check: database unreachable', error);
+    logger.error('Health check: database unreachable', error);
     return NextResponse.json({ status: 'degraded', database: 'unreachable' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
 }
