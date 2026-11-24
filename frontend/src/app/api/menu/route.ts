@@ -9,12 +9,19 @@ import { ownedCategory } from '@/lib/tenant-scope';
 
 const price = z.coerce.number().positive().max(1_000_000);
 
+const variantSchema = z.object({
+  name: z.string().trim().min(1).max(50),
+  price,
+});
+
 const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().max(500).optional().default(''),
   price,
   categoryId: z.string().uuid(),
   tags: z.array(z.string().max(30)).max(10).optional().default([]),
+  imageUrl: z.string().max(500_000).nullable().optional(),
+  variants: z.array(variantSchema).max(20).nullable().optional(),
 });
 
 // Only these fields can ever be changed. Anything else in the body is dropped.
@@ -26,7 +33,8 @@ const patchSchema = z.object({
   categoryId: z.string().uuid().optional(),
   tags: z.array(z.string().max(30)).max(10).optional(),
   isAvailable: z.boolean().optional(),
-  imageUrl: z.string().url().max(500).nullable().optional(),
+  imageUrl: z.string().max(500_000).nullable().optional(),
+  variants: z.array(variantSchema).max(20).nullable().optional(),
   sortOrder: z.number().int().min(0).max(10_000).optional(),
 });
 
@@ -60,6 +68,8 @@ export async function POST(request: NextRequest) {
       categoryId: category.id,
       outletId: category.outletId,
       tags: body.tags,
+      imageUrl: body.imageUrl || null,
+      variants: body.variants || null,
       isAvailable: true,
     }).returning();
 

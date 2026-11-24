@@ -42,7 +42,15 @@ export default function RestaurantPage() {
   const [saving, setSaving] = useState(false);
 
   // Forms
-  const [itemForm, setItemForm] = useState({ name: '', description: '', price: '', categoryId: '', tags: '' });
+  const [itemForm, setItemForm] = useState<{
+    name: string;
+    description: string;
+    price: string;
+    categoryId: string;
+    tags: string;
+    imageUrl?: string;
+    variants?: { name: string; price: number }[];
+  }>({ name: '', description: '', price: '', categoryId: '', tags: '', imageUrl: '', variants: [] });
   const [categoryName, setCategoryName] = useState('');
   const [lastCategoryId, setLastCategoryId] = useState('');
   const LAST_CATEGORY_KEY = 'kipd.menu.lastCategoryId';
@@ -83,7 +91,7 @@ export default function RestaurantPage() {
 
   const startAddItem = () => {
     const categoryId = categories.some((c) => c.id === lastCategoryId) ? lastCategoryId : categories[0]?.id || '';
-    setItemForm({ name: '', description: '', price: '', categoryId, tags: '' });
+    setItemForm({ name: '', description: '', price: '', categoryId, tags: '', imageUrl: '', variants: [] });
     setShowAddItem(true);
   };
 
@@ -103,12 +111,14 @@ export default function RestaurantPage() {
           price: parseFloat(itemForm.price),
           categoryId: itemForm.categoryId,
           tags: itemForm.tags ? itemForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+          imageUrl: itemForm.imageUrl || undefined,
+          variants: itemForm.variants && itemForm.variants.length > 0 ? itemForm.variants : undefined,
         }),
       });
       if (!res.ok) throw new Error('Failed');
       rememberCategory(itemForm.categoryId);
       setShowAddItem(false);
-      setItemForm({ name: '', description: '', price: '', categoryId: itemForm.categoryId, tags: '' });
+      setItemForm({ name: '', description: '', price: '', categoryId: itemForm.categoryId, tags: '', imageUrl: '', variants: [] });
       refetchItems();
       showToast('Menu item created', 'success');
     } catch {
@@ -132,6 +142,8 @@ export default function RestaurantPage() {
           price: itemForm.price,
           categoryId: itemForm.categoryId,
           tags: itemForm.tags ? itemForm.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+          imageUrl: itemForm.imageUrl || null,
+          variants: itemForm.variants && itemForm.variants.length > 0 ? itemForm.variants : null,
         }),
       });
       setShowEditItem(null);
@@ -485,6 +497,8 @@ export default function RestaurantPage() {
                       price: it.price,
                       categoryId: it.categoryId,
                       tags: (it.tags || []).join(', '),
+                      imageUrl: it.imageUrl || '',
+                      variants: it.variants || [],
                     });
                   }}
                   onDelete={handleDeleteItem}

@@ -4,6 +4,11 @@ export interface MenuCategory {
   sortOrder?: number;
 }
 
+export interface MenuItemVariant {
+  name: string;
+  price: number;
+}
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -13,7 +18,8 @@ export interface MenuItem {
   category?: MenuCategory;
   tags: string[];
   isAvailable: boolean;
-  imageUrl?: string;
+  imageUrl?: string | null;
+  variants?: MenuItemVariant[] | null;
 }
 
 export interface Table {

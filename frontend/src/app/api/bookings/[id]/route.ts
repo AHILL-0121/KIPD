@@ -10,6 +10,8 @@ import { nightsBetween, reviseStayBreakdown, stayBillValues, type StayBreakdown 
 import { getTaxSettings } from '@/lib/tax-settings';
 import { dateInput, toCheckIn, toCheckOut } from '@/lib/booking-dates';
 import { todayInZone } from '@/lib/tz';
+import { realEmail } from '@/lib/guest-email';
+import { emailTemplates, sendEmail } from '@/lib/email';
 
 const actionSchema = z.object({ action: z.enum(['confirm', 'check-in', 'check-out', 'cancel']) });
 // Anything left out stays as it is.
@@ -216,6 +218,49 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     // db.batch wants a typed, non-empty tuple; the statements here are built conditionally.
     const results = (await db.batch(writes as never)) as unknown as { paidAmount: string | null }[][];
     const refundDue = voids ? Number(results[results.length - 1][0]?.paidAmount ?? 0) : 0;
+
+    // Notify guest by email if confirmed or cancelled (non-blocking)
+    if (action === 'confirm' || action === 'cancel') {
+      db.query.bookings.findFirst({
+        where: and(eq(bookings.id, booking.id), eq(bookings.tenantId, tenantId)),
+        with: { guest: true, room: { with: { roomType: true } }, property: true },
+      }).then((b) => {
+        if (!b?.guest) return;
+        const toEmail = realEmail(b.guest.email);
+        if (!toEmail) return;
+
+        const hotelName = b.property?.name || 'Hotel';
+        const checkIn = todayInZone(timezone, b.checkInDate);
+        const checkOut = todayInZone(timezone, b.checkOutDate);
+
+        if (action === 'confirm') {
+          sendEmail({
+            to: toEmail,
+            subject: `Booking Confirmed — ${hotelName}`,
+            html: emailTemplates.bookingConfirmation({
+              guestName: b.guest.name || 'Guest',
+              hotelName,
+              checkIn,
+              checkOut,
+              roomType: b.room?.roomType?.name || 'Room',
+              bookingId: b.id.slice(0, 8).toUpperCase(),
+            }),
+          }).catch((err) => console.error('[EMAIL ERROR] Failed to send booking confirmation email:', err));
+        } else if (action === 'cancel') {
+          sendEmail({
+            to: toEmail,
+            subject: `Booking Cancelled — ${hotelName}`,
+            html: emailTemplates.bookingCancellation({
+              guestName: b.guest.name || 'Guest',
+              hotelName,
+              checkIn,
+              checkOut,
+              bookingId: b.id.slice(0, 8).toUpperCase(),
+            }),
+          }).catch((err) => console.error('[EMAIL ERROR] Failed to send booking cancellation email:', err));
+        }
+      }).catch((err) => console.error('[EMAIL ERROR] Failed to load booking for email notification:', err));
+    }
 
     return NextResponse.json({ success: true, ...(refundDue > 0 ? { refundDue } : {}) });
   } catch (error) {

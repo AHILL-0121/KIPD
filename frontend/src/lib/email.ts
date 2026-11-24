@@ -93,6 +93,107 @@ export const emailTemplates = {
     </div>
   `,
 
+  bookingRequestReceived: (data: {
+    guestName: string;
+    hotelName: string;
+    checkIn: string;
+    checkOut: string;
+    roomType: string;
+    bookingId: string;
+    totalAmount?: string;
+  }) => `
+    <div style="font-family: 'DM Sans', sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+      <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: #0B6B6F; font-family: 'Playfair Display', serif; font-size: 32px; margin: 0;">Kipd</h1>
+      </div>
+      
+      <h2 style="color: #1C1917; font-size: 24px; margin-bottom: 20px;">Booking Request Received</h2>
+      
+      <p style="color: #6B6662; line-height: 1.6;">Dear ${esc(data.guestName)},</p>
+      
+      <p style="color: #6B6662; line-height: 1.6;">
+        Thank you for choosing <strong>${esc(data.hotelName)}</strong>. We have received your booking request and our front desk will review and confirm your reservation shortly.
+      </p>
+      
+      <div style="background: #FAF8F4; border-radius: 12px; padding: 24px; margin: 30px 0;">
+        <div style="margin-bottom: 12px;">
+          <strong style="color: #1C1917;">Status:</strong>
+          <span style="color: #D97706; font-weight: 600;"> Pending Confirmation</span>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <strong style="color: #1C1917;">Booking Reference:</strong>
+          <span style="color: #6B6662;"> ${esc(data.bookingId)}</span>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <strong style="color: #1C1917;">Room Type:</strong>
+          <span style="color: #6B6662;"> ${esc(data.roomType)}</span>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <strong style="color: #1C1917;">Check-in:</strong>
+          <span style="color: #6B6662;"> ${esc(data.checkIn)}</span>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <strong style="color: #1C1917;">Check-out:</strong>
+          <span style="color: #6B6662;"> ${esc(data.checkOut)}</span>
+        </div>
+        ${data.totalAmount ? `
+        <div>
+          <strong style="color: #1C1917;">Estimated Total:</strong>
+          <span style="color: #1C1917; font-weight: 600;"> ₹${esc(data.totalAmount)}</span>
+        </div>` : ''}
+      </div>
+      
+      <p style="color: #6B6662; line-height: 1.6;">
+        You will receive another email as soon as your booking is confirmed.
+      </p>
+      
+      <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #E7E5E4; text-align: center; color: #A8A29E; font-size: 12px;">
+        <p>Powered by Kipd — Hotel & Restaurant Management</p>
+      </div>
+    </div>
+  `,
+
+  bookingCancellation: (data: {
+    guestName: string;
+    hotelName: string;
+    checkIn: string;
+    checkOut: string;
+    bookingId: string;
+  }) => `
+    <div style="font-family: 'DM Sans', sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+      <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="color: #0B6B6F; font-family: 'Playfair Display', serif; font-size: 32px; margin: 0;">Kipd</h1>
+      </div>
+      
+      <h2 style="color: #B91C1C; font-size: 24px; margin-bottom: 20px;">Booking Cancelled</h2>
+      
+      <p style="color: #6B6662; line-height: 1.6;">Dear ${esc(data.guestName)},</p>
+      
+      <p style="color: #6B6662; line-height: 1.6;">
+        Your reservation at <strong>${esc(data.hotelName)}</strong> (Booking Reference: <strong>${esc(data.bookingId)}</strong>) has been cancelled.
+      </p>
+      
+      <div style="background: #FAF8F4; border-radius: 12px; padding: 24px; margin: 30px 0;">
+        <div style="margin-bottom: 12px;">
+          <strong style="color: #1C1917;">Check-in:</strong>
+          <span style="color: #6B6662;"> ${esc(data.checkIn)}</span>
+        </div>
+        <div>
+          <strong style="color: #1C1917;">Check-out:</strong>
+          <span style="color: #6B6662;"> ${esc(data.checkOut)}</span>
+        </div>
+      </div>
+      
+      <p style="color: #6B6662; line-height: 1.6;">
+        If this was unexpected or if you have questions regarding refunds or deposits, please contact the hotel directly.
+      </p>
+      
+      <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #E7E5E4; text-align: center; color: #A8A29E; font-size: 12px;">
+        <p>Powered by Kipd — Hotel & Restaurant Management</p>
+      </div>
+    </div>
+  `,
+
   staffInvite: (data: {
     name: string;
     hotelName: string;
