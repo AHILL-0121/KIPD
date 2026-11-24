@@ -7,6 +7,7 @@ import { HttpError, badRequest, handleError, notFound, parseJson } from '@/lib/h
 import { SLUG, resolveHotel } from '@/lib/public';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { todayInZone, zonedDateTimeToInstant } from '@/lib/tz';
+import { emailTemplates, sendEmail } from '@/lib/email';
 
 /** Hotel-local times: guests arrive from 14:00 and leave by 11:00. */
 const CHECK_IN_HOUR = 14, CHECK_OUT_HOUR = 11;
@@ -85,6 +86,22 @@ export async function POST(request: NextRequest) {
           checkInDate: checkInAt, checkOutDate: checkOutAt, numGuests: body.guests,
           status: 'pending', source: 'online', totalAmount: total, specialRequests: body.requests || null,
         });
+
+        // Notify guest by email that request was received (non-blocking)
+        sendEmail({
+          to: body.email,
+          subject: `Booking Request Received — ${property.name || tenant.name}`,
+          html: emailTemplates.bookingRequestReceived({
+            guestName: body.name,
+            hotelName: property.name || tenant.name,
+            checkIn: body.checkIn,
+            checkOut: body.checkOut,
+            roomType: roomType.name,
+            bookingId: id.slice(0, 8).toUpperCase(),
+            totalAmount: total,
+          }),
+        }).catch((err) => console.error('[EMAIL ERROR] Failed to send booking request email:', err));
+
         return NextResponse.json({
           success: true, reference: id.slice(0, 8).toUpperCase(), status: 'pending',
           roomType: roomType.name, checkIn: body.checkIn, checkOut: body.checkOut, nights, total: Number(total),

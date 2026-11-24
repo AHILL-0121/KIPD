@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, count, countDistinct, desc, eq, gte, inArray, lt, ne, sql, sum } from 'drizzle-orm';
 import { db } from '@/db';
-import { menuCategories, menuItems, orderItems, orders, tables } from '@/db/schema';
+import { bills, menuCategories, menuItems, orderItems, orders, rooms, tables } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { handleError } from '@/lib/http';
 import { RANGES, buildPeriod, changeText, type Range } from '@/lib/periods';
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     const bucket = sql<string>`to_char(date_trunc(${period.sqlUnit}, ${orders.createdAt} AT TIME ZONE ${timezone}), ${period.sqlFormat})`;
     const lineValue = sql`${orderItems.price} * ${orderItems.quantity}`;
 
-    const [series, [current], [previous], [tableCount], [inUse], top, byCategory] = await Promise.all([
+    const [series, [current], [previous], [tableCount], [inUse], top, byCategory, [roomBills], [totalRoomsCount], [occupiedRoomsCount]] = await Promise.all([
       db.select({ key: bucket, revenue: sum(orders.totalAmount), orders: count(), tables: countDistinct(orders.tableId) })
         .from(orders).where(within(period.start, period.end)).groupBy(sql`1`), // by position: the bucket expression carries bind parameters, which Postgres will not match twice
       db.select({ revenue: sum(orders.totalAmount), orders: count() }).from(orders).where(within(period.start, period.end)),
@@ -55,18 +55,37 @@ export async function GET(request: NextRequest) {
         .innerJoin(menuCategories, and(eq(menuCategories.id, menuItems.categoryId), eq(menuCategories.tenantId, menuItems.tenantId)))
         .where(within(period.start, period.end))
         .groupBy(menuCategories.id, menuCategories.name).orderBy(desc(sum(lineValue))),
+      db.select({ roomRevenue: sum(bills.totalAmount), staysCount: count() })
+        .from(bills)
+        .where(and(eq(bills.tenantId, tenantId), eq(bills.kind, 'stay'), ne(bills.status, 'void'), gte(bills.createdAt, period.start), lt(bills.createdAt, period.end))),
+      db.select({ n: count() }).from(rooms).where(eq(rooms.tenantId, tenantId)),
+      db.select({ n: count() }).from(rooms).where(and(eq(rooms.tenantId, tenantId), eq(rooms.status, 'occupied'))),
     ]);
 
     const totalTables = tableCount.n;
     const byKey = new Map(series.map((r) => [r.key, r]));
     const num = (v: string | null | undefined) => Number(v ?? 0);
     const revenue = num(current.revenue), orderCount = current.orders;
+    const roomRevenue = num(roomBills?.roomRevenue);
+    const totalRooms = totalRoomsCount?.n ?? 0;
+    const occupiedRooms = occupiedRoomsCount?.n ?? 0;
+    const hotelOccupancy = totalRooms > 0 ? Number(((occupiedRooms / totalRooms) * 100).toFixed(1)) : 0;
+    const staysCount = roomBills?.staysCount ?? 0;
+    const adr = staysCount > 0 ? Number((roomRevenue / staysCount).toFixed(2)) : 0;
+    const revPar = Number(((adr * hotelOccupancy) / 100).toFixed(2));
+    const totalCombinedRevenue = revenue + roomRevenue;
 
     return NextResponse.json({
       revenue,
+      roomRevenue,
+      totalCombinedRevenue,
       revenueChange: changeText(revenue, num(previous.revenue)),
       occupancy: totalTables ? Number(((inUse.n / totalTables) * 100).toFixed(1)) : 0,
       occupancyNote: totalTables ? `${inUse.n} of ${totalTables} tables in use now` : 'No tables set up yet',
+      hotelOccupancy,
+      hotelOccupancyNote: totalRooms ? `${occupiedRooms} of ${totalRooms} rooms occupied now` : 'No rooms configured',
+      adr,
+      revPar,
       guests: orderCount, // the screen labels this "Total Orders"
       newGuests: null,
       avgOrderValue: orderCount ? Number((revenue / orderCount).toFixed(2)) : 0,
