@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { rooms } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { assertUuid, handleError, notFound, parseJson } from '@/lib/http';
+import { enforcePlanLimit } from '@/lib/plan-limits';
 import { ownedRoomType } from '@/lib/tenant-scope';
 
 const status = z.enum(['available', 'occupied', 'dirty', 'cleaning', 'inspected', 'maintenance', 'blocked']);
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
   try {
     const { tenantId } = await requireTenant(ROLES.manage, 'hotel');
     const body = await parseJson(request, createSchema);
+    await enforcePlanLimit(tenantId, 'rooms');
 
     // The room belongs to the same property as its room type (and the type must be ours).
     const roomType = await ownedRoomType(tenantId, body.roomTypeId);

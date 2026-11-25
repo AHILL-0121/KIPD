@@ -92,6 +92,13 @@
       "when": 1795650000000,
       "tag": "0012_housekeeping_refunds_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795700000000,
+      "tag": "0013_platform_settings",
+      "breakpoints": true
     }
   ]
 }

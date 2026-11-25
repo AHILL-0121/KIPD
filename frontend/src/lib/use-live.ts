@@ -21,6 +21,7 @@ export function useLive(refetch: () => void, channel: string | null | undefined,
     const timer = setInterval(visibleRun, intervalMs);
     document.addEventListener('visibilitychange', visibleRun);
     window.addEventListener('online', run);
+    window.addEventListener('kipd:refresh', run);
 
     let stream: EventSource | null = null;
     if (channel) {
@@ -38,6 +39,7 @@ export function useLive(refetch: () => void, channel: string | null | undefined,
       clearInterval(timer);
       document.removeEventListener('visibilitychange', visibleRun);
       window.removeEventListener('online', run);
+      window.removeEventListener('kipd:refresh', run);
       stream?.close();
     };
   }, [channel, intervalMs]);

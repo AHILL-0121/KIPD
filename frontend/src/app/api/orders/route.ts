@@ -104,11 +104,17 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { tenantId } = await requireTenant([...ROLES.orders, 'front_desk'], 'restaurant');
+    const outletId = request?.url ? new URL(request.url).searchParams.get('outletId') : null;
+    const filters = [eq(orders.tenantId, tenantId), notInArray(orders.status, ['closed', 'cancelled'])];
+    if (outletId) {
+      await ownedOutlet(tenantId, outletId);
+      filters.push(eq(orders.outletId, outletId));
+    }
     const all = await db.query.orders.findMany({
-      where: and(eq(orders.tenantId, tenantId), notInArray(orders.status, ['closed', 'cancelled'])),
+      where: and(...filters),
       with: { orderItems: { with: { menuItem: true } }, table: true },
       orderBy: (o, { desc }) => [desc(o.createdAt)],
     });

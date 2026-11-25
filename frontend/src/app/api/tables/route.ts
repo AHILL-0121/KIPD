@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { orders, tables } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { assertUuid, badRequest, handleError, notFound, parseJson } from '@/lib/http';
+import { enforcePlanLimit } from '@/lib/plan-limits';
 import { firstOutlet, ownedOutlet, ownedTable } from '@/lib/tenant-scope';
 
 const tableNumber = z.coerce.string().trim().min(1).max(20);
@@ -27,11 +28,17 @@ const patchSchema = z.object({
   tags: tags.optional(),
 });
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { tenantId } = await requireTenant(undefined, 'restaurant');
+    const outletId = request?.url ? new URL(request.url).searchParams.get('outletId') : null;
+    const filters = [eq(tables.tenantId, tenantId)];
+    if (outletId) {
+      await ownedOutlet(tenantId, outletId);
+      filters.push(eq(tables.outletId, outletId));
+    }
     const all = await db.query.tables.findMany({
-      where: eq(tables.tenantId, tenantId),
+      where: and(...filters),
       with: { outlet: true },
       orderBy: (t, { asc }) => [asc(t.tableNumber)],
     });
@@ -45,6 +52,7 @@ export async function POST(request: NextRequest) {
   try {
     const { tenantId } = await requireTenant(ROLES.manage, 'restaurant');
     const body = await parseJson(request, createSchema);
+    await enforcePlanLimit(tenantId, 'tables');
 
     const outlet = body.outletId ? await ownedOutlet(tenantId, body.outletId) : await firstOutlet(tenantId);
     if (!outlet) throw badRequest('No outlet found. Set up a restaurant first.');

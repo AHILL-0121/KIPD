@@ -66,3 +66,18 @@ CHECKING FOR DRIFT (read-only, any time)
   npm run db:drift
   Compares the live database with schema.ts: tables, columns, types, NOT NULL, indexes, check constraints,
   unique constraints and foreign keys. Exit code 1 means someone changed the database by hand.
+
+NEON BACKUPS & POINT-IN-TIME RESTORE (PITR)
+  Neon maintains an immutable WAL / history window per project plan (24h on Free, 7–30 days on Launch/Scale):
+  1. Never run destructive SQL directly on the `main` / production Neon branch.
+  2. Before applying schema migrations or bulk data updates:
+       - Create a pre-release snapshot branch in Neon Console (`Branches -> Create branch` from `main` at "Current point in time"), e.g. `pre-release-YYYY-MM-DD`.
+       - Verify `npm run db:migrate` and `npm run db:drift` against a separate preview branch first.
+  3. Recovery / Point-in-Time Restore:
+       - Enable Maintenance Mode in Platform Admin (`/admin/settings`) so live writes pause cleanly and visitors see `/maintenance`.
+       - In Neon Console: select `Branches -> Create branch` from `main` choosing **Past state (Date & Time / LSN)** immediately before the incident.
+       - Point staging or a local check at the recovery branch, inspect affected tables (`bills`, `payments`, `bookings`, `orders`), and run `npm run db:drift`.
+       - Either promote/restore the recovery branch in Neon (or copy recovered rows back via `pg_dump --table=...` / `psql`), then run `npm run db:drift`.
+       - Disable Maintenance Mode once `/api/health` returns 200 OK.
+  4. Scheduled logical backups (recommended weekly):
+       - Run `pg_dump "$DATABASE_URL" --format=custom --no-owner --no-acl -f kipd_$(date +%F).dump` from a secure runner and store encrypted off-site.

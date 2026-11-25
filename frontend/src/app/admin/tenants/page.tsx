@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { confirmDialog } from '@/components/ui/confirm';
-import { Plus, Search, MoreVertical, Power, Edit, Trash2 } from 'lucide-react';
+import { Plus, Power, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Tenant {
@@ -35,6 +35,11 @@ export default function TenantsPage() {
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [planFilter, setPlanFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalTenants, setTotalTenants] = useState(0);
+  const pageSize = 12;
   const [showNewModal, setShowNewModal] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -46,34 +51,88 @@ export default function TenantsPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/admin/tenants')
-      .then(res => {
-        if (!res.ok) {
-          throw new Error('Failed to fetch tenants');
-        }
-        return res.json();
-      })
-      .then(data => {
-        // Ensure data is an array
-        setTenants(Array.isArray(data) ? data : []);
-      })
-      .catch(err => {
-        console.error('Error fetching tenants:', err);
-        setTenants([]);
+  const fetchTenants = useCallback(async () => {
+    try {
+      const qs = new URLSearchParams({
+        page: String(page),
+        limit: String(pageSize),
       });
+      if (search.trim()) qs.set('search', search.trim());
+      if (statusFilter !== 'all') qs.set('status', statusFilter);
+      if (planFilter !== 'all') qs.set('plan', planFilter);
+
+      const res = await fetch(`/api/admin/tenants?${qs.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch tenants');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setTenants(data);
+        setTotalTenants(data.length);
+        setTotalPages(1);
+      } else {
+        setTenants(Array.isArray(data.items) ? data.items : []);
+        setTotalTenants(Number(data.total ?? 0));
+        setTotalPages(Number(data.totalPages ?? 1));
+      }
+    } catch (err) {
+      console.error('Error fetching tenants:', err);
+      setTenants([]);
+    }
+  }, [page, search, statusFilter, planFilter]);
+
+  const fetchAudit = useCallback(() => {
     fetch('/api/admin/audit')
       .then(res => (res.ok ? res.json() : []))
       .then(data => setAuditLogs(Array.isArray(data) ? data : []))
       .catch(() => setAuditLogs([]));
   }, []);
 
-  const filteredTenants = tenants.filter(t => {
-    const matchesSearch = t.name.toLowerCase().includes(search.toLowerCase()) || 
-                         t.slug.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  useEffect(() => {
+    fetchTenants();
+  }, [fetchTenants]);
+
+  useEffect(() => {
+    fetchAudit();
+  }, [fetchAudit]);
+
+  const filteredTenants = tenants;
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  };
+
+  const handleToggleStatus = async (tenant: Tenant) => {
+    const action = tenant.status === 'active' ? 'suspend' : 'activate';
+    try {
+      const res = await fetch(`/api/admin/tenants/${tenant.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      showToast(`Tenant "${tenant.name}" ${action === 'suspend' ? 'suspended' : 'activated'}`, 'success');
+      fetchTenants();
+      fetchAudit();
+    } catch {
+      showToast('Failed to update tenant status', 'error');
+    }
+  };
+
+  const handlePlanChange = async (tenant: Tenant, plan: string) => {
+    try {
+      const res = await fetch(`/api/admin/tenants/${tenant.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      showToast(`Updated ${tenant.name} to ${plan} plan`, 'success');
+      fetchTenants();
+      fetchAudit();
+    } catch {
+      showToast('Failed to update plan', 'error');
+    }
+  };
 
   const handleCreateTenant = async () => {
     if (!formData.name || !formData.slug || !formData.ownerEmail) {
@@ -97,8 +156,8 @@ export default function TenantsPage() {
       const result = await response.json();
       
       // Refresh the tenants list
-      const updatedTenants = await fetch('/api/admin/tenants').then(r => r.json());
-      setTenants(Array.isArray(updatedTenants) ? updatedTenants : []);
+      await fetchTenants();
+      fetchAudit();
       
       // Reset form and close modal
       setFormData({ name: '', slug: '', ownerEmail: '', type: 'both' });
@@ -136,8 +195,8 @@ export default function TenantsPage() {
       }
 
       // Refresh the tenants list
-      const updatedTenants = await fetch('/api/admin/tenants').then(r => r.json());
-      setTenants(Array.isArray(updatedTenants) ? updatedTenants : []);
+      await fetchTenants();
+      fetchAudit();
 
       setToast({ message: `Tenant "${tenantName}" deleted successfully`, type: 'success' });
       setTimeout(() => setToast(null), 5000);
@@ -163,24 +222,35 @@ export default function TenantsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4 mb-6">
-        <div className="flex-1">
+      <div className="flex flex-wrap gap-4 mb-6">
+        <div className="flex-1 min-w-[220px]">
           <Input
             placeholder="Search tenants..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="max-w-md"
           />
         </div>
         
         <Select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
           options={[
             { value: 'all', label: 'All Status' },
             { value: 'active', label: 'Active' },
             { value: 'suspended', label: 'Suspended' },
             { value: 'pending', label: 'Pending' },
+          ]}
+        />
+
+        <Select
+          value={planFilter}
+          onChange={(e) => { setPlanFilter(e.target.value); setPage(1); }}
+          options={[
+            { value: 'all', label: 'All Plans' },
+            { value: 'basic', label: 'Basic' },
+            { value: 'pro', label: 'Pro' },
+            { value: 'enterprise', label: 'Enterprise' },
           ]}
         />
       </div>
@@ -216,6 +286,19 @@ export default function TenantsPage() {
                 <span className="text-ink-muted">Owner</span>
                 <span className="text-ink">{tenant.ownerEmail}</span>
               </div>
+              <div className="flex justify-between items-center">
+                <span className="text-ink-muted">Plan</span>
+                <select
+                  aria-label={`Plan for ${tenant.name}`}
+                  value={tenant.plan || 'basic'}
+                  onChange={(e) => handlePlanChange(tenant, e.target.value)}
+                  className="text-xs font-medium capitalize border border-stone-200 rounded-lg px-2 py-1 bg-cream text-ink"
+                >
+                  <option value="basic">Basic</option>
+                  <option value="pro">Pro</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
               <div className="flex justify-between">
                 <span className="text-ink-muted">Created</span>
                 <span className="text-ink">{new Date(tenant.createdAt).toLocaleDateString()}</span>
@@ -223,11 +306,12 @@ export default function TenantsPage() {
             </div>
             
             <div className="flex gap-2 pt-4 border-t border-stone-200">
-              <Button size="sm" variant="ghost" className="flex-1">
-                <Edit className="w-4 h-4" />
-                Edit
-              </Button>
-              <Button size="sm" variant="ghost" className="flex-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="flex-1"
+                onClick={() => handleToggleStatus(tenant)}
+              >
                 <Power className="w-4 h-4" />
                 {tenant.status === 'active' ? 'Suspend' : 'Activate'}
               </Button>
@@ -248,6 +332,32 @@ export default function TenantsPage() {
       {filteredTenants.length === 0 && (
         <div className="text-center py-16">
           <p className="text-ink-muted">No tenants found</p>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-between border-t border-stone-200 pt-4 text-sm text-ink-muted">
+          <span>Showing page {page} of {totalPages} ({totalTenants} total)</span>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Prev
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       )}
 

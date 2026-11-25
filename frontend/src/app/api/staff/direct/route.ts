@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { staff } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { HttpError, handleError, parseJson } from '@/lib/http';
+import { enforcePlanLimit } from '@/lib/plan-limits';
 
 // 'owner' is deliberately not creatable here.
 const schema = z.object({
@@ -19,6 +20,7 @@ export async function POST(request: NextRequest) {
   try {
     const { tenantId } = await requireTenant(ROLES.manage);
     const { name, email, role, password, areas } = await parseJson(request, schema);
+    await enforcePlanLimit(tenantId, 'staff');
 
     // 0. A login with this email may already exist (an earlier staff account, or someone who signed up
     //    themselves). Do NOT attach it to this team on a typed email: a typo would hand a stranger access.

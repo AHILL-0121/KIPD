@@ -9,6 +9,7 @@ import { Plus, UtensilsCrossed, Coffee, QrCode, Search, X } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/confirm';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@/hooks/use-query';
+import { useTenantInfo } from '@/contexts/tenant-context';
 import type { MenuCategory, MenuItem, Table } from '@/components/restaurant/types';
 import { MenuItemCard } from '@/components/restaurant/menu-item-card';
 import { MenuItemModal } from '@/components/restaurant/menu-item-modal';
@@ -17,15 +18,20 @@ import { TableCard } from '@/components/restaurant/table-card';
 import { TableModal } from '@/components/restaurant/table-modal';
 
 export default function RestaurantPage() {
+  const { info } = useTenantInfo();
+  const outlets = info?.outlets ?? [];
+  const [selectedOutletId, setSelectedOutletId] = useState<string>('all');
+  const outletQs = selectedOutletId !== 'all' ? `?outletId=${selectedOutletId}` : '';
+
   const [activeTab, setActiveTab] = useState<'menu' | 'tables'>('menu');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Queries
-  const { data: rawItems, isLoading: itemsLoading, refetch: refetchItems } = useQuery<MenuItem[]>('/api/menu');
-  const { data: rawCategories, refetch: refetchCategories } = useQuery<MenuCategory[]>('/api/menu-categories');
-  const { data: rawTables, refetch: refetchTables } = useQuery<Table[]>('/api/tables');
+  const { data: rawItems, isLoading: itemsLoading, refetch: refetchItems } = useQuery<MenuItem[]>(`/api/menu${outletQs}`, [selectedOutletId]);
+  const { data: rawCategories, refetch: refetchCategories } = useQuery<MenuCategory[]>(`/api/menu-categories${outletQs}`, [selectedOutletId]);
+  const { data: rawTables, refetch: refetchTables } = useQuery<Table[]>(`/api/tables${outletQs}`, [selectedOutletId]);
 
   const [items, setItems] = useState<MenuItem[]>([]);
   useEffect(() => {
@@ -166,7 +172,10 @@ export default function RestaurantPage() {
       const res = await fetch('/api/menu-categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: categoryName }),
+        body: JSON.stringify({
+          name: categoryName,
+          ...(selectedOutletId !== 'all' ? { outletId: selectedOutletId } : {}),
+        }),
       });
       if (!res.ok) throw new Error('Failed');
       setCategoryName('');
@@ -245,6 +254,7 @@ export default function RestaurantPage() {
           capacity: parseInt(tableForm.capacity) || 4,
           section: tableForm.section.trim() || undefined,
           tags: parsedTags,
+          ...(selectedOutletId !== 'all' ? { outletId: selectedOutletId } : {}),
         }),
       });
       if (!res.ok) {
@@ -356,6 +366,22 @@ export default function RestaurantPage() {
         </div>
 
         <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3">
+          {outlets.length > 1 && (
+            <select
+              aria-label="Select outlet"
+              value={selectedOutletId}
+              onChange={(e) => {
+                setSelectedOutletId(e.target.value);
+                setCategoryFilter('all');
+              }}
+              className="min-h-[44px] px-3 py-2 rounded-xl border border-stone-300 bg-white text-sm text-ink"
+            >
+              <option value="all">All Outlets</option>
+              {outlets.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+          )}
           {activeTab === 'menu' && (
             <>
               <Button variant="ghost" onClick={() => setShowAddCategory(true)}>

@@ -38,6 +38,12 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsLoading(false));
   }, [tick]);
 
+  useEffect(() => {
+    const onRefresh = () => setTick((t) => t + 1);
+    window.addEventListener('kipd:refresh', onRefresh);
+    return () => window.removeEventListener('kipd:refresh', onRefresh);
+  }, []);
+
   return (
     <TenantContext.Provider value={{ info, isLoading, error, reload: () => setTick(t => t + 1) }}>
       {children}

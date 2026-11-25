@@ -5,7 +5,7 @@ import { db } from '@/db';
 import { menuItems } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { assertUuid, handleError, notFound, parseJson } from '@/lib/http';
-import { ownedCategory } from '@/lib/tenant-scope';
+import { ownedCategory, ownedOutlet } from '@/lib/tenant-scope';
 
 const price = z.coerce.number().positive().max(1_000_000);
 
@@ -38,11 +38,17 @@ const patchSchema = z.object({
   sortOrder: z.number().int().min(0).max(10_000).optional(),
 });
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { tenantId } = await requireTenant(undefined, 'restaurant');
+    const outletId = request?.url ? new URL(request.url).searchParams.get('outletId') : null;
+    const filters = [eq(menuItems.tenantId, tenantId)];
+    if (outletId) {
+      await ownedOutlet(tenantId, outletId);
+      filters.push(eq(menuItems.outletId, outletId));
+    }
     const items = await db.query.menuItems.findMany({
-      where: eq(menuItems.tenantId, tenantId),
+      where: and(...filters),
       with: { category: true },
       orderBy: (m, { asc }) => [asc(m.name)],
     });

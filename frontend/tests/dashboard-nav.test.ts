@@ -124,4 +124,16 @@ describe('breadcrumbs', () => {
     expect(restaurantAsWaiter[1]).toEqual({ label: 'Restaurant', href: '/dashboard/orders' });
     expect(restaurantAsWaiter[0].href).toBe('/dashboard/orders'); // a waiter's "Home" is their own start page
   });
+
+  it('supports dedicated hotel and restaurant overview routes and breadcrumbs', () => {
+    expect(trail('/dashboard/hotel')).toBe('Home > Hotel > Overview');
+    expect(trail('/dashboard/restaurant/overview')).toBe('Home > Restaurant > Overview');
+    expect(canOpen('/dashboard/hotel', 'both', 'owner')).toBe(true);
+    expect(canOpen('/dashboard/hotel', 'both', 'front_desk', 'hotel')).toBe(true);
+    expect(canOpen('/dashboard/hotel', 'both', 'front_desk', 'restaurant')).toBe(false);
+    expect(canOpen('/dashboard/hotel', 'restaurant', 'owner')).toBe(false);
+    expect(canOpen('/dashboard/hotel', 'both', 'waiter')).toBe(false);
+    expect(canOpen('/dashboard/restaurant/overview', 'both', 'owner')).toBe(true);
+    expect(canOpen('/dashboard/restaurant/overview', 'hotel', 'owner')).toBe(false);
+  });
 });
