@@ -1,8 +1,9 @@
 /**
  * Production-ready structured logger and error tracking utility.
  * Supports structured JSON logs in production, pretty-printing in development,
- * sensitive field redaction, and optional Sentry error tracking integration.
+ * sensitive field redaction, and Sentry error forwarding via @sentry/nextjs.
  */
+import * as Sentry from '@sentry/nextjs';
 
 type LogLevel = 'info' | 'warn' | 'error';
 
@@ -60,7 +61,9 @@ function formatError(error: unknown): Record<string, unknown> {
 
 class Logger {
   private isProduction = process.env.NODE_ENV === 'production';
-  private sentryDsn = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN;
+  private get sentryDsn() {
+    return process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN;
+  }
 
   private emit(level: LogLevel, message: string, error?: unknown, context?: LogContext) {
     const timestamp = new Date().toISOString();
@@ -88,36 +91,26 @@ class Logger {
       }
     }
 
-    // Optional Sentry forward if configured
-    if (level === 'error' && this.sentryDsn && typeof window === 'undefined') {
-      this.sendToSentry(message, error, cleanContext).catch(() => {});
+    // Forward errors to Sentry on both server and browser when DSN is configured
+    if (level === 'error' && this.sentryDsn) {
+      this.sendToSentry(message, error, cleanContext);
     }
   }
 
-  private async sendToSentry(message: string, error?: unknown, context?: LogContext) {
+  private sendToSentry(message: string, error?: unknown, context?: LogContext) {
     if (!this.sentryDsn) return;
     try {
-      const dsnUrl = new URL(this.sentryDsn);
-      const projectId = dsnUrl.pathname.replace('/', '');
-      const key = dsnUrl.username;
-      const endpoint = `https://${dsnUrl.host}/api/${projectId}/store/?sentry_key=${key}&sentry_version=7`;
+      Sentry.withScope((scope) => {
+        if (context?.tenantId) scope.setTag('tenantId', String(context.tenantId));
+        if (context?.route) scope.setTag('route', String(context.route));
+        if (context) scope.setExtras(context);
+        scope.setExtra('loggerMessage', message);
 
-      const payload = {
-        event_id: Math.random().toString(36).substring(2, 18),
-        timestamp: new Date().toISOString(),
-        logger: 'kipd.logger',
-        level: 'error',
-        message: { formatted: message },
-        extra: {
-          ...context,
-          error: error ? formatError(error) : undefined,
-        },
-      };
-
-      await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage(error ? `${message}: ${String(error)}` : message, 'error');
+        }
       });
     } catch {
       // Never throw from the logger
