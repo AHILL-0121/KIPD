@@ -7,6 +7,7 @@ import { ROLES, requireTenant } from '@/lib/auth';
 import { HttpError, assertUuid, handleError, notFound, parseJson } from '@/lib/http';
 import { financialYear } from '@/lib/gst';
 import { buildCreditSnapshot, creditNoteDocument, type CreditNoteSnapshot, type InvoiceSnapshot } from '@/lib/invoice';
+import { writeTenantAudit } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -49,7 +50,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { tenantId, userName } = await requireTenant(ROLES.frontDesk, 'hotel');
+    const { tenantId, userId, userName } = await requireTenant(ROLES.frontDesk, 'hotel');
     const body = await parseJson(request, schema);
     const bill = await loadBill(tenantId, params.id);
 
@@ -110,6 +111,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const fresh = await db.query.creditNotes.findFirst({ where: (c) => and(eq(c.id, row.id), eq(c.tenantId, tenantId)) });
     if (!fresh) throw new HttpError(500, 'The credit note could not be read back.');
+
+    void writeTenantAudit({
+      tenantId,
+      actorUserId: userId,
+      actorName: userName,
+      action: 'credit_note.issue',
+      targetType: 'credit_note',
+      targetId: fresh.id,
+      metadata: { billId: fresh.billId, number: fresh.number, amount: Number(fresh.amount), reason: fresh.reason },
+    });
+
     return NextResponse.json(creditNoteDocument({ id: fresh.id, billId: fresh.billId, number: fresh.number, issuedAt: fresh.issuedAt, issuedBy: fresh.issuedBy, snapshot: fresh.data as CreditNoteSnapshot }), { status: 201 });
   } catch (error) {
     return handleError(error, 'Failed to issue the credit note');

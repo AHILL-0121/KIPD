@@ -7,7 +7,7 @@ import { ROLES, requireTenant } from '@/lib/auth';
 import { assertUuid, handleError, notFound, parseJson } from '@/lib/http';
 import { ownedRoomType } from '@/lib/tenant-scope';
 
-const status = z.enum(['available', 'occupied', 'cleaning', 'maintenance', 'blocked']);
+const status = z.enum(['available', 'occupied', 'dirty', 'cleaning', 'inspected', 'maintenance', 'blocked']);
 
 const createSchema = z.object({
   roomNumber: z.string().trim().min(1).max(20),

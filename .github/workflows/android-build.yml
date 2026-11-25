@@ -39,6 +39,10 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
+      - name: Dependency security audit
+        working-directory: ./frontend
+        run: npm audit --audit-level=high || true
+
       - name: Type check
         working-directory: ./frontend
         run: npx tsc --noEmit

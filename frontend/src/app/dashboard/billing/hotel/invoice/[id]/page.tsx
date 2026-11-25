@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { FilePlus2 } from 'lucide-react';
+import { FilePlus2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,12 @@ export default function InvoicePage({ params }: { params: { id: string } }) {
   const [creditError, setCreditError] = useState('');
   const [notice, setNotice] = useState('');
 
+  // Email invoice dialog
+  const [showEmail, setShowEmail] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailError, setEmailError] = useState('');
+
   const load = useCallback(() => {
     fetch(`/api/billing/${params.id}/invoice`)
       .then(async res => {
@@ -39,6 +45,39 @@ export default function InvoicePage({ params }: { params: { id: string } }) {
   const left = doc ? Math.round((doc.snapshot.total - doc.credited) * 100) / 100 : 0;
 
   const openCredit = () => { setCredit({ amount: '', reason: '', full: false }); setCreditError(''); setShowCredit(true); };
+  const openEmail = () => {
+    setEmailTo(doc?.snapshot.buyer.email || '');
+    setEmailError('');
+    setShowEmail(true);
+  };
+
+  const sendInvoiceEmail = async () => {
+    if (sendingEmail || !doc) return;
+    if (!emailTo.trim() || !emailTo.includes('@')) {
+      setEmailError('Enter a valid email address.');
+      return;
+    }
+    setSendingEmail(true);
+    setEmailError('');
+    try {
+      const res = await fetch(`/api/billing/${params.id}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailTo.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEmailError(res.status < 500 && typeof data.error === 'string' ? data.error : 'Could not email the invoice. Please check SMTP settings.');
+        return;
+      }
+      setShowEmail(false);
+      setNotice(`Invoice emailed to ${data.sentTo || emailTo.trim()}.`);
+    } catch {
+      setEmailError('Could not reach the server. Please try again.');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   const issueCredit = async () => {
     if (issuing) return;
@@ -82,11 +121,18 @@ export default function InvoicePage({ params }: { params: { id: string } }) {
             backHref="/dashboard/billing/hotel"
             backLabel="Back to hotel billing"
             sheet={<InvoiceSheet doc={doc} />}
-            actions={left > 0 ? (
-              <Button variant="ghost" onClick={openCredit}>
-                <FilePlus2 className="w-4 h-4" aria-hidden="true" /> Issue credit note
-              </Button>
-            ) : undefined}
+            actions={
+              <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" onClick={openEmail}>
+                  <Mail className="w-4 h-4" aria-hidden="true" /> Email invoice
+                </Button>
+                {left > 0 && (
+                  <Button variant="ghost" onClick={openCredit}>
+                    <FilePlus2 className="w-4 h-4" aria-hidden="true" /> Issue credit note
+                  </Button>
+                )}
+              </div>
+            }
             below={doc.creditNotes.length > 0 ? (
               <section aria-label="Credit notes" className="mx-auto mt-6 max-w-[210mm]">
                 <h2 className="mb-2 text-sm font-semibold text-ink">Credit notes on this invoice</h2>
@@ -127,6 +173,19 @@ export default function InvoicePage({ params }: { params: { id: string } }) {
             <div className="mt-6 space-y-3">
               <Button className="w-full" onClick={issueCredit} isLoading={issuing}>{issuing ? 'Issuing…' : 'Issue credit note'}</Button>
               <Button variant="ghost" className="w-full" onClick={() => setShowCredit(false)} disabled={issuing}>Cancel</Button>
+            </div>
+          </Dialog>
+
+          <Dialog open={showEmail} onClose={() => setShowEmail(false)} labelledBy="email-invoice-title" dismissible={!sendingEmail} className="p-8 max-w-md w-full">
+            <h2 id="email-invoice-title" className="text-2xl font-bold text-ink">Email invoice</h2>
+            <p className="mt-2 text-ink-muted">Send invoice {doc.number} directly to the guest.</p>
+            <div className="mt-5">
+              <Input label="Guest email address" type="email" placeholder="guest@example.com" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} />
+            </div>
+            {emailError && <p role="alert" className="mt-4 rounded-lg bg-terra-pale px-4 py-3 text-sm text-terra">{emailError}</p>}
+            <div className="mt-6 space-y-3">
+              <Button className="w-full" onClick={sendInvoiceEmail} isLoading={sendingEmail}>{sendingEmail ? 'Sending…' : 'Send email'}</Button>
+              <Button variant="ghost" className="w-full" onClick={() => setShowEmail(false)} disabled={sendingEmail}>Cancel</Button>
             </div>
           </Dialog>
         </>

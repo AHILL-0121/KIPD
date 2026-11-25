@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import Image from 'next/image';
 import { Check, Minus, Plus, Send, ShoppingCart, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -244,6 +245,13 @@ export default function GuestMenuPage({ params }: { params: { restaurantSlug: st
           </div>
         </div>
       )}
+      <footer className="py-6 text-center text-xs text-ink-muted">
+        <div className="flex items-center justify-center gap-4">
+          <Link href="/privacy" className="hover:text-ink">Privacy Policy</Link>
+          <span>·</span>
+          <Link href="/terms" className="hover:text-ink">Terms of Service</Link>
+        </div>
+      </footer>
     </div>
   );
 }

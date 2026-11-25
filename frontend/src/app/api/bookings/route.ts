@@ -97,17 +97,31 @@ export async function GET() {
     const { tenantId } = await requireTenant(ROLES.frontDesk, 'hotel');
     const all = await db.query.bookings.findMany({
       where: eq(bookings.tenantId, tenantId),
-      with: { guest: true, room: { with: { roomType: true } }, bills: true },
+      with: { guest: true, room: { with: { roomType: true } }, bills: { with: { refunds: true } } },
       orderBy: (b, { desc }) => [desc(b.createdAt)],
     });
     // Each booking carries a short summary of its live stay bill (not the voided ones), for the details drawer.
     return NextResponse.json(all.map(({ bills: billRows, ...booking }) => {
       const bill = billRows.find((b) => b.kind === 'stay' && b.status !== 'void');
+      const voidBill = billRows.find((b) => b.kind === 'stay' && b.status === 'void' && Number(b.paidAmount ?? 0) > 0);
       // An issued invoice stays reachable after the booking is cancelled (its bill is void then), so it can be credited.
       const invoiced = billRows.find((b) => b.kind === 'stay' && b.invoiceNumber);
+      const voidPaid = voidBill ? Number(voidBill.paidAmount ?? 0) : 0;
+      const voidRefunded = voidBill ? voidBill.refunds.reduce((s, r) => s + Number(r.amount), 0) : 0;
       return {
         ...booking,
-        bill: bill ? { id: bill.id, status: bill.status, totalAmount: Number(bill.totalAmount), paidAmount: Number(bill.paidAmount ?? 0) } : null,
+        bill: bill ? {
+          id: bill.id,
+          status: bill.status,
+          totalAmount: Number(bill.totalAmount),
+          paidAmount: Number(bill.paidAmount ?? 0),
+        } : null,
+        voidRefund: voidBill ? {
+          billId: voidBill.id,
+          paidAmount: voidPaid,
+          refundedAmount: voidRefunded,
+          remainingRefund: Math.max(0, Math.round((voidPaid - voidRefunded) * 100) / 100),
+        } : null,
         invoice: invoiced ? { billId: invoiced.id, number: invoiced.invoiceNumber } : null,
       };
     }));

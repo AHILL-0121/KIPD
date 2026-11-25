@@ -21,8 +21,18 @@ interface Tenant {
   createdAt: string;
 }
 
+interface AuditEntry {
+  id: string;
+  adminClerkId: string;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  createdAt: string;
+}
+
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showNewModal, setShowNewModal] = useState(false);
@@ -52,6 +62,10 @@ export default function TenantsPage() {
         console.error('Error fetching tenants:', err);
         setTenants([]);
       });
+    fetch('/api/admin/audit')
+      .then(res => (res.ok ? res.json() : []))
+      .then(data => setAuditLogs(Array.isArray(data) ? data : []))
+      .catch(() => setAuditLogs([]));
   }, []);
 
   const filteredTenants = tenants.filter(t => {
@@ -235,6 +249,23 @@ export default function TenantsPage() {
         <div className="text-center py-16">
           <p className="text-ink-muted">No tenants found</p>
         </div>
+      )}
+
+      {auditLogs.length > 0 && (
+        <Card hover={false} className="mt-8">
+          <h2 className="text-lg font-bold text-ink mb-3">Recent Platform Audit Log</h2>
+          <div className="divide-y divide-stone-100 text-sm">
+            {auditLogs.slice(0, 15).map((log) => (
+              <div key={log.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="font-mono text-xs bg-stone-100 px-2 py-0.5 rounded text-ink mr-2">{log.action}</span>
+                  <span className="text-ink-muted">{log.targetType}{log.targetId ? ` · ${log.targetId.slice(0, 8)}` : ''}</span>
+                </div>
+                <span className="text-xs text-ink-muted">{new Date(log.createdAt).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* Create Modal */}

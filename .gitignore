@@ -2,7 +2,7 @@
 node_modules/
 frontend/node_modules/
 
-# Build outputs
+# ─── Build outputs ────────────────────────────────────────────────────────────
 .next/
 frontend/.next/
 out/
@@ -12,27 +12,8 @@ frontend/dist/
 .vite/
 frontend/.vite/
 
-# ─── Python / Backend ─────────────────────────────────────────────────────────
-__pycache__/
-**/__pycache__/
-*.py[cod]
-*.pyo
-
-# Virtual environments
-venv/
-.venv/
-env/
-backend/venv/
-backend/.venv/
-
-# Pytest / coverage
-.pytest_cache/
-.coverage
-htmlcov/
-
 # ─── Uploaded & generated files ───────────────────────────────────────────────
 # Never commit user data or generated reports
-backend/uploads/
 uploads/
 
 # ─── Environment variables ────────────────────────────────────────────────────
@@ -46,15 +27,9 @@ frontend/.env
 frontend/.env.local
 frontend/.env.*.local
 
-# Backend
-backend/.env
-backend/.env.local
-backend/.env.*.local
-
 # Keep example templates
 !.env.example
 !frontend/.env.example
-!backend/.env.example
 
 # ─── Logs ─────────────────────────────────────────────────────────────────────
 *.log

@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^frontend/src/.*\.(ts|tsx)$' || true)
+
+if [ -z "$STAGED_TS" ]; then
+  exit 0
+fi
+
+echo "Running TypeScript typecheck..."
+cd frontend && npx tsc --noEmit
+
+echo "Running ESLint..."
+npm run lint

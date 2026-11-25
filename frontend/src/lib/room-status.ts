@@ -1,15 +1,17 @@
 import type { StatusTone } from '@/lib/order-status';
 
-export type RoomStatus = 'available' | 'occupied' | 'cleaning' | 'maintenance' | 'blocked';
+export type RoomStatus = 'available' | 'occupied' | 'dirty' | 'cleaning' | 'inspected' | 'maintenance' | 'blocked';
 
 /**
- * How a room's status reads, following the design sample: free is green, a guest in it is the brand colour,
- * cleaning and blocked are neutral, and out of order is the one red state, because it needs someone to act.
+ * How a room's status reads, following the design sample: free/inspected is green, occupied is brand colour,
+ * dirty/cleaning/blocked are neutral, and out of order is the one red state, because it needs someone to act.
  */
 export const ROOM_STATUS: Record<RoomStatus, { label: string; tone: StatusTone }> = {
   available: { label: 'Available', tone: 'sage' },
   occupied: { label: 'Occupied', tone: 'amber' },
+  dirty: { label: 'Dirty', tone: 'stone' },
   cleaning: { label: 'Cleaning', tone: 'stone' },
+  inspected: { label: 'Inspected', tone: 'sage' },
   maintenance: { label: 'Out of order', tone: 'terra' },
   blocked: { label: 'Blocked', tone: 'stone' },
 };

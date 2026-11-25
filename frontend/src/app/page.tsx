@@ -187,7 +187,11 @@ export default function HomePage() {
       <footer className="border-t border-stone-200 py-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 text-sm text-ink-muted">
           <span className="font-semibold text-ink">Kipd</span>
-          <span>© 2026 Kipd. Made for hotels and the restaurants inside them.</span>
+          <div className="flex flex-wrap items-center gap-5">
+            <Link href="/privacy" className="hover:text-ink">Privacy</Link>
+            <Link href="/terms" className="hover:text-ink">Terms</Link>
+            <span>© 2026 Kipd. Made for hotels and the restaurants inside them.</span>
+          </div>
         </div>
       </footer>
     </div>

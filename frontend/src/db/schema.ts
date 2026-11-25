@@ -109,7 +109,7 @@ export const rooms = pgTable('rooms', {
   roomTypeId: uuid('room_type_id').notNull(),
   roomNumber: text('room_number').notNull(),
   floor: integer('floor'),
-  status: text('status').notNull().default('available'), // available, occupied, cleaning, maintenance, blocked
+  status: text('status').notNull().default('available'), // available, occupied, dirty, cleaning, inspected, maintenance, blocked
   createdAt: tstz('created_at').defaultNow().notNull(),
 }, (t) => [
   unique('rooms_tenant_id_uq').on(t.tenantId, t.id),
@@ -117,7 +117,7 @@ export const rooms = pgTable('rooms', {
   foreignKey({ name: 'fk_rooms_room_type', columns: [t.tenantId, t.roomTypeId], foreignColumns: [roomTypes.tenantId, roomTypes.id] }),
   uniqueIndex('rooms_property_number_uq').on(t.propertyId, t.roomNumber),
   index('idx_rooms_room_type').on(t.roomTypeId),
-  check('rooms_status_check', sql`${t.status} in ('available','occupied','cleaning','maintenance','blocked')`),
+  check('rooms_status_check', sql`${t.status} in ('available','occupied','dirty','cleaning','inspected','maintenance','blocked')`),
 ]);
 
 // ============= GUESTS =============
@@ -390,6 +390,45 @@ export const payments = pgTable('payments', {
   check('payments_amount_check', sql`${t.amount} > 0`),
 ]);
 
+/**
+ * Recorded refunds for cancelled bookings (deposits) or overpaid bills.
+ * Gives an immutable accounting trail instead of ad-hoc hand refunds.
+ */
+export const refunds = pgTable('refunds', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  billId: uuid('bill_id').notNull(),
+  bookingId: uuid('booking_id'),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  method: text('method').notNull(), // cash, upi, card, bank_transfer, razorpay
+  reference: text('reference'),
+  reason: text('reason').notNull(),
+  processedBy: text('processed_by'),
+  processedByUserId: text('processed_by_user_id'),
+  createdAt: tstz('created_at').defaultNow().notNull(),
+}, (t) => [
+  foreignKey({ name: 'fk_refunds_bill', columns: [t.tenantId, t.billId], foreignColumns: [bills.tenantId, bills.id] }),
+  foreignKey({ name: 'fk_refunds_booking', columns: [t.tenantId, t.bookingId], foreignColumns: [bookings.tenantId, bookings.id] }),
+  index('idx_refunds_bill').on(t.billId),
+  check('refunds_method_check', sql`${t.method} in ('cash','upi','card','bank_transfer','razorpay')`),
+  check('refunds_amount_check', sql`${t.amount} > 0`),
+]);
+
+/** Tenant-scoped audit log for sensitive staff operations (bill voids, refunds, credit notes, PII actions). */
+export const tenantAuditLogs = pgTable('tenant_audit_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  actorUserId: text('actor_user_id').notNull(),
+  actorName: text('actor_name'),
+  action: text('action').notNull(),
+  targetType: text('target_type').notNull(),
+  targetId: text('target_id'),
+  metadata: jsonb('metadata'),
+  createdAt: tstz('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('idx_tenant_audit_tenant_created').on(t.tenantId, t.createdAt),
+]);
+
 // ============= STAFF =============
 export const staff = pgTable('staff', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -607,8 +646,18 @@ export const billsRelations = relations(bills, ({ one, many }) => ({
   booking: one(bookings, { fields: [bills.bookingId], references: [bookings.id] }),
   guest: one(guests, { fields: [bills.guestId], references: [guests.id] }),
   payments: many(payments),
+  refunds: many(refunds),
   orders: many(orders),
   creditNotes: many(creditNotes),
+}));
+
+export const refundsRelations = relations(refunds, ({ one }) => ({
+  bill: one(bills, { fields: [refunds.billId], references: [bills.id] }),
+  booking: one(bookings, { fields: [refunds.bookingId], references: [bookings.id] }),
+}));
+
+export const tenantAuditLogsRelations = relations(tenantAuditLogs, ({ one }) => ({
+  tenant: one(tenants, { fields: [tenantAuditLogs.tenantId], references: [tenants.id] }),
 }));
 
 export const creditNotesRelations = relations(creditNotes, ({ one }) => ({
