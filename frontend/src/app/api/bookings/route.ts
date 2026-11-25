@@ -115,7 +115,6 @@ export async function GET() {
           status: bill.status,
           totalAmount: Number(bill.totalAmount),
           paidAmount: Number(bill.paidAmount ?? 0),
-          refundedAmount: bill.refunds.reduce((s, r) => s + Number(r.amount), 0),
         } : null,
         voidRefund: voidBill ? {
           billId: voidBill.id,

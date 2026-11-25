@@ -31,7 +31,7 @@ interface Booking {
   source: string;
   specialRequests?: string;
   /** The stay's live bill, if it has one (a pending request has none until it is confirmed). */
-  bill?: { id: string; status: 'open' | 'partial' | 'paid'; totalAmount: number; paidAmount: number; refundedAmount?: number } | null;
+  bill?: { id: string; status: 'open' | 'partial' | 'paid'; totalAmount: number; paidAmount: number } | null;
   /** Voided stay bill with paid deposits eligible for refund after cancellation. */
   voidRefund?: { billId: string; paidAmount: number; refundedAmount: number; remainingRefund: number } | null;
   /** The stay's issued invoice, if any. It outlives the bill, which is void once the booking is cancelled. */
