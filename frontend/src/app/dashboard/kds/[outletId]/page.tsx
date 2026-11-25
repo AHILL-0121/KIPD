@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLive } from '@/lib/use-live';
+import { playChime } from '@/lib/chime';
 import { HoldButton } from '@/components/ui/hold-button';
 import { Button } from '@/components/ui/button';
 import { Clock, MapPin, AlertCircle, Volume2, VolumeX, ChefHat, Package } from 'lucide-react';
@@ -39,7 +40,7 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
   const [soundOn, setSoundOn] = useState(false);
   const soundRef = useRef(false);
   soundRef.current = soundOn;
-  const chime = () => new Audio('/notification.mp3').play().then(() => true).catch(() => false);
+  const chime = () => playChime();
   const toggleSound = async () => {
     if (soundOn) return setSoundOn(false);
     if (await chime()) setSoundOn(true); // the test chime doubles as the proof that sound works

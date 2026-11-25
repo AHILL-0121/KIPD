@@ -1,5 +1,13 @@
 apply plugin: 'com.android.application'
 
+def appVersionCode = (project.findProperty('APP_VERSION_CODE') ?: System.getenv('APP_VERSION_CODE') ?: '1').toInteger()
+def appVersionName = (project.findProperty('APP_VERSION_NAME') ?: System.getenv('APP_VERSION_NAME') ?: '1.0.0').toString()
+def releaseStoreFile = project.findProperty('KIPD_UPLOAD_STORE_FILE') ?: System.getenv('KIPD_UPLOAD_STORE_FILE')
+def releaseStorePassword = project.findProperty('KIPD_UPLOAD_STORE_PASSWORD') ?: System.getenv('KIPD_UPLOAD_STORE_PASSWORD')
+def releaseKeyAlias = project.findProperty('KIPD_UPLOAD_KEY_ALIAS') ?: System.getenv('KIPD_UPLOAD_KEY_ALIAS')
+def releaseKeyPassword = project.findProperty('KIPD_UPLOAD_KEY_PASSWORD') ?: System.getenv('KIPD_UPLOAD_KEY_PASSWORD')
+def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
 android {
     namespace = "com.kipd.android"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +15,8 @@ android {
         applicationId "com.kipd.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +24,24 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

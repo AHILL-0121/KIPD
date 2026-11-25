@@ -221,9 +221,10 @@ to the deployed site, so the app loads the live web application:
 
 An `AndroidPrinter` Javascript bridge in `MainActivity.java` enables native thermal/system printing directly from the WebView for invoices, receipts, and order tickets.
 
-### Building the APK
+### Building & auto-updating the APK
 
-CI builds a debug APK on pushes to `main` and on manual runs, and uploads it as the `kipd-app-debug.apk` artifact.
+CI builds a debug APK on pushes to `main` and uploads `kipd-app-debug.apk`. When `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD` secrets are set on GitHub, `main` pushes also build a minified signed release APK & `.aab` (`minifyEnabled true`, `shrinkResources true`) and publish a `android-v1.0.<run_number>` GitHub Release. Installed apps check `/api/android/version` against `MainActivity`'s `AndroidUpdater.getVersionCode()` and display an in-app update banner when a newer build is released.
+
 To build locally:
 
 ```bash
@@ -318,9 +319,18 @@ Migrations so far:
 | 0011 | Staff area access (`hotel`, `restaurant`, `both`) |
 | 0012 | Housekeeping states, refunds, and tenant audit logs |
 | 0013 | Platform settings (`platform_settings` for maintenance mode) |
+| 0014 | Drop unused legacy tables and enable PostgreSQL Row-Level Security (RLS) on tenant-owned tables |
 
 Practice for changes: make them additive where possible, run them first on a Neon branch, run `db:drift` afterwards,
 and apply them to production at or before the deploy that needs them. For emergency recovery, enable Maintenance Mode in `/admin/settings` and restore from a Neon Point-in-Time branch (see `frontend/drizzle/RUNBOOK.txt`).
+
+For local development data, run `npm run db:seed` (creates an idempotent `demo-stay` hotel + restaurant tenant).
+
+### Staging & production release setup
+
+1. **Staging / Vercel Previews:** Create a separate Neon `staging` branch and Clerk Development application, and scope those keys to Vercel **Preview** deployments while keeping Neon `main` + Clerk Production scoped to **Production**.
+2. **Database migrations:** Before deploying schema changes, run `npm run db:migrate && npm run db:drift` inside `frontend/`.
+3. **Observability:** Set `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN` in Vercel (plus `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` for source maps) and configure alert rules in Sentry Issues.
 
 ## Testing and CI
 
@@ -328,6 +338,7 @@ and apply them to production at or before the deploy that needs them. For emerge
 cd frontend
 npm test              # Vitest, single run
 npm run test:watch
+npm run test:e2e      # Playwright smoke suite
 npx tsc --noEmit      # type check
 npm run lint
 ```
