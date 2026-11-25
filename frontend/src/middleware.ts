@@ -29,6 +29,7 @@ export default authMiddleware({
     '/onboarding',
     '/maintenance',
     '/api/maintenance',
+    '/monitoring(.*)',
     // Razorpay calls this without a Clerk session. The route verifies Razorpay's signature itself.
     '/api/webhooks/razorpay/(.*)',
     // Guest-facing: the QR menu, ordering and hotel booking. These routes resolve the tenant from the
@@ -48,6 +49,7 @@ export default authMiddleware({
       path === '/maintenance' ||
       path === '/api/maintenance' ||
       path === '/api/health' ||
+      path.startsWith('/monitoring') ||
       path.startsWith('/api/webhooks/') ||
       path.startsWith('/admin') ||
       path.startsWith('/api/admin') ||

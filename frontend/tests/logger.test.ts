@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as Sentry from '@sentry/nextjs';
 import { logger } from '@/lib/logger';
 
 describe('structured logger', () => {
@@ -48,5 +49,26 @@ describe('structured logger', () => {
     expect(stringified).not.toContain('webhook_secret_key');
     expect(stringified).toContain('[REDACTED]');
     expect(stringified).toContain('visible_info');
+  });
+
+  it('forwards error events to Sentry with redacted extras when SENTRY_DSN is set', () => {
+    const prevDsn = process.env.SENTRY_DSN;
+    process.env.SENTRY_DSN = 'https://key@o1.ingest.sentry.io/123';
+    const captureSpy = vi.spyOn(Sentry, 'captureException');
+    const extrasSpy = vi.fn();
+    vi.spyOn(Sentry, 'withScope').mockImplementation((cb: any) => {
+      cb({ setTag: vi.fn(), setExtras: extrasSpy, setExtra: vi.fn() });
+      return '';
+    });
+
+    try {
+      const err = new Error('Unhandled failure');
+      logger.error('Request failed', err, { tenantId: 't1', secret: 'raw-secret' });
+      expect(captureSpy).toHaveBeenCalledWith(err);
+      expect(extrasSpy).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1', secret: '[REDACTED]' }));
+    } finally {
+      if (prevDsn === undefined) delete process.env.SENTRY_DSN;
+      else process.env.SENTRY_DSN = prevDsn;
+    }
   });
 });
