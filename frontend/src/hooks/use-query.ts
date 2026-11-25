@@ -27,8 +27,16 @@ export function useQuery<T>(url: string, deps: unknown[] = []): UseQueryResult<T
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
+  useEffect(() => {
+    fetch_();
+    const onRefresh = () => fetch_();
+    window.addEventListener('kipd:refresh', onRefresh);
+    return () => {
+      window.removeEventListener('kipd:refresh', onRefresh);
+      abortRef.current?.abort();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetch_(); return () => abortRef.current?.abort(); }, [fetch_, ...deps]);
+  }, [fetch_, ...deps]);
 
   return { data, isLoading, error, refetch: fetch_ };
 }

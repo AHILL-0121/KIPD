@@ -1,0 +1,7 @@
+# Default code owners
+* @AHILL-0121
+
+# Database schema, migrations, and workflows require maintainer review
+/frontend/src/db/ @AHILL-0121
+/frontend/drizzle/ @AHILL-0121
+/.github/ @AHILL-0121

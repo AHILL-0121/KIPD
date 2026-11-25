@@ -7,6 +7,8 @@ import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/toaster';
+import { confirmDialog } from '@/components/ui/confirm';
+import { useTenantInfo } from '@/contexts/tenant-context';
 import { PaymentSettingsCard } from '@/components/settings/payment-settings-card';
 import { RazorpayConnectionCard } from '@/components/settings/razorpay-connection-card';
 import { TaxSettingsCard } from '@/components/settings/tax-settings-card';
@@ -23,6 +25,7 @@ import { motion } from 'framer-motion';
 import { useEffect } from 'react';
 
 export default function SettingsPage() {
+  const { reload: reloadTenantInfo } = useTenantInfo();
   const [propertySettings, setPropertySettings] = useState({
     name: '',
     checkInTime: '14:00',
@@ -57,6 +60,15 @@ export default function SettingsPage() {
     type: string;
     isActive: boolean;
   }>>([]);
+  const [showAddOutlet, setShowAddOutlet] = useState(false);
+  const [newOutletName, setNewOutletName] = useState('');
+  const [newOutletType, setNewOutletType] = useState<'restaurant' | 'bar' | 'cafe' | 'room_service'>('restaurant');
+  const [savingOutlet, setSavingOutlet] = useState(false);
+  const [planUsage, setPlanUsage] = useState<{
+    plan: string;
+    limits: { rooms: number | null; tables: number | null; outlets: number | null; staff: number | null };
+    usage: { rooms: number; tables: number; outlets: number; staff: number };
+  } | null>(null);
 
   const [webhooks, setWebhooks] = useState<Array<{
     id: string;
@@ -77,11 +89,63 @@ export default function SettingsPage() {
         if (data.receiptSettings) setReceiptSettings(data.receiptSettings);
         if (data.outlets) setOutlets(data.outlets);
         if (data.webhooks) setWebhooks(data.webhooks);
+        if (data.plan && data.limits && data.usage) {
+          setPlanUsage({ plan: data.plan, limits: data.limits, usage: data.usage });
+        }
       })
       .catch(() => {
         // Keep defaults
       });
   }, []);
+
+  const handleCreateOutlet = async () => {
+    if (!newOutletName.trim()) {
+      toast('error', 'Outlet name is required');
+      return;
+    }
+    setSavingOutlet(true);
+    try {
+      const res = await fetch('/api/outlets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newOutletName.trim(), type: newOutletType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add outlet');
+      if (data.outlet) setOutlets((prev) => [...prev, data.outlet]);
+      setNewOutletName('');
+      setShowAddOutlet(false);
+      reloadTenantInfo();
+      toast('success', 'Outlet created');
+    } catch (e: unknown) {
+      toast('error', e instanceof Error ? e.message : 'Could not create outlet');
+    } finally {
+      setSavingOutlet(false);
+    }
+  };
+
+  const handleDeleteOutlet = async (outlet: { id: string; name: string }) => {
+    if (
+      !(await confirmDialog({
+        title: `Delete "${outlet.name}"?`,
+        message: 'Outlets with existing tables, menus, or orders cannot be deleted.',
+        confirmLabel: 'Delete outlet',
+        danger: true,
+      }))
+    ) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/outlets?id=${outlet.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete outlet');
+      setOutlets((prev) => prev.filter((o) => o.id !== outlet.id));
+      reloadTenantInfo();
+      toast('success', 'Outlet deleted');
+    } catch (e: unknown) {
+      toast('error', e instanceof Error ? e.message : 'Could not delete outlet');
+    }
+  };
 
   const saveSettings = async () => {
     try {
@@ -179,6 +243,35 @@ export default function SettingsPage() {
         {/* Tax & invoices */}
         <TaxSettingsCard />
 
+        {/* Plan & Quotas */}
+        {planUsage && (
+          <Card hover={false}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <CardTitle>Plan &amp; Usage</CardTitle>
+                <CardDescription>Resource quotas enforced on your current subscription tier</CardDescription>
+              </div>
+              <Badge variant="amber" className="capitalize">
+                {planUsage.plan} plan
+              </Badge>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              {(['rooms', 'tables', 'outlets', 'staff'] as const).map((k) => {
+                const used = planUsage.usage[k];
+                const cap = planUsage.limits[k];
+                return (
+                  <div key={k} className="p-3 rounded-xl bg-cream border border-stone-200">
+                    <div className="text-xs text-ink-muted capitalize">{k}</div>
+                    <div className="font-semibold text-ink mt-0.5">
+                      {used} / {cap === null ? 'Unlimited' : cap}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
         {/* Outlets */}
         <Card hover={false}>
           <div className="flex items-center justify-between mb-6">
@@ -192,11 +285,40 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={() => setShowAddOutlet((s) => !s)}>
               <Plus className="w-4 h-4" />
               Add Outlet
             </Button>
           </div>
+
+          {showAddOutlet && (
+            <div className="mb-5 p-4 rounded-xl bg-cream border border-stone-200 flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+              <div className="flex-1 space-y-1">
+                <label className="text-xs font-medium text-ink">Outlet Name</label>
+                <Input
+                  value={newOutletName}
+                  onChange={(e) => setNewOutletName(e.target.value)}
+                  placeholder="e.g. Rooftop Bar"
+                />
+              </div>
+              <div className="sm:w-44 space-y-1">
+                <label className="text-xs font-medium text-ink">Type</label>
+                <Select
+                  value={newOutletType}
+                  onChange={(e) => setNewOutletType(e.target.value as 'restaurant' | 'bar' | 'cafe' | 'room_service')}
+                  options={[
+                    { value: 'restaurant', label: 'Restaurant' },
+                    { value: 'bar', label: 'Bar' },
+                    { value: 'cafe', label: 'Cafe' },
+                    { value: 'room_service', label: 'Room Service' },
+                  ]}
+                />
+              </div>
+              <Button onClick={handleCreateOutlet} disabled={savingOutlet}>
+                {savingOutlet ? 'Saving...' : 'Save Outlet'}
+              </Button>
+            </div>
+          )}
 
           <div className="space-y-3">
             {outlets.map((outlet) => (
@@ -217,7 +339,12 @@ export default function SettingsPage() {
                   <Badge variant={outlet.isActive ? 'sage' : 'stone'} dot>
                     {outlet.isActive ? 'Active' : 'Inactive'}
                   </Badge>
-                  <button className="text-ink-muted hover:text-terra">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteOutlet(outlet)}
+                    aria-label={`Delete ${outlet.name}`}
+                    className="text-ink-muted hover:text-terra min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
+                  >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>

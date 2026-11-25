@@ -143,7 +143,7 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 md:p-8 overflow-x-hidden">
-      <div className="mb-8 flex flex-row items-start md:items-center justify-between gap-3">
+      <div className="mb-6 flex flex-row items-start md:items-center justify-between gap-3">
         <div>
           <h1 className="section-title">Home</h1>
           <p className="section-sub">Today&apos;s operations at a glance</p>
@@ -155,6 +155,29 @@ export default function DashboardPage() {
           </span>
         </div>
       </div>
+
+      {(showHotel || showRestaurant) && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          {showHotel && (
+            <Link
+              href="/dashboard/hotel"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-stone-200 text-sm font-medium text-ink hover:border-amber transition-colors min-h-[44px]"
+            >
+              <Hotel className="w-4 h-4 text-amber-deep" aria-hidden="true" />
+              Hotel Overview
+            </Link>
+          )}
+          {showRestaurant && (
+            <Link
+              href="/dashboard/restaurant/overview"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-stone-200 text-sm font-medium text-ink hover:border-amber transition-colors min-h-[44px]"
+            >
+              <UtensilsCrossed className="w-4 h-4 text-sage-deep" aria-hidden="true" />
+              Restaurant Overview
+            </Link>
+          )}
+        </div>
+      )}
 
       {stale && (
         <p role="status" className="mb-6 rounded-lg bg-amber-pale px-4 py-3 text-sm text-amber-deep">

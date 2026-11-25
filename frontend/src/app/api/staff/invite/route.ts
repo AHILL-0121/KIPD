@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { staff, staffInvites, tenants } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { HttpError, handleError, parseJson } from '@/lib/http';
+import { enforcePlanLimit } from '@/lib/plan-limits';
 import { emailTemplates, sendEmail } from '@/lib/email';
 import { INVITE_TTL_MS, hashInviteToken, newInviteToken } from '@/lib/invites';
 
@@ -23,6 +24,8 @@ export async function POST(request: NextRequest) {
     const [already] = await db.select({ id: staff.id }).from(staff)
       .where(and(eq(staff.tenantId, tenantId), sql`lower(${staff.email}) = ${email}`)).limit(1);
     if (already) throw new HttpError(409, 'That person is already on your team.');
+
+    await enforcePlanLimit(tenantId, 'staff', { excludeInviteEmail: email });
 
     const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
 

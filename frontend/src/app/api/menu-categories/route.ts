@@ -9,11 +9,17 @@ import { firstOutlet, ownedOutlet } from '@/lib/tenant-scope';
 
 const createSchema = z.object({ name: z.string().trim().min(1).max(80), outletId: z.string().uuid().optional() });
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { tenantId } = await requireTenant(undefined, 'restaurant');
+    const outletId = request?.url ? new URL(request.url).searchParams.get('outletId') : null;
+    const filters = [eq(menuCategories.tenantId, tenantId)];
+    if (outletId) {
+      await ownedOutlet(tenantId, outletId);
+      filters.push(eq(menuCategories.outletId, outletId));
+    }
     const categories = await db.query.menuCategories.findMany({
-      where: eq(menuCategories.tenantId, tenantId),
+      where: and(...filters),
       orderBy: (c, { asc }) => [asc(c.sortOrder), asc(c.createdAt)], // newest last, so the order is the order they were created in
     });
     return NextResponse.json(categories);

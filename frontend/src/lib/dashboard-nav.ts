@@ -71,6 +71,13 @@ export const landingFor = (type: TenantType, role: StaffRole, areas: AccessArea 
 
 /** A page this person has no menu entry for is not theirs to open. Pages that are not in the menu are left alone. */
 export function canOpen(pathname: string, type: TenantType, role: StaffRole, areas: AccessArea = 'both') {
+  if (pathname === '/dashboard/hotel' || pathname.startsWith('/dashboard/hotel/')) {
+    return (
+      type !== 'restaurant' &&
+      ['owner', 'manager', 'front_desk'].includes(role) &&
+      (role === 'owner' || role === 'manager' || areas === 'both' || areas === 'hotel')
+    );
+  }
   const home = navigation[0];
   const item = pathname === home.href
     ? home
@@ -90,6 +97,18 @@ export function crumbsFor(pathname: string | null, type: TenantType, role: Staff
   const crumbs = [{ label: 'Home', href: landingFor(type, role) }];
   const path = pathname ?? '/dashboard';
   if (path === '/dashboard' || path === '/dashboard/') return crumbs;
+
+  if (path === '/dashboard/hotel' || path.startsWith('/dashboard/hotel/')) {
+    crumbs.push({ label: AREA_LABEL.hotel, href: visible.find(i => i.area === 'hotel')?.href ?? '/dashboard/rooms' });
+    crumbs.push({ label: 'Overview', href: '/dashboard/hotel' });
+    return crumbs;
+  }
+
+  if (path === '/dashboard/restaurant/overview' || path.startsWith('/dashboard/restaurant/overview/')) {
+    crumbs.push({ label: AREA_LABEL.restaurant, href: visible.find(i => i.area === 'restaurant')?.href ?? '/dashboard/restaurant' });
+    crumbs.push({ label: 'Overview', href: '/dashboard/restaurant/overview' });
+    return crumbs;
+  }
 
   // The menu page this one belongs to: the longest menu address the path starts with.
   const item = navigation.slice(1)

@@ -70,6 +70,13 @@ export const platformAuditLog = pgTable('platform_audit_log', {
   createdAt: tstz('created_at').defaultNow().notNull(),
 });
 
+export const platformSettings = pgTable('platform_settings', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  updatedBy: text('updated_by'),
+  updatedAt: tstz('updated_at').defaultNow().notNull(),
+});
+
 // ============= PROPERTIES =============
 export const properties = pgTable('properties', {
   id: uuid('id').primaryKey().defaultRandom(),

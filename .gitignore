@@ -63,3 +63,4 @@ desktop.ini
 plan/
 *.md
 !README.md
+!.github/**/*.md

@@ -20,10 +20,15 @@ import { SettleTableDialog, SettleTakeawayDialog } from '@/components/orders/set
 import { TableDetailDrawer } from '@/components/orders/table-detail-drawer';
 
 export default function OrdersPage() {
-  const { data: rawOrders, error: ordersError, isLoading: ordersLoading, refetch: refetchOrders } = useQuery<Order[]>('/api/orders');
-  const { data: rawMenu } = useQuery<MenuItem[]>('/api/menu');
-  const { data: rawTables } = useQuery<TableOption[]>('/api/tables');
-  const { data: rawCategories } = useQuery<{ name: string }[]>('/api/menu-categories');
+  const { info } = useTenantInfo();
+  const outlets = info?.outlets ?? [];
+  const [selectedOutletId, setSelectedOutletId] = useState<string>('all');
+  const outletQs = selectedOutletId !== 'all' ? `?outletId=${selectedOutletId}` : '';
+
+  const { data: rawOrders, error: ordersError, isLoading: ordersLoading, refetch: refetchOrders } = useQuery<Order[]>(`/api/orders${outletQs}`, [selectedOutletId]);
+  const { data: rawMenu } = useQuery<MenuItem[]>(`/api/menu${outletQs}`, [selectedOutletId]);
+  const { data: rawTables } = useQuery<TableOption[]>(`/api/tables${outletQs}`, [selectedOutletId]);
+  const { data: rawCategories } = useQuery<{ name: string }[]>(`/api/menu-categories${outletQs}`, [selectedOutletId]);
 
   const [orders, setOrders] = useState<Order[]>([]);
   useEffect(() => {
@@ -65,8 +70,7 @@ export default function OrdersPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const { info } = useTenantInfo();
-  const channel = info?.id || null;
+  const channel = selectedOutletId !== 'all' ? selectedOutletId : (info?.id || null);
 
   useLive(() => {
     refetchOrders();
@@ -229,6 +233,7 @@ export default function OrdersPage() {
       if (orderMode === 'dine_in') {
         payload.tableId = selectedTableId;
       } else {
+        if (selectedOutletId !== 'all') payload.outletId = selectedOutletId;
         if (customerName.trim()) payload.customerName = customerName.trim();
       }
       const res = await fetch('/api/orders', {
@@ -324,6 +329,19 @@ export default function OrdersPage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {outlets.length > 1 && (
+            <select
+              aria-label="Select outlet"
+              value={selectedOutletId}
+              onChange={(e) => setSelectedOutletId(e.target.value)}
+              className="min-h-[44px] px-3 py-2 rounded-xl border border-stone-300 bg-white text-sm text-ink"
+            >
+              <option value="all">All Outlets</option>
+              {outlets.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+          )}
           <Button
             variant="ghost"
             className="bg-stone-100 hover:bg-stone-200 min-h-[44px] min-w-[44px] p-2.5 sm:px-4"

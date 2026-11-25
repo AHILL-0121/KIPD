@@ -2,19 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { tenants } from '@/db/schema';
+import { outlets, tenants } from '@/db/schema';
 import { ROLES, requireTenant } from '@/lib/auth';
 import { handleError, parseJson } from '@/lib/http';
+import { getTenantPlanUsage } from '@/lib/plan-limits';
 import { getSettings, propertySettingsSchema, receiptSettingsSchema } from '@/lib/property-settings';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-/** Billing roles print receipts, so they may read. Outlets and webhooks have no tables yet. */
+/** Billing roles print receipts, so they may read. Outlets and plan quotas are returned alongside settings. */
 export async function GET() {
   try {
     const { tenantId } = await requireTenant(ROLES.billing);
-    return NextResponse.json({ ...(await getSettings(tenantId)), outlets: [], webhooks: [] });
+    const [settings, tenantOutlets, planInfo] = await Promise.all([
+      getSettings(tenantId),
+      db.select().from(outlets).where(eq(outlets.tenantId, tenantId)).orderBy(outlets.createdAt),
+      getTenantPlanUsage(tenantId),
+    ]);
+    return NextResponse.json({ ...settings, outlets: tenantOutlets, webhooks: [], ...planInfo });
   } catch (error) {
     return handleError(error, 'Failed to fetch settings');
   }

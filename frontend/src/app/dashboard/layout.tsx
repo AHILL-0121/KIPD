@@ -96,7 +96,8 @@ function DashboardShell({ children }: { children: ReactNode }) {
   const handleTouchEnd = () => {
     if (pullY > 100) {
       setIsRefreshing(true);
-      window.location.reload();
+      window.dispatchEvent(new CustomEvent('kipd:refresh'));
+      window.setTimeout(() => setIsRefreshing(false), 650);
     }
     setStartY(0);
     setPullY(0);

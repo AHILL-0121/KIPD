@@ -1,5 +1,6 @@
 import { authMiddleware } from '@clerk/nextjs';
 import { NextResponse } from 'next/server';
+import { getMaintenanceState } from '@/lib/maintenance';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -26,6 +27,8 @@ export default authMiddleware({
     '/terms',
     '/offline',
     '/onboarding',
+    '/maintenance',
+    '/api/maintenance',
     // Razorpay calls this without a Clerk session. The route verifies Razorpay's signature itself.
     '/api/webhooks/razorpay/(.*)',
     // Guest-facing: the QR menu, ordering and hotel booking. These routes resolve the tenant from the
@@ -39,6 +42,30 @@ export default authMiddleware({
 
   async afterAuth(auth, req) {
     const path = req.nextUrl.pathname;
+
+    // Platform admins, admin endpoints, auth pages, health checks, webhooks, and /maintenance bypass the maintenance gate.
+    const bypassMaintenance =
+      path === '/maintenance' ||
+      path === '/api/maintenance' ||
+      path === '/api/health' ||
+      path.startsWith('/api/webhooks/') ||
+      path.startsWith('/admin') ||
+      path.startsWith('/api/admin') ||
+      path.startsWith('/sign-in') ||
+      path.startsWith('/sign-up');
+
+    if (!bypassMaintenance) {
+      const maintenance = await getMaintenanceState();
+      if (maintenance.enabled) {
+        if (path.startsWith('/api/')) {
+          return NextResponse.json(
+            { error: maintenance.message, estimatedEnd: maintenance.estimatedEnd },
+            { status: 503 },
+          );
+        }
+        return NextResponse.redirect(new URL('/maintenance', req.url));
+      }
+    }
 
     // Not signed in and not on a public route: send to sign-in (APIs get a 401 from their own guards).
     if (!auth.userId && !auth.isPublicRoute) {
