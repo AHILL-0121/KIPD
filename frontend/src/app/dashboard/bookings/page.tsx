@@ -31,7 +31,9 @@ interface Booking {
   source: string;
   specialRequests?: string;
   /** The stay's live bill, if it has one (a pending request has none until it is confirmed). */
-  bill?: { id: string; status: 'open' | 'partial' | 'paid'; totalAmount: number; paidAmount: number } | null;
+  bill?: { id: string; status: 'open' | 'partial' | 'paid'; totalAmount: number; paidAmount: number; refundedAmount?: number } | null;
+  /** Voided stay bill with paid deposits eligible for refund after cancellation. */
+  voidRefund?: { billId: string; paidAmount: number; refundedAmount: number; remainingRefund: number } | null;
   /** The stay's issued invoice, if any. It outlives the bill, which is void once the booking is cancelled. */
   invoice?: { billId: string; number: string } | null;
 }
@@ -63,6 +65,9 @@ export default function BookingsPage() {
   const [rooms, setRooms] = useState<AvailableRoom[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'arriving_today' | 'leaving_today' | 'upcoming_7d' | 'past'>('all');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 15;
   const [view, setView] = useState<'list' | 'calendar'>('list');
   const [loading, setLoading] = useState(true);
   const [stale, setStale] = useState(false);
@@ -70,6 +75,9 @@ export default function BookingsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [cancelling, setCancelling] = useState<Booking | null>(null);
+  const [refunding, setRefunding] = useState<Booking | null>(null);
+  const [refundForm, setRefundForm] = useState({ amount: '', method: 'cash', reference: '', reason: 'Booking cancelled — deposit refund' });
+  const [refundError, setRefundError] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -250,14 +258,28 @@ export default function BookingsPage() {
   const arrivingToday = bookings.filter(b => (b.status === 'pending' || b.status === 'confirmed') && isToday(new Date(b.checkInDate))).length;
   const leavingToday = bookings.filter(b => b.status === 'checked_in' && isToday(new Date(b.checkOutDate))).length;
 
-  const q = search.toLowerCase();
+  const q = search.toLowerCase().trim();
+  const nowMs = Date.now();
+  const sevenDaysMs = nowMs + 7 * 86_400_000;
+
   const filteredBookings = bookings
     .filter(b => {
       const matchesSearch = !q ||
         b.guest?.name?.toLowerCase().includes(q) ||
         b.guest?.email?.toLowerCase().includes(q) ||
-        b.room?.roomNumber?.includes(search);
-      return matchesSearch && (statusFilter === 'all' || b.status === statusFilter);
+        b.guest?.phone?.toLowerCase().includes(q) ||
+        b.id.toLowerCase().includes(q) ||
+        b.room?.roomNumber?.toLowerCase().includes(q);
+      if (!matchesSearch || (statusFilter !== 'all' && b.status !== statusFilter)) return false;
+
+      if (dateFilter === 'arriving_today') return isToday(new Date(b.checkInDate));
+      if (dateFilter === 'leaving_today') return isToday(new Date(b.checkOutDate));
+      if (dateFilter === 'upcoming_7d') {
+        const ci = new Date(b.checkInDate).getTime();
+        return ci >= nowMs - 86_400_000 && ci <= sevenDaysMs;
+      }
+      if (dateFilter === 'past') return new Date(b.checkOutDate).getTime() < nowMs;
+      return true;
     })
     // Bookings that still need handling come first, soonest arrival first; finished ones follow, newest first.
     .sort((a, b) => {
@@ -266,7 +288,54 @@ export default function BookingsPage() {
       const diff = new Date(a.checkInDate).getTime() - new Date(b.checkInDate).getTime();
       return aActive ? diff : -diff;
     });
-  const filtering = !!search || statusFilter !== 'all';
+  const filtering = !!search || statusFilter !== 'all' || dateFilter !== 'all';
+  const totalPages = Math.max(1, Math.ceil(filteredBookings.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedBookings = filteredBookings.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, dateFilter]);
+
+  const handleRecordRefund = async () => {
+    if (!refunding?.voidRefund || saving) return;
+    const amt = Number(refundForm.amount);
+    if (!(amt > 0)) {
+      setRefundError('Enter a positive refund amount.');
+      return;
+    }
+    if (refundForm.reason.trim().length < 3) {
+      setRefundError('Enter a brief reason for the refund.');
+      return;
+    }
+    setSaving(true);
+    setRefundError('');
+    try {
+      const res = await fetch(`/api/billing/${refunding.voidRefund.billId}/refund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amt,
+          method: refundForm.method,
+          reference: refundForm.reference.trim() || undefined,
+          reason: refundForm.reason.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRefundError(res.status < 500 && typeof data.error === 'string' ? data.error : 'Could not record the refund.');
+        return;
+      }
+      setRefunding(null);
+      setSelectedId(null);
+      fetchBookings();
+      showToast(`Refund of ${formatCurrency(amt)} recorded for ${refunding.guest?.name || 'guest'}.`, 'success');
+    } catch {
+      setRefundError('Could not reach the server. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const tabs = [
     { value: 'all', label: 'All', count: count('all') },
@@ -319,13 +388,29 @@ export default function BookingsPage() {
           </div>
           {view === 'list' && <FilterTabs label="Show bookings that are" tabs={tabs} value={statusFilter} onChange={setStatusFilter} />}
         </div>
-        <Input
-          aria-label="Search bookings"
-          placeholder="Search by guest, email or room…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="lg:w-72"
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          {view === 'list' && (
+            <Select
+              aria-label="Filter by date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as typeof dateFilter)}
+              options={[
+                { value: 'all', label: 'All dates' },
+                { value: 'arriving_today', label: 'Arriving today' },
+                { value: 'leaving_today', label: 'Leaving today' },
+                { value: 'upcoming_7d', label: 'Next 7 days' },
+                { value: 'past', label: 'Past check-outs' },
+              ]}
+            />
+          )}
+          <Input
+            aria-label="Search bookings"
+            placeholder="Search guest, phone, ref or room…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="lg:w-72"
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -344,8 +429,9 @@ export default function BookingsPage() {
           onAction={!filtering ? () => openCreate() : undefined}
         />
       ) : (
-        <ul className="space-y-3">
-          {filteredBookings.map((booking) => {
+        <>
+          <ul className="space-y-3">
+            {pagedBookings.map((booking) => {
             const status = bookingStatus(booking.status);
             const next = NEXT_ACTION[booking.status];
             const arrivesToday = (booking.status === 'pending' || booking.status === 'confirmed') && isToday(new Date(booking.checkInDate));
@@ -386,7 +472,24 @@ export default function BookingsPage() {
               </li>
             );
           })}
-        </ul>
+          </ul>
+          {filteredBookings.length > PAGE_SIZE && (
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4 text-sm text-ink-muted">
+              <span>
+                Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filteredBookings.length)} of {filteredBookings.length} bookings
+              </span>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
+                  Previous
+                </Button>
+                <span className="px-2 font-medium text-ink">Page {safePage} of {totalPages}</span>
+                <Button size="sm" variant="ghost" disabled={safePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Booking details */}
@@ -405,7 +508,15 @@ export default function BookingsPage() {
             ['Total', formatCurrency(selected.bill ? selected.bill.totalAmount : Number(selected.totalAmount))],
             ['Payment', selected.bill
               ? selected.bill.status === 'paid' ? `Paid in full (${formatCurrency(selected.bill.totalAmount)})` : `${formatCurrency(selected.bill.paidAmount)} paid, ${formatCurrency(selected.bill.totalAmount - selected.bill.paidAmount)} owed`
-              : selected.status === 'pending' ? 'No bill until the request is confirmed' : selected.status === 'cancelled' ? 'Bill cancelled' : 'No bill yet'],
+              : selected.status === 'pending'
+                ? 'No bill until the request is confirmed'
+                : selected.status === 'cancelled'
+                  ? selected.voidRefund
+                    ? selected.voidRefund.remainingRefund > 0
+                      ? `Bill voided · ${formatCurrency(selected.voidRefund.remainingRefund)} paid deposit awaiting refund`
+                      : `Bill voided · ${formatCurrency(selected.voidRefund.refundedAmount)} refunded`
+                    : 'Bill cancelled'
+                  : 'No bill yet'],
             ['Booked via', SOURCE_LABEL[selected.source] ?? selected.source],
             ...(selected.specialRequests ? [['Requests', selected.specialRequests] as [string, string]] : []),
           ];
@@ -423,8 +534,25 @@ export default function BookingsPage() {
                   {rows.map(([k, v]) => (<div key={k} className="contents"><dt className="text-ink-muted">{k}</dt><dd className="font-medium text-ink break-words">{v}</dd></div>))}
                 </dl>
               </div>
-              {(next || selected.bill || selected.invoice || ACTIVE.includes(selected.status)) && (
+              {(next || selected.bill || selected.invoice || ACTIVE.includes(selected.status) || (selected.status === 'cancelled' && selected.voidRefund && selected.voidRefund.remainingRefund > 0)) && (
                 <footer className="grid gap-2.5 px-6 py-4 border-t border-stone-200">
+                  {selected.status === 'cancelled' && selected.voidRefund && selected.voidRefund.remainingRefund > 0 && (
+                    <Button
+                      className="w-full h-[46px]"
+                      onClick={() => {
+                        setRefundForm({
+                          amount: String(selected.voidRefund!.remainingRefund),
+                          method: 'cash',
+                          reference: '',
+                          reason: 'Booking cancelled — deposit refund',
+                        });
+                        setRefundError('');
+                        setRefunding(selected);
+                      }}
+                    >
+                      Record deposit refund ({formatCurrency(selected.voidRefund.remainingRefund)})
+                    </Button>
+                  )}
                   {selected.invoice && (
                     <Link href={`/dashboard/billing/hotel/invoice/${selected.invoice.billId}`} className="inline-flex items-center justify-center h-[46px] rounded-lg border border-stone-200 text-ink-soft font-medium hover:bg-stone-100 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber">
                       Open invoice {selected.invoice.number}
@@ -557,6 +685,59 @@ export default function BookingsPage() {
               <Button variant="ghost" className="flex-1" onClick={() => setCancelling(null)} disabled={saving}>Keep booking</Button>
               <Button variant="terra" className="flex-1" onClick={() => updateBookingAction(cancelling, 'cancel')} disabled={saving}>
                 {saving ? 'Cancelling…' : cancelling.status === 'pending' ? 'Decline request' : 'Cancel booking'}
+              </Button>
+            </div>
+          </>
+        )}
+      </Dialog>
+
+      {/* Record Deposit Refund */}
+      <Dialog open={!!refunding} onClose={() => setRefunding(null)} labelledBy="refund-title" dismissible={!saving} className="p-8 max-w-md w-full">
+        {refunding?.voidRefund && (
+          <>
+            <h2 id="refund-title" className="text-2xl font-bold text-ink">Record deposit refund</h2>
+            <p className="text-ink-muted mt-2">
+              {refunding.guest?.name || 'Guest'} · up to {formatCurrency(refunding.voidRefund.remainingRefund)} refundable on this cancelled stay.
+            </p>
+            <div className="mt-5 space-y-4">
+              <Input
+                label="Refund amount (₹)"
+                type="number"
+                inputMode="decimal"
+                min={0.01}
+                step="0.01"
+                value={refundForm.amount}
+                onChange={(e) => setRefundForm({ ...refundForm, amount: e.target.value })}
+              />
+              <Select
+                label="Refund method"
+                value={refundForm.method}
+                onChange={(e) => setRefundForm({ ...refundForm, method: e.target.value })}
+                options={[
+                  { value: 'cash', label: 'Cash' },
+                  { value: 'upi', label: 'UPI' },
+                  { value: 'bank_transfer', label: 'Bank transfer' },
+                  { value: 'card', label: 'Card' },
+                  { value: 'razorpay', label: 'Razorpay' },
+                ]}
+              />
+              <Input
+                label="Reference / Transaction ID (optional)"
+                placeholder="UTR / bank ref"
+                value={refundForm.reference}
+                onChange={(e) => setRefundForm({ ...refundForm, reference: e.target.value })}
+              />
+              <Input
+                label="Reason"
+                value={refundForm.reason}
+                onChange={(e) => setRefundForm({ ...refundForm, reason: e.target.value })}
+              />
+            </div>
+            {refundError && <p role="alert" className="mt-4 rounded-lg bg-terra-pale px-4 py-3 text-sm text-terra">{refundError}</p>}
+            <div className="mt-6 flex gap-3">
+              <Button variant="ghost" className="flex-1" onClick={() => setRefunding(null)} disabled={saving}>Cancel</Button>
+              <Button className="flex-1" onClick={handleRecordRefund} isLoading={saving}>
+                {saving ? 'Recording…' : 'Record refund'}
               </Button>
             </div>
           </>

@@ -9,7 +9,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import Link from 'next/link';
-import { Receipt, IndianRupee, CheckCircle2, Printer, Link2, Copy, FileText, BedDouble, X, QrCode } from 'lucide-react';
+import { Receipt, IndianRupee, CheckCircle2, Printer, Link2, Copy, FileText, BedDouble, X, QrCode, Mail } from 'lucide-react';
 import { format } from 'date-fns';
 import QRCode from 'qrcode';
 import { formatCurrency } from '@/lib/currency';
@@ -188,6 +188,40 @@ export function BillingView({ kind }: { kind: BillKind }) {
   const [issuing, setIssuing] = useState(false);
   const [invoiceError, setInvoiceError] = useState('');
   const [buyer, setBuyer] = useState({ name: '', gstin: '', stateCode: '', address: '' });
+
+  // Email receipt dialog
+  const [showEmailReceipt, setShowEmailReceipt] = useState(false);
+  const [receiptEmail, setReceiptEmail] = useState('');
+  const [sendingReceipt, setSendingReceipt] = useState(false);
+  const [emailReceiptError, setEmailReceiptError] = useState('');
+
+  const sendReceiptEmail = async () => {
+    if (!selected || sendingReceipt) return;
+    if (!receiptEmail.trim() || !receiptEmail.includes('@')) {
+      setEmailReceiptError('Enter a valid email address.');
+      return;
+    }
+    setSendingReceipt(true);
+    setEmailReceiptError('');
+    try {
+      const res = await fetch(`/api/billing/${selected.id}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: receiptEmail.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEmailReceiptError(res.status < 500 && typeof data.error === 'string' ? data.error : 'Could not send receipt. Check SMTP settings.');
+        return;
+      }
+      setShowEmailReceipt(false);
+      setNotice(`Receipt emailed to ${data.sentTo || receiptEmail.trim()}.`);
+    } catch {
+      setEmailReceiptError('Could not reach the server. Please try again.');
+    } finally {
+      setSendingReceipt(false);
+    }
+  };
 
   useEffect(() => {
     fetchBills();
@@ -738,6 +772,19 @@ export function BillingView({ kind }: { kind: BillKind }) {
                   <Printer className="w-4 h-4" aria-hidden="true" />
                   Print bill
                 </Button>
+
+                <Button
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => {
+                    setReceiptEmail('');
+                    setEmailReceiptError('');
+                    setShowEmailReceipt(true);
+                  }}
+                >
+                  <Mail className="w-4 h-4" aria-hidden="true" />
+                  Email receipt
+                </Button>
               </div>
             </Card>
           ) : (
@@ -975,6 +1022,40 @@ export function BillingView({ kind }: { kind: BillKind }) {
             </div>
           </div>
         )}
+      </Dialog>
+
+      {/* Email Receipt Dialog */}
+      <Dialog
+        open={showEmailReceipt && !!selected}
+        onClose={() => setShowEmailReceipt(false)}
+        labelledBy="email-receipt-title"
+        dismissible={!sendingReceipt}
+        className="p-8 max-w-md w-full"
+      >
+        <h2 id="email-receipt-title" className="text-2xl font-bold text-ink">Email receipt</h2>
+        <p className="mt-2 text-ink-muted">
+          Send a digital copy of {selected?.guestName ? `${selected.guestName}'s` : 'this'} bill ({formatCurrency(selected?.totalAmount || 0)}).
+        </p>
+        <div className="mt-5">
+          <Input
+            label="Recipient email address"
+            type="email"
+            placeholder="guest@example.com"
+            value={receiptEmail}
+            onChange={(e) => setReceiptEmail(e.target.value)}
+          />
+        </div>
+        {emailReceiptError && (
+          <p role="alert" className="mt-4 rounded-lg bg-terra-pale px-4 py-3 text-sm text-terra">{emailReceiptError}</p>
+        )}
+        <div className="mt-6 space-y-3">
+          <Button className="w-full" onClick={sendReceiptEmail} isLoading={sendingReceipt}>
+            {sendingReceipt ? 'Sending…' : 'Send receipt'}
+          </Button>
+          <Button variant="ghost" className="w-full" onClick={() => setShowEmailReceipt(false)} disabled={sendingReceipt}>
+            Cancel
+          </Button>
+        </div>
       </Dialog>
     </div>
   );

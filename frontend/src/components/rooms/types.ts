@@ -1,4 +1,4 @@
-import { type LucideIcon, Check, User, Sparkles, Wrench, Ban } from 'lucide-react';
+import { type LucideIcon, Check, User, Sparkles, Wrench, Ban, AlertCircle, ClipboardCheck } from 'lucide-react';
 import { type RoomStatus } from '@/lib/room-status';
 
 export interface RoomType {
@@ -37,7 +37,9 @@ export const EMPTY_TYPE = { name: '', basePrice: '', maxOccupancy: '2', descript
 export const STATUS_ICON: Record<RoomStatus, LucideIcon> = {
   available: Check,
   occupied: User,
+  dirty: AlertCircle,
   cleaning: Sparkles,
+  inspected: ClipboardCheck,
   maintenance: Wrench,
   blocked: Ban,
 };
@@ -45,7 +47,9 @@ export const STATUS_ICON: Record<RoomStatus, LucideIcon> = {
 export const IDLE_NOTE: Record<RoomStatus, string> = {
   available: 'Ready to sell',
   occupied: 'Guest in the room',
+  dirty: 'Needs housekeeping',
   cleaning: 'Housekeeping in progress',
+  inspected: 'Inspected · ready to open',
   maintenance: 'Needs repair before it can be sold',
   blocked: 'Not for sale',
 };

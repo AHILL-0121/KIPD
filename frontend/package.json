@@ -15,7 +15,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:drift": "tsx scripts/db-drift.ts",
     "db:reset": "tsx scripts/db-reset.ts",
-    "admin:create": "tsx scripts/create-platform-admin.ts"
+    "admin:create": "tsx scripts/create-platform-admin.ts",
+    "hooks:install": "git -C .. config core.hooksPath .githooks"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",

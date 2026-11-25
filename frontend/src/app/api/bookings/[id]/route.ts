@@ -12,6 +12,7 @@ import { dateInput, toCheckIn, toCheckOut } from '@/lib/booking-dates';
 import { todayInZone } from '@/lib/tz';
 import { realEmail } from '@/lib/guest-email';
 import { emailTemplates, sendEmail } from '@/lib/email';
+import { writeTenantAudit } from '@/lib/audit';
 
 const actionSchema = z.object({ action: z.enum(['confirm', 'check-in', 'check-out', 'cancel']) });
 // Anything left out stays as it is.
@@ -162,7 +163,7 @@ async function editBooking(tenantId: string, timezone: string, booking: typeof b
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { tenantId, timezone } = await requireTenant(ROLES.frontDesk, 'hotel');
+    const { tenantId, timezone, userId, userName } = await requireTenant(ROLES.frontDesk, 'hotel');
     const body = await parseJson(request, schema);
 
     // 404 if the booking isn't in this tenant's properties.
@@ -179,6 +180,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const roomStatus = action === 'cancel' ? (booking.status === 'checked_in' ? 'available' : null) : next.room;
 
     if (action === 'check-in') {
+      const room = await ownedRoom(tenantId, booking.roomId);
+      if (['dirty', 'maintenance', 'blocked'].includes(room.status)) {
+        throw new HttpError(
+          409,
+          room.status === 'dirty'
+            ? `Room ${room.roomNumber} is marked dirty. Complete housekeeping before checking in.`
+            : `Room ${room.roomNumber} is out of service (${room.status}) and cannot be checked in.`,
+        );
+      }
       const [inHouse] = await db.select({ id: bookings.id }).from(bookings).where(and(
         eq(bookings.tenantId, tenantId), eq(bookings.roomId, booking.roomId), eq(bookings.status, 'checked_in'), ne(bookings.id, booking.id),
       )).limit(1);
@@ -218,6 +228,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     // db.batch wants a typed, non-empty tuple; the statements here are built conditionally.
     const results = (await db.batch(writes as never)) as unknown as { paidAmount: string | null }[][];
     const refundDue = voids ? Number(results[results.length - 1][0]?.paidAmount ?? 0) : 0;
+
+    if (voids && results[results.length - 1]?.[0]) {
+      void writeTenantAudit({
+        tenantId,
+        actorUserId: userId,
+        actorName: userName,
+        action: 'bill.void',
+        targetType: 'booking',
+        targetId: booking.id,
+        metadata: { refundDue },
+      });
+    }
 
     // Notify guest by email if confirmed or cancelled (non-blocking)
     if (action === 'confirm' || action === 'cancel') {

@@ -22,6 +22,9 @@ export default authMiddleware({
     '/sign-up(.*)',
     '/book/(.*)',
     '/menu/(.*)',
+    '/privacy',
+    '/terms',
+    '/offline',
     '/onboarding',
     // Razorpay calls this without a Clerk session. The route verifies Razorpay's signature itself.
     '/api/webhooks/razorpay/(.*)',

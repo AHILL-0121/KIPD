@@ -254,7 +254,7 @@ export default function RoomsPage() {
   const tabs = [
     { value: 'all', label: 'All', count: count('all') },
     ...ROOM_STATUS_ORDER
-      .filter(s => s !== 'blocked' || count('blocked') > 0)
+      .filter(s => !['blocked', 'dirty', 'inspected'].includes(s) || count(s) > 0)
       .map(s => ({ value: s, label: roomStatus(s).label, count: count(s) })),
   ];
 
@@ -265,11 +265,25 @@ export default function RoomsPage() {
     switch (room.status) {
       case 'occupied': return [{ label: 'Check out guest', primary: true, run: () => checkOut(room) }];
       case 'available': return [
+        { label: 'Mark dirty', run: () => changeStatus(room, 'dirty', `Room ${n} marked dirty for housekeeping.`) },
         { label: 'Block room', run: () => changeStatus(room, 'blocked', `Room ${n} blocked.`) },
+        { label: 'Mark out of order', run: () => changeStatus(room, 'maintenance', `Room ${n} marked out of order.`) },
+      ];
+      case 'dirty': return [
+        { label: 'Start cleaning', primary: true, run: () => changeStatus(room, 'cleaning', `Room ${n} housekeeping started.`) },
+        { label: 'Mark inspected', run: () => changeStatus(room, 'inspected', `Room ${n} inspected.`) },
+        { label: 'Mark as clean', run: () => changeStatus(room, 'available', `Room ${n} marked clean.`) },
         { label: 'Mark out of order', run: () => changeStatus(room, 'maintenance', `Room ${n} marked out of order.`) },
       ];
       case 'cleaning': return [
         { label: 'Mark as clean', primary: true, run: () => changeStatus(room, 'available', `Room ${n} marked clean.`) },
+        { label: 'Mark inspected', run: () => changeStatus(room, 'inspected', `Room ${n} marked inspected.`) },
+        { label: 'Mark dirty', run: () => changeStatus(room, 'dirty', `Room ${n} marked dirty.`) },
+        { label: 'Mark out of order', run: () => changeStatus(room, 'maintenance', `Room ${n} marked out of order.`) },
+      ];
+      case 'inspected': return [
+        { label: 'Mark available', primary: true, run: () => changeStatus(room, 'available', `Room ${n} is ready to sell.`) },
+        { label: 'Mark dirty', run: () => changeStatus(room, 'dirty', `Room ${n} sent back to housekeeping.`) },
         { label: 'Mark out of order', run: () => changeStatus(room, 'maintenance', `Room ${n} marked out of order.`) },
       ];
       case 'maintenance': return [{ label: 'Mark as fixed', primary: true, run: () => changeStatus(room, 'available', `Room ${n} marked as fixed.`) }];
