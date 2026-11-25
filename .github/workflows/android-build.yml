@@ -66,6 +66,10 @@ jobs:
     # Pull requests only run the checks above; the APK is built from main or on demand.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -93,14 +97,42 @@ jobs:
         working-directory: ./frontend
         run: npx cap sync android
 
-      - name: Build APK
+      - name: Build Debug APK
         working-directory: ./frontend/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --stacktrace --info
+          ./gradlew assembleDebug -PAPP_VERSION_CODE=${{ github.run_number }} -PAPP_VERSION_NAME=1.0.${{ github.run_number }} --stacktrace
 
-      - name: Upload APK
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: kipd-app-debug.apk
           path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Decode Release Keystore
+        if: github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_BASE64 != ''
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > frontend/android/app/release.keystore
+
+      - name: Build Signed Release APK & AAB
+        if: github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_BASE64 != ''
+        working-directory: ./frontend/android
+        env:
+          KIPD_UPLOAD_STORE_FILE: release.keystore
+          KIPD_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KIPD_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KIPD_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease bundleRelease -PAPP_VERSION_CODE=${{ github.run_number }} -PAPP_VERSION_NAME=1.0.${{ github.run_number }} --stacktrace
+
+      - name: Publish Signed Release to GitHub Releases
+        if: github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="android-v1.0.${{ github.run_number }}"
+          gh release create "$TAG" \
+            frontend/android/app/build/outputs/apk/release/app-release.apk \
+            frontend/android/app/build/outputs/bundle/release/app-release.aab \
+            --title "Kipd Android 1.0.${{ github.run_number }}" \
+            --notes "Automated signed Android build from main (${{ github.sha }})"

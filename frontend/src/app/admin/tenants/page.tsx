@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog } from '@/components/ui/dialog';
 import { confirmDialog } from '@/components/ui/confirm';
 import { Plus, Power, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -379,132 +380,106 @@ export default function TenantsPage() {
       )}
 
       {/* Create Modal */}
-      <AnimatePresence>
-        {showNewModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-            onClick={() => setShowNewModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 className="font-serif text-2xl font-bold mb-6">Create New Tenant</h2>
-              
-              <div className="space-y-4">
-                {/* Type Selection */}
-                <div>
-                  <label className="text-sm font-medium text-ink block mb-2">Business Type</label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { value: 'hotel', label: 'Hotel', icon: '🏨', desc: 'Rooms & Bookings' },
-                      { value: 'restaurant', label: 'Restaurant', icon: '🍽️', desc: 'Menu & Orders' },
-                      { value: 'both', label: 'Both', icon: '🏢', desc: 'Full Service' },
-                    ].map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, type: opt.value as any })}
-                        className={`p-4 rounded-xl border-2 text-center transition-all ${
-                          formData.type === opt.value
-                            ? 'border-amber bg-amber-50'
-                            : 'border-stone-200 hover:border-stone-300'
-                        }`}
-                      >
-                        <div className="text-2xl mb-1">{opt.icon}</div>
-                        <div className="font-medium text-ink text-sm">{opt.label}</div>
-                        <div className="text-xs text-ink-muted">{opt.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+      <Dialog
+        open={showNewModal}
+        onClose={() => setShowNewModal(false)}
+        labelledBy="create-tenant-title"
+        dismissible={!isCreating}
+        className="p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto"
+      >
+        <h2 id="create-tenant-title" className="font-serif text-2xl font-bold mb-6">Create New Tenant</h2>
+        <div className="space-y-4">
+          {/* Type Selection */}
+          <div>
+            <label className="text-sm font-medium text-ink block mb-2">Business Type</label>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { value: 'hotel', label: 'Hotel', icon: '🏨', desc: 'Rooms & Bookings' },
+                { value: 'restaurant', label: 'Restaurant', icon: '🍽️', desc: 'Menu & Orders' },
+                { value: 'both', label: 'Both', icon: '🏢', desc: 'Full Service' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, type: opt.value as 'hotel' | 'restaurant' | 'both' })}
+                  className={`p-4 rounded-xl border-2 text-center transition-all ${
+                    formData.type === opt.value
+                      ? 'border-amber bg-amber-50'
+                      : 'border-stone-200 hover:border-stone-300'
+                  }`}
+                >
+                  <div className="text-2xl mb-1">{opt.icon}</div>
+                  <div className="font-medium text-ink text-sm">{opt.label}</div>
+                  <div className="text-xs text-ink-muted">{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
 
-                <Input 
-                  label="Business Name" 
-                  placeholder="Grand Palace Hotel" 
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-                <Input 
-                  label="URL Slug" 
-                  placeholder="grand-palace" 
-                  value={formData.slug}
-                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                />
-                <Input 
-                  label="Owner Email" 
-                  type="email" 
-                  placeholder="owner@hotel.com" 
-                  value={formData.ownerEmail}
-                  onChange={(e) => setFormData({ ...formData, ownerEmail: e.target.value })}
-                />
-                
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-                  <p className="text-blue-900">📧 An invitation email will be sent to the owner so they can set their own password and access their dashboard.</p>
-                </div>
-                
-                <div className="flex gap-3 pt-4">
-                  <Button variant="ghost" className="flex-1" onClick={() => setShowNewModal(false)} disabled={isCreating}>
-                    Cancel
-                  </Button>
-                  <Button variant="terra" className="flex-1" onClick={handleCreateTenant} disabled={isCreating}>
-                    {isCreating ? 'Creating...' : 'Create & Invite'}
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          <Input
+            label="Business Name"
+            placeholder="Grand Palace Hotel"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          />
+          <Input
+            label="URL Slug"
+            placeholder="grand-palace"
+            value={formData.slug}
+            onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+          />
+          <Input
+            label="Owner Email"
+            type="email"
+            placeholder="owner@hotel.com"
+            value={formData.ownerEmail}
+            onChange={(e) => setFormData({ ...formData, ownerEmail: e.target.value })}
+          />
 
-      {/* Invitation Success Banner */}
-      <AnimatePresence>
-        {inviteMessage && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-            onClick={() => setInviteMessage(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl p-8 max-w-md w-full"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <h2 className="font-serif text-2xl font-bold text-ink mb-2">Invitation Sent!</h2>
-                <p className="text-ink-muted">{inviteMessage}</p>
-              </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+            <p className="text-blue-900">An invitation email will be sent to the owner so they can set their own password and access their dashboard.</p>
+          </div>
 
-              <Button
-                variant="terra"
-                className="w-full mt-2"
-                onClick={() => {
-                  setInviteMessage(null);
-                  setToast({ message: 'Tenant created successfully', type: 'success' });
-                  setTimeout(() => setToast(null), 5000);
-                }}
-              >
-                Done
-              </Button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          <div className="flex gap-3 pt-4">
+            <Button variant="ghost" className="flex-1" onClick={() => setShowNewModal(false)} disabled={isCreating}>
+              Cancel
+            </Button>
+            <Button variant="terra" className="flex-1" onClick={handleCreateTenant} disabled={isCreating}>
+              {isCreating ? 'Creating...' : 'Create & Invite'}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Invitation Success Dialog */}
+      <Dialog
+        open={Boolean(inviteMessage)}
+        onClose={() => setInviteMessage(null)}
+        labelledBy="invite-sent-title"
+        className="p-8 max-w-md w-full"
+      >
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h2 id="invite-sent-title" className="font-serif text-2xl font-bold text-ink mb-2">Invitation Sent!</h2>
+          <p className="text-ink-muted">{inviteMessage}</p>
+        </div>
+
+        <Button
+          variant="terra"
+          className="w-full mt-2"
+          onClick={() => {
+            setInviteMessage(null);
+            setToast({ message: 'Tenant created successfully', type: 'success' });
+            setTimeout(() => setToast(null), 5000);
+          }}
+        >
+          Done
+        </Button>
+      </Dialog>
 
       {/* Toast Notification */}
       <AnimatePresence>
@@ -520,17 +495,19 @@ export default function TenantsPage() {
             }`}
           >
             {toast.type === 'success' ? (
-              <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             ) : (
-              <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             )}
             <span className="font-medium">{toast.message}</span>
             <button 
+              type="button"
               onClick={() => setToast(null)}
+              aria-label="Dismiss notification"
               className="ml-2 text-gray-500 hover:text-gray-700"
             >
               ×

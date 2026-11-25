@@ -480,33 +480,7 @@ export const staffInvites = pgTable('staff_invites', {
   check('staff_invites_areas_check', sql`${t.areas} in ('hotel','restaurant','both')`),
 ]);
 
-// ============= WEBHOOKS =============
-export const webhooks = pgTable('webhooks', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
-  url: text('url').notNull(),
-  events: jsonb('events').$type<string[]>(),
-  secret: text('secret'),
-  isActive: boolean('is_active').default(true),
-  createdAt: tstz('created_at').defaultNow().notNull(),
-}, (t) => [
-  unique('webhooks_tenant_id_uq').on(t.tenantId, t.id),
-]);
-
-export const webhookLogs = pgTable('webhook_logs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
-  webhookId: uuid('webhook_id').notNull(),
-  event: text('event').notNull(),
-  payload: jsonb('payload'),
-  responseStatus: integer('response_status'),
-  responseBody: text('response_body'),
-  createdAt: tstz('created_at').defaultNow().notNull(),
-}, (t) => [
-  foreignKey({ name: 'fk_webhook_logs_webhook', columns: [t.tenantId, t.webhookId], foreignColumns: [webhooks.tenantId, webhooks.id] }).onDelete('cascade'),
-]);
-
-// ============= UPI & NOTIFICATIONS =============
+// ============= PAYMENTS & RAZORPAY =============
 /**
  * A business's own Razorpay account. Money paid online goes straight to that business's bank account; Kipd never holds it.
  * The key secret and the webhook secret are stored encrypted (lib/secret-box.ts) and are never sent to a browser.
@@ -546,34 +520,6 @@ export const paymentEvents = pgTable('payment_events', {
   index('idx_payment_events_bill').on(t.matchedBillId),
   check('payment_events_source_check', sql`${t.source} in ('webhook','notification')`),
   check('payment_events_match_check', sql`${t.matchConfidence} in ('exact','probable','unmatched')`),
-]);
-
-export const upiPaymentIntents = pgTable('upi_payment_intents', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
-  billId: uuid('bill_id'),
-  pspProvider: text('psp_provider').notNull(), // razorpay, cashfree, phonepe_business
-  pspIntentId: text('psp_intent_id').notNull(),
-  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
-  status: text('status').default('created').notNull(), // created, paid, expired, failed
-  qrCodeUrl: text('qr_code_url'),
-  createdAt: tstz('created_at').defaultNow().notNull(),
-  expiresAt: tstz('expires_at'),
-}, (t) => [
-  foreignKey({ name: 'fk_upi_intents_bill', columns: [t.tenantId, t.billId], foreignColumns: [bills.tenantId, bills.id] }),
-]);
-
-export const notificationListenerConfig = pgTable('notification_listener_config', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
-  staffId: uuid('staff_id'),
-  deviceId: text('device_id').notNull(),
-  enabled: boolean('enabled').default(false).notNull(),
-  whitelistedPackages: jsonb('whitelisted_packages').$type<string[]>(),
-  lastActiveAt: tstz('last_active_at'),
-  createdAt: tstz('created_at').defaultNow().notNull(),
-}, (t) => [
-  foreignKey({ name: 'fk_listener_staff', columns: [t.tenantId, t.staffId], foreignColumns: [staff.tenantId, staff.id] }).onDelete('cascade'),
 ]);
 
 // ============= RELATIONS (for db.query.* helpers) =============

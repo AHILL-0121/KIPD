@@ -43,7 +43,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </div>
           )}
           <button
+            type="button"
             onClick={() => setIsCollapsed(!isCollapsed)}
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-ink transition-colors flex-shrink-0"
           >
             {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}

@@ -26,7 +26,10 @@ describe('building a database from the migrations', () => {
 
   it('the stored snapshot of the latest migration agrees with schema.ts', async () => {
     const { client } = await migratedFresh();
-    expect((await checkDrift(asQuery(client), expectedFromSnapshot(0))).errors).toEqual([]);
+    // Tables dropped cleanly in migration 0014_rls_and_cleanup.sql
+    const retired = new Set(['webhooks', 'webhook_logs', 'upi_payment_intents', 'notification_listener_config']);
+    const baseline = expectedFromSnapshot(0).filter((t) => !retired.has(t.name));
+    expect((await checkDrift(asQuery(client), baseline)).errors).toEqual([]);
   });
 
   it('is safe to run twice', async () => {
@@ -54,7 +57,7 @@ describe('the drift checker catches what it should', () => {
     ['a dropped check constraint', `alter table orders drop constraint orders_status_check`, /check constraint "orders_status_check" is missing/],
     ['a dropped tenant foreign key (isolation would be unenforced)', `alter table orders drop constraint fk_orders_outlet`, /foreign key "fk_orders_outlet" is missing/],
     ['a dropped (tenant_id, id) unique constraint', `alter table order_items drop constraint fk_order_items_order; alter table orders drop constraint fk_orders_outlet; alter table orders drop constraint orders_tenant_id_uq`, /unique constraint "orders_tenant_id_uq" is missing/],
-    ['a missing table', `drop table webhook_logs`, /table "webhook_logs" is missing/],
+    ['a missing table', `drop table refunds`, /table "refunds" is missing/],
   ];
   it.each(cases)('%s', async (_name, sqlText, expected) => {
     const { client } = await migratedFresh();

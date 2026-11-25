@@ -13,10 +13,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx scripts/db-seed.ts",
     "db:drift": "tsx scripts/db-drift.ts",
     "db:reset": "tsx scripts/db-reset.ts",
     "admin:create": "tsx scripts/create-platform-admin.ts",
-    "hooks:install": "git -C .. config core.hooksPath .githooks"
+    "hooks:install": "git -C .. config core.hooksPath .githooks",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
@@ -47,6 +49,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.13",
+    "@playwright/test": "^1.65.1",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@types/node": "20.19.43",

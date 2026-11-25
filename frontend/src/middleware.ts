@@ -29,6 +29,7 @@ export default authMiddleware({
     '/onboarding',
     '/maintenance',
     '/api/maintenance',
+    '/api/android/version',
     '/monitoring(.*)',
     // Razorpay calls this without a Clerk session. The route verifies Razorpay's signature itself.
     '/api/webhooks/razorpay/(.*)',
@@ -48,6 +49,7 @@ export default authMiddleware({
     const bypassMaintenance =
       path === '/maintenance' ||
       path === '/api/maintenance' ||
+      path === '/api/android/version' ||
       path === '/api/health' ||
       path.startsWith('/monitoring') ||
       path.startsWith('/api/webhooks/') ||

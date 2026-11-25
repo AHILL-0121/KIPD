@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useLive } from '@/lib/use-live';
+import { playChime } from '@/lib/chime';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { LoadingState } from '@/components/ui/loading-state';
-import { MapPin, Plus, Package, UtensilsCrossed } from 'lucide-react';
+import { MapPin, Plus, Package, UtensilsCrossed, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTenantInfo } from '@/contexts/tenant-context';
 import { useQuery } from '@/hooks/use-query';
@@ -31,8 +32,25 @@ export default function OrdersPage() {
   const { data: rawCategories } = useQuery<{ name: string }[]>(`/api/menu-categories${outletQs}`, [selectedOutletId]);
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const seenOrderIds = useRef<Set<string> | null>(null);
+  const [soundOn, setSoundOn] = useState(false);
+  const soundRef = useRef(false);
+  soundRef.current = soundOn;
+
+  const toggleSound = async () => {
+    if (soundOn) return setSoundOn(false);
+    if (await playChime()) setSoundOn(true);
+  };
+
   useEffect(() => {
-    if (rawOrders) setOrders(rawOrders);
+    if (rawOrders) {
+      const nextIds = new Set(rawOrders.map((o) => o.id));
+      if (seenOrderIds.current && soundRef.current && rawOrders.some((o) => !seenOrderIds.current!.has(o.id))) {
+        playChime();
+      }
+      seenOrderIds.current = nextIds;
+      setOrders(rawOrders);
+    }
   }, [rawOrders]);
 
   const menuItems = Array.isArray(rawMenu) ? rawMenu.filter((i: MenuItem) => i.isAvailable) : [];
@@ -342,6 +360,16 @@ export default function OrdersPage() {
               ))}
             </select>
           )}
+          <Button
+            variant="ghost"
+            onClick={toggleSound}
+            aria-pressed={soundOn}
+            aria-label={soundOn ? 'Mute order chime' : 'Enable order chime'}
+            title={soundOn ? 'Sound alerts on' : 'Enable sound alerts'}
+            className={`min-h-[44px] min-w-[44px] p-2.5 ${soundOn ? 'bg-amber-pale text-amber-deep' : 'bg-stone-100 hover:bg-stone-200 text-ink'}`}
+          >
+            {soundOn ? <Volume2 className="w-5 h-5" aria-hidden="true" /> : <VolumeX className="w-5 h-5" aria-hidden="true" />}
+          </Button>
           <Button
             variant="ghost"
             className="bg-stone-100 hover:bg-stone-200 min-h-[44px] min-w-[44px] p-2.5 sm:px-4"
