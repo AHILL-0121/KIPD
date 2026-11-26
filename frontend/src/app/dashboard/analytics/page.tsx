@@ -5,6 +5,7 @@ import { Card, CardIcon, CardTitle, CardDescription } from '@/components/ui/card
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { useTenantInfo } from '@/contexts/tenant-context';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 import {
   BarChart,
   Bar,
@@ -32,6 +33,7 @@ import {
 import { formatCurrency } from '@/lib/currency';
 
 export default function AnalyticsPage() {
+  const m = useAppMessages();
   const { info } = useTenantInfo();
   const tenantType = info?.type || 'both';
 
@@ -95,8 +97,8 @@ export default function AnalyticsPage() {
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="section-title">Analytics & Reports</h1>
-          <p className="section-sub">Performance insights, financial reports, and exports</p>
+          <h1 className="section-title">{m.analytics.title}</h1>
+          <p className="section-sub">{m.analytics.subtitle}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -104,10 +106,10 @@ export default function AnalyticsPage() {
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
             options={[
-              { value: 'day', label: 'Today' },
-              { value: 'week', label: 'This Week' },
-              { value: 'month', label: 'This Month' },
-              { value: 'year', label: 'This Year' },
+              { value: 'day', label: m.analytics.today },
+              { value: 'week', label: m.analytics.thisWeek },
+              { value: 'month', label: m.analytics.thisMonth },
+              { value: 'year', label: m.analytics.thisYear },
             ]}
           />
 
@@ -120,7 +122,7 @@ export default function AnalyticsPage() {
               title="Download detailed item sales CSV"
             >
               <Download className="w-4 h-4 text-amber" />
-              <span>Export Sales</span>
+              <span>{m.analytics.exportSales}</span>
             </Button>
             <Button
               variant="ghost"
@@ -130,7 +132,7 @@ export default function AnalyticsPage() {
               title="Download GST / Tax invoice report CSV"
             >
               <ReceiptText className="w-4 h-4 text-emerald-700" />
-              <span>Export Tax / GST</span>
+              <span>{m.analytics.exportGst}</span>
             </Button>
           </div>
         </div>
@@ -146,7 +148,7 @@ export default function AnalyticsPage() {
             {formatCurrency(showHotel && showRestaurant ? (stats.totalCombinedRevenue || 0) : (stats.revenue || 0))}
           </div>
           <div className="text-sm text-ink-muted">
-            {showHotel && showRestaurant ? 'Total Gross Revenue' : 'F&B Revenue'}
+            {showHotel && showRestaurant ? m.analytics.totalGrossRevenue : m.analytics.fbRevenue}
           </div>
           {stats.revenueChange && (
             <div className="flex items-center gap-1 text-xs text-sage mt-2">
@@ -162,7 +164,7 @@ export default function AnalyticsPage() {
               <Calendar className="w-5 h-5" />
             </CardIcon>
             <div className="text-3xl font-bold text-ink mb-1">{stats.occupancy || 0}%</div>
-            <div className="text-sm text-ink-muted">Table Occupancy</div>
+            <div className="text-sm text-ink-muted">{m.analytics.tableOccupancy}</div>
             {stats.occupancyNote && (
               <div className="text-xs text-ink-muted mt-2">{stats.occupancyNote}</div>
             )}
@@ -175,8 +177,8 @@ export default function AnalyticsPage() {
               <Users className="w-5 h-5" />
             </CardIcon>
             <div className="text-3xl font-bold text-ink mb-1">{stats.guests || 0}</div>
-            <div className="text-sm text-ink-muted">Total F&B Orders</div>
-            <div className="text-xs text-ink-muted mt-2">Kitchen tickets placed</div>
+            <div className="text-sm text-ink-muted">{m.analytics.totalFbOrders}</div>
+            <div className="text-xs text-ink-muted mt-2">{m.analytics.kitchenTicketsPlaced}</div>
           </Card>
         )}
 
@@ -186,8 +188,8 @@ export default function AnalyticsPage() {
               <UtensilsCrossed className="w-5 h-5" />
             </CardIcon>
             <div className="text-3xl font-bold text-ink mb-1">{formatCurrency(stats.avgOrderValue || 0)}</div>
-            <div className="text-sm text-ink-muted">Avg Order Value</div>
-            <div className="text-xs text-ink-muted mt-2">F&B per order</div>
+            <div className="text-sm text-ink-muted">{m.analytics.avgOrderValue}</div>
+            <div className="text-xs text-ink-muted mt-2">{m.analytics.fbPerOrder}</div>
           </Card>
         )}
       </div>
@@ -197,7 +199,7 @@ export default function AnalyticsPage() {
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-4">
             <Hotel className="w-5 h-5 text-amber" />
-            <h2 className="text-lg font-bold text-ink">Hotel Accommodation Metrics</h2>
+            <h2 className="text-lg font-bold text-ink">{m.analytics.hotelMetrics}</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card hover={false}>
@@ -205,8 +207,8 @@ export default function AnalyticsPage() {
                 <Hotel className="w-5 h-5" />
               </CardIcon>
               <div className="text-2xl font-bold text-ink mb-1">{formatCurrency(stats.roomRevenue || 0)}</div>
-              <div className="text-sm text-ink-muted">Room Revenue</div>
-              <div className="text-xs text-ink-muted mt-2">From confirmed stays</div>
+              <div className="text-sm text-ink-muted">{m.analytics.roomRevenue}</div>
+              <div className="text-xs text-ink-muted mt-2">{m.analytics.fromConfirmedStays}</div>
             </Card>
 
             <Card hover={false}>
@@ -214,7 +216,7 @@ export default function AnalyticsPage() {
                 <Calendar className="w-5 h-5" />
               </CardIcon>
               <div className="text-2xl font-bold text-ink mb-1">{stats.hotelOccupancy || 0}%</div>
-              <div className="text-sm text-ink-muted">Room Occupancy</div>
+              <div className="text-sm text-ink-muted">{m.analytics.roomOccupancy}</div>
               <div className="text-xs text-ink-muted mt-2">{stats.hotelOccupancyNote}</div>
             </Card>
 
@@ -223,8 +225,8 @@ export default function AnalyticsPage() {
                 <TrendingUp className="w-5 h-5" />
               </CardIcon>
               <div className="text-2xl font-bold text-ink mb-1">{formatCurrency(stats.adr || 0)}</div>
-              <div className="text-sm text-ink-muted">Average Daily Rate (ADR)</div>
-              <div className="text-xs text-ink-muted mt-2">Revenue per booked room</div>
+              <div className="text-sm text-ink-muted">{m.analytics.adr}</div>
+              <div className="text-xs text-ink-muted mt-2">{m.analytics.revenuePerBookedRoom}</div>
             </Card>
 
             <Card hover={false}>
@@ -232,8 +234,8 @@ export default function AnalyticsPage() {
                 <DollarSign className="w-5 h-5" />
               </CardIcon>
               <div className="text-2xl font-bold text-ink mb-1">{formatCurrency(stats.revPar || 0)}</div>
-              <div className="text-sm text-ink-muted">RevPAR</div>
-              <div className="text-xs text-ink-muted mt-2">Revenue per available room</div>
+              <div className="text-sm text-ink-muted">{m.analytics.revPar}</div>
+              <div className="text-xs text-ink-muted mt-2">{m.analytics.revenuePerAvailableRoom}</div>
             </Card>
           </div>
         </div>
@@ -242,8 +244,8 @@ export default function AnalyticsPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <Card hover={false}>
-          <CardTitle>Occupancy Trend</CardTitle>
-          <CardDescription>Daily occupancy rate (%)</CardDescription>
+          <CardTitle>{m.analytics.occupancyTrend}</CardTitle>
+          <CardDescription>{m.analytics.dailyOccupancyRate}</CardDescription>
 
           <div className="mt-6 h-64">
             {stats.occupancyData?.length > 0 ? (
@@ -265,8 +267,8 @@ export default function AnalyticsPage() {
         </Card>
 
         <Card hover={false}>
-          <CardTitle>Revenue Trend</CardTitle>
-          <CardDescription>Daily revenue distribution</CardDescription>
+          <CardTitle>{m.analytics.revenueTrend}</CardTitle>
+          <CardDescription>{m.analytics.dailyRevenueDist}</CardDescription>
 
           <div className="mt-6 h-64">
             {stats.revenueData?.length > 0 ? (
@@ -292,8 +294,8 @@ export default function AnalyticsPage() {
       {showRestaurant && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card hover={false}>
-            <CardTitle>Revenue by Category</CardTitle>
-            <CardDescription>Distribution of F&B income sources</CardDescription>
+            <CardTitle>{m.analytics.revenueByCategory}</CardTitle>
+            <CardDescription>{m.analytics.categoryBreakdownSub}</CardDescription>
 
             <div className="mt-6 h-auto sm:h-64 flex flex-col sm:flex-row items-center gap-6 sm:gap-0">
               {stats.categoryBreakdown?.length > 0 ? (
@@ -336,8 +338,8 @@ export default function AnalyticsPage() {
           </Card>
 
           <Card hover={false}>
-            <CardTitle>Top Menu Items</CardTitle>
-            <CardDescription>Best sellers in selected period</CardDescription>
+            <CardTitle>{m.analytics.topMenuItems}</CardTitle>
+            <CardDescription>{m.analytics.bestSellers}</CardDescription>
 
             <div className="mt-6">
               {stats.topItems?.length > 0 ? (

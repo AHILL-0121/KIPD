@@ -23,6 +23,7 @@ export default authMiddleware({
     '/sign-up(.*)',
     '/book/(.*)',
     '/menu/(.*)',
+    '/pay/(.*)',
     '/privacy',
     '/terms',
     '/offline',

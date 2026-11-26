@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 let pathname = '/dashboard/rooms';
 const replace = vi.fn();
@@ -71,5 +71,19 @@ describe('dashboard layout', () => {
     await screen.findByRole('navigation', { name: 'Breadcrumb' });
     // Only desktop sidebar renders the email, mobile banner suppresses it
     expect(screen.getAllByText('sa.education5211@gmail.com').length).toBe(1);
+  });
+
+  it('opens mobile More drawer cleanly with all secondary nav items including Analytics and Settings', async () => {
+    pathname = '/dashboard';
+    signedInAs('owner');
+    render(<DashboardLayout><p>page</p></DashboardLayout>);
+    const moreBtn = await screen.findByRole('button', { name: 'More navigation options' });
+    fireEvent.click(moreBtn);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Analytics')).toBeTruthy();
+    expect(within(dialog).getByText('Settings')).toBeTruthy();
+    expect(within(dialog).getByText('Log out')).toBeTruthy();
+    expect(within(dialog).getByRole('combobox', { name: 'Language' })).toBeTruthy();
   });
 });

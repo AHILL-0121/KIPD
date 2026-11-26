@@ -12,11 +12,12 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { LoadingState } from '@/components/ui/loading-state';
 import Link from 'next/link';
 import { BookingCalendar } from '@/components/bookings/booking-calendar';
-import { CalendarDays, List, Plus, X } from 'lucide-react';
+import { CalendarDays, List, Plus, X, Download, Copy, ExternalLink } from 'lucide-react';
 import { differenceInCalendarDays, format, isToday } from 'date-fns';
 import { formatCurrency } from '@/lib/currency';
 import { realEmail } from '@/lib/guest-email';
 import { BOOKING_STATUS_ORDER, NEXT_ACTION, bookingStatus, type BookingStatus } from '@/lib/booking-status';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Booking {
@@ -61,6 +62,7 @@ const nightsBetween = (from: string, to: string) => {
 const emptyForm = () => ({ roomId: '', guestName: '', guestEmail: '', guestPhone: '', checkInDate: todayYmd(), checkOutDate: dayAfter(todayYmd()) ?? '', numGuests: '1', specialRequests: '' });
 
 export default function BookingsPage() {
+  const m = useAppMessages();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [rooms, setRooms] = useState<AvailableRoom[]>([]);
   const [search, setSearch] = useState('');
@@ -85,6 +87,9 @@ export default function BookingsPage() {
   const [editing, setEditing] = useState<Booking | null>(null);
   const [editForm, setEditForm] = useState({ checkInDate: '', checkOutDate: '', roomId: '', numGuests: '1' });
   const [editError, setEditError] = useState('');
+  const [showIcal, setShowIcal] = useState(false);
+  const [icalFeedUrl, setIcalFeedUrl] = useState<string | null>(null);
+  const [loadingIcal, setLoadingIcal] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error', ms = 4000) => {
     setToast({ message, type });
@@ -254,6 +259,22 @@ export default function BookingsPage() {
     }
   };
 
+  const openIcalDialog = async () => {
+    setShowIcal(true);
+    setLoadingIcal(true);
+    try {
+      const res = await fetch('/api/bookings/export.ics?mode=feed-url');
+      if (res.ok) {
+        const data = await res.json();
+        setIcalFeedUrl(data.feedUrl ?? null);
+      }
+    } catch {
+      setIcalFeedUrl(null);
+    } finally {
+      setLoadingIcal(false);
+    }
+  };
+
   const count = (s: string) => bookings.filter(b => s === 'all' || b.status === s).length;
   const arrivingToday = bookings.filter(b => (b.status === 'pending' || b.status === 'confirmed') && isToday(new Date(b.checkInDate))).length;
   const leavingToday = bookings.filter(b => b.status === 'checked_in' && isToday(new Date(b.checkOutDate))).length;
@@ -337,32 +358,46 @@ export default function BookingsPage() {
     }
   };
 
+  const bookingStatusLabels: Record<string, string> = {
+    pending: m.bookings.pending,
+    confirmed: m.bookings.confirmed,
+    checked_in: m.bookings.checkedIn,
+    checked_out: m.bookings.checkedOut,
+    cancelled: m.bookings.cancelled,
+  };
+
   const tabs = [
-    { value: 'all', label: 'All', count: count('all') },
-    ...BOOKING_STATUS_ORDER.map(s => ({ value: s, label: bookingStatus(s).label, count: count(s) })),
+    { value: 'all', label: m.common.all, count: count('all') },
+    ...BOOKING_STATUS_ORDER.map(s => ({ value: s, label: bookingStatusLabels[s] ?? bookingStatus(s).label, count: count(s) })),
   ];
 
   const selected = bookings.find(b => b.id === selectedId) ?? null;
   const summary = bookings.length === 0
-    ? 'Reservations and check-ins for your rooms.'
-    : [`${bookings.length} ${bookings.length === 1 ? 'booking' : 'bookings'}`, arrivingToday && `${arrivingToday} arriving today`, leavingToday && `${leavingToday} leaving today`, count('pending') && `${count('pending')} to confirm`].filter(Boolean).join(' · ');
+    ? m.bookings.emptySub
+    : [`${bookings.length} ${bookings.length === 1 ? m.bookings.bookingSingle : m.bookings.bookingPlural}`, arrivingToday && `${arrivingToday} ${m.bookings.arrivingToday.toLowerCase()}`, leavingToday && `${leavingToday} ${m.bookings.leavingToday.toLowerCase()}`, count('pending') && `${count('pending')} ${m.bookings.toConfirm}`].filter(Boolean).join(' · ');
 
   const stay = (b: Booking) => {
     const n = differenceInCalendarDays(new Date(b.checkOutDate), new Date(b.checkInDate));
-    return `${format(new Date(b.checkInDate), 'd MMM')} – ${format(new Date(b.checkOutDate), 'd MMM yyyy')} · ${n} ${n === 1 ? 'night' : 'nights'}`;
+    return `${format(new Date(b.checkInDate), 'd MMM')} – ${format(new Date(b.checkOutDate), 'd MMM yyyy')} · ${n} ${n === 1 ? m.bookings.night : m.bookings.nights}`;
   };
 
   return (
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="section-title">Bookings</h1>
+          <h1 className="section-title">{m.bookings.title}</h1>
           <p className="section-sub">{summary}</p>
         </div>
-        <Button onClick={() => openCreate()}>
-          <Plus className="w-4 h-4" aria-hidden="true" />
-          New booking
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" onClick={openIcalDialog}>
+            <Download className="w-4 h-4" aria-hidden="true" />
+            {m.bookings.icalSync}
+          </Button>
+          <Button onClick={() => openCreate()}>
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            {m.bookings.newBooking}
+          </Button>
+        </div>
       </div>
 
       {stale && (
@@ -374,7 +409,7 @@ export default function BookingsPage() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div className="flex flex-wrap items-center gap-3">
           <div role="group" aria-label="Bookings view" className="inline-flex gap-1 p-1 rounded-xl bg-stone-100">
-            {([['list', 'List', List], ['calendar', 'Calendar', CalendarDays]] as const).map(([v, label, Icon]) => (
+            {([['list', m.bookings.list, List], ['calendar', m.bookings.calendar, CalendarDays]] as const).map(([v, label, Icon]) => (
               <button
                 key={v}
                 type="button"
@@ -395,17 +430,17 @@ export default function BookingsPage() {
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value as typeof dateFilter)}
               options={[
-                { value: 'all', label: 'All dates' },
-                { value: 'arriving_today', label: 'Arriving today' },
-                { value: 'leaving_today', label: 'Leaving today' },
-                { value: 'upcoming_7d', label: 'Next 7 days' },
-                { value: 'past', label: 'Past check-outs' },
+                { value: 'all', label: m.bookings.allDates },
+                { value: 'arriving_today', label: m.bookings.arrivingToday },
+                { value: 'leaving_today', label: m.bookings.leavingToday },
+                { value: 'upcoming_7d', label: m.bookings.upcoming7d },
+                { value: 'past', label: m.bookings.past },
               ]}
             />
           )}
           <Input
             aria-label="Search bookings"
-            placeholder="Search guest, phone, ref or room…"
+            placeholder={m.bookings.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="lg:w-72"
@@ -437,7 +472,7 @@ export default function BookingsPage() {
             const arrivesToday = (booking.status === 'pending' || booking.status === 'confirmed') && isToday(new Date(booking.checkInDate));
             const leavesToday = booking.status === 'checked_in' && isToday(new Date(booking.checkOutDate));
             return (
-              <li key={booking.id} className="flex items-stretch bg-white border border-stone-200 rounded-xl shadow-sm hover:border-amber transition-colors">
+              <li key={booking.id} className="flex flex-col sm:flex-row sm:items-stretch bg-white border border-stone-200 rounded-xl shadow-sm hover:border-amber transition-colors">
                 <button
                   type="button"
                   onClick={() => setSelectedId(booking.id)}
@@ -447,13 +482,13 @@ export default function BookingsPage() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-ink truncate">{booking.guest?.name || 'Guest'}</span>
-                      <Badge variant={status.tone} dot>{status.label}</Badge>
+                      <Badge variant={status.tone} dot>{bookingStatusLabels[booking.status] ?? status.label}</Badge>
                       {booking.source === 'online' && booking.status === 'pending' && <Badge variant="stone">Online request</Badge>}
                     </div>
-                    <div className="text-sm text-ink-muted truncate mt-0.5">{realEmail(booking.guest?.email) || booking.guest?.phone || 'No email on file'}</div>
+                    <div className="text-sm text-ink-muted truncate mt-0.5">{realEmail(booking.guest?.email) || booking.guest?.phone || m.bookings.noEmail}</div>
                   </div>
                   <div className="text-sm">
-                    <div className="font-medium text-ink">Room {booking.room?.roomNumber}</div>
+                    <div className="font-medium text-ink">{m.rooms.roomPrefix} {booking.room?.roomNumber}</div>
                     <div className="text-ink-muted">{booking.room?.roomType?.name || 'Standard'}</div>
                   </div>
                   <div className="text-sm">
@@ -463,8 +498,8 @@ export default function BookingsPage() {
                   <div className="font-semibold text-ink md:text-right">{formatCurrency(Number(booking.totalAmount))}</div>
                 </button>
                 {next && (
-                  <div className="flex items-center pr-4 md:pr-5">
-                    <Button size="sm" variant={booking.status === 'checked_in' ? 'ghost' : 'primary'} disabled={saving} onClick={() => updateBookingAction(booking, next.action)}>
+                  <div className="flex items-center px-4 pb-4 sm:py-0 sm:pl-0 sm:pr-4 md:pr-5">
+                    <Button size="sm" variant={booking.status === 'checked_in' ? 'ghost' : 'primary'} disabled={saving} onClick={() => updateBookingAction(booking, next.action)} className="w-full sm:w-auto">
                       {next.label}<span className="sr-only"> {booking.guest?.name}</span>
                     </Button>
                   </div>
@@ -552,6 +587,15 @@ export default function BookingsPage() {
                     >
                       Record deposit refund ({formatCurrency(selected.voidRefund.remainingRefund)})
                     </Button>
+                  )}
+                  {selected.guest?.id && (
+                    <Link
+                      href={`/dashboard/hotel/guests/${selected.guest.id}`}
+                      className="inline-flex items-center justify-center gap-1.5 h-[46px] rounded-lg border border-stone-200 text-ink-soft font-medium hover:bg-stone-100 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber"
+                    >
+                      <ExternalLink className="w-4 h-4" aria-hidden="true" />
+                      Guest profile &amp; preferences
+                    </Link>
                   )}
                   {selected.invoice && (
                     <Link href={`/dashboard/billing/hotel/invoice/${selected.invoice.billId}`} className="inline-flex items-center justify-center h-[46px] rounded-lg border border-stone-200 text-ink-soft font-medium hover:bg-stone-100 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber">
@@ -742,6 +786,54 @@ export default function BookingsPage() {
             </div>
           </>
         )}
+      </Dialog>
+
+      {/* iCal / Channel Manager Sync */}
+      <Dialog open={showIcal} onClose={() => setShowIcal(false)} labelledBy="ical-sync-title" className="p-6 md:p-8 max-w-lg w-full">
+        <div className="flex items-center justify-between mb-4">
+          <h2 id="ical-sync-title" className="text-xl font-bold text-ink">iCal &amp; Channel Manager Sync</h2>
+          <button onClick={() => setShowIcal(false)} aria-label="Close" className="p-1.5 rounded text-ink-muted hover:text-ink">
+            <X className="w-5 h-5" aria-hidden="true" />
+          </button>
+        </div>
+        <p className="text-sm text-ink-muted mb-4">
+          Export your active reservations as an `.ics` calendar file, or paste the signed sync link into Booking.com, Airbnb, or Vrbo to block dates automatically.
+        </p>
+        <div className="space-y-4">
+          <a href="/api/bookings/export.ics" download="bookings.ics" className="block">
+            <Button className="w-full" variant="ghost">
+              <Download className="w-4 h-4" aria-hidden="true" />
+              Download bookings.ics
+            </Button>
+          </a>
+          <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Live Channel Sync URL</div>
+            {loadingIcal ? (
+              <p className="text-xs text-ink-muted">Generating signed feed URL...</p>
+            ) : icalFeedUrl ? (
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  aria-label="Channel sync iCal URL"
+                  value={icalFeedUrl}
+                  className="flex-1 text-xs font-mono bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-ink"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(icalFeedUrl);
+                    showToast('Sync URL copied to clipboard', 'success');
+                  }}
+                >
+                  <Copy className="w-4 h-4" aria-hidden="true" />
+                  Copy
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-ink-muted">Add a property first to generate a channel sync link.</p>
+            )}
+          </div>
+        </div>
       </Dialog>
 
       {/* Toast */}

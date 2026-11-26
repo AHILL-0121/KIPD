@@ -46,6 +46,7 @@ export default function GuestMenuPage({ params }: { params: { restaurantSlug: st
   const [sendError, setSendError] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [tracked, setTracked] = useState<Tracked | null>(null);
+  const [openBillId, setOpenBillId] = useState<string | null>(null);
   const honeypot = useRef<HTMLInputElement>(null);
 
   const loadMenu = useCallback(async () => {
@@ -62,6 +63,22 @@ export default function GuestMenuPage({ params }: { params: { restaurantSlug: st
   }, [slug, tableId]);
 
   useEffect(() => { loadMenu(); setOrderId(store.get(orderKey)); }, [loadMenu, orderKey]);
+
+  // Check if a settle-tab bill is open for this table so the guest can Pay at Table.
+  useEffect(() => {
+    let active = true;
+    const checkBill = async () => {
+      try {
+        const res = await fetch(`/api/public/table-bill/${slug}?table=${tableId}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (active) setOpenBillId(json.billId ?? null);
+      } catch { /* ignore transient offline errors */ }
+    };
+    checkBill();
+    const timer = setInterval(checkBill, 12000);
+    return () => { active = false; clearInterval(timer); };
+  }, [slug, tableId]);
 
   // Follow the order until the guest is done. Stops when the order is finished or the page closes.
   useEffect(() => {
@@ -145,6 +162,20 @@ export default function GuestMenuPage({ params }: { params: { restaurantSlug: st
           </nav>
         )}
       </header>
+
+      {openBillId && (
+        <div className="max-w-3xl mx-auto px-4 pt-4">
+          <Card hover={false} className="p-4 border-2 border-amber flex items-center justify-between gap-3">
+            <div>
+              <div className="font-semibold text-ink">Your table bill is ready</div>
+              <div className="text-sm text-ink-muted">Pay directly online or via UPI app without waiting.</div>
+            </div>
+            <Link href={`/pay/${openBillId}`}>
+              <Button size="sm">Pay at Table</Button>
+            </Link>
+          </Card>
+        </div>
+      )}
 
       {status && (
         <div className="max-w-3xl mx-auto px-4 pt-4" role="status" aria-live="polite">

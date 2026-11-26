@@ -8,6 +8,7 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { useQuery } from '@/hooks/use-query';
 import { useLive } from '@/lib/use-live';
 import { useTenantInfo } from '@/contexts/tenant-context';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 import { formatCurrency } from '@/lib/currency';
 
 interface RoomRow {
@@ -38,6 +39,7 @@ interface DashboardStats {
 }
 
 export default function HotelOverviewPage() {
+  const m = useAppMessages();
   const { info } = useTenantInfo();
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<DashboardStats>('/api/dashboard/stats');
   const { data: rooms, refetch: refetchRooms } = useQuery<RoomRow[]>('/api/rooms');
@@ -52,7 +54,7 @@ export default function HotelOverviewPage() {
   useLive(refreshAll, info?.id ?? null);
 
   if (statsLoading && !stats) {
-    return <LoadingState message="Loading hotel overview..." />;
+    return <LoadingState message={m.common.loading} />;
   }
 
   const roomList = Array.isArray(rooms) ? rooms : [];
@@ -68,7 +70,7 @@ export default function HotelOverviewPage() {
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="section-title">Hotel Overview</h1>
+          <h1 className="section-title">{m.dashboard.hotelOverview}</h1>
           <p className="section-sub">Room readiness, front-desk arrivals, and stay billing</p>
         </div>
 
@@ -78,21 +80,21 @@ export default function HotelOverviewPage() {
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-medium text-ink hover:border-amber min-h-[44px]"
           >
             <Hotel className="w-4 h-4 text-amber-deep" aria-hidden="true" />
-            Rooms
+            {m.nav.rooms}
           </Link>
           <Link
             href="/dashboard/bookings"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-medium text-ink hover:border-amber min-h-[44px]"
           >
             <Calendar className="w-4 h-4 text-sage-deep" aria-hidden="true" />
-            Bookings
+            {m.nav.bookings}
           </Link>
           <Link
             href="/dashboard/billing/hotel"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber text-white text-sm font-medium hover:bg-amber-deep min-h-[44px]"
           >
             <Receipt className="w-4 h-4" aria-hidden="true" />
-            Hotel Billing
+            {m.billing.hotelTitle}
           </Link>
         </div>
       </div>
@@ -104,9 +106,9 @@ export default function HotelOverviewPage() {
             <BedDouble className="w-5 h-5" aria-hidden="true" />
           </CardIcon>
           <div className="text-3xl font-bold text-ink mb-1">{stats?.occupancyRate ?? 0}%</div>
-          <div className="text-sm font-medium text-ink-soft">Occupancy Rate</div>
+          <div className="text-sm font-medium text-ink-soft">{m.dashboard.occupancyRate}</div>
           <div className="text-xs text-ink-muted mt-1">
-            {stats?.occupiedRooms ?? 0} of {roomList.length || stats?.totalRooms || 0} rooms occupied
+            {stats?.occupiedRooms ?? 0} {m.dashboard.of} {roomList.length || stats?.totalRooms || 0} {m.dashboard.roomsOccupiedSuffix}
           </div>
         </Card>
 
@@ -159,13 +161,13 @@ export default function HotelOverviewPage() {
                   <div>
                     <div className="font-medium text-ink">{b.guest?.name || 'Guest'}</div>
                     <div className="text-xs text-ink-muted">
-                      Room {b.room?.roomNumber || '-'} · {new Date(b.checkInDate).toLocaleDateString()} →{' '}
+                      {m.rooms.roomPrefix} {b.room?.roomNumber || '-'} · {new Date(b.checkInDate).toLocaleDateString()} →{' '}
                       {new Date(b.checkOutDate).toLocaleDateString()}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-semibold text-ink">{formatCurrency(Number(b.totalAmount || 0))}</div>
-                    <Badge variant="amber">Pending</Badge>
+                    <Badge variant="amber">{m.bookings.pending}</Badge>
                   </div>
                 </div>
               ))}
@@ -193,10 +195,10 @@ export default function HotelOverviewPage() {
                   <div>
                     <div className="font-medium text-ink">{b.guest?.name || 'Guest'}</div>
                     <div className="text-xs text-ink-muted">
-                      Room {b.room?.roomNumber || '-'} · Check-out {new Date(b.checkOutDate).toLocaleDateString()}
+                      {m.rooms.roomPrefix} {b.room?.roomNumber || '-'} · {m.bookings.checkedOut} {new Date(b.checkOutDate).toLocaleDateString()}
                     </div>
                   </div>
-                  <Badge variant="sage" dot>In house</Badge>
+                  <Badge variant="sage" dot>{m.bookings.checkedIn}</Badge>
                 </div>
               ))}
             </div>

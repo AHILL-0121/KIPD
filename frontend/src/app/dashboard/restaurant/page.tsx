@@ -10,6 +10,7 @@ import { confirmDialog } from '@/components/ui/confirm';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@/hooks/use-query';
 import { useTenantInfo } from '@/contexts/tenant-context';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 import type { MenuCategory, MenuItem, Table } from '@/components/restaurant/types';
 import { MenuItemCard } from '@/components/restaurant/menu-item-card';
 import { MenuItemModal } from '@/components/restaurant/menu-item-modal';
@@ -18,6 +19,7 @@ import { TableCard } from '@/components/restaurant/table-card';
 import { TableModal } from '@/components/restaurant/table-modal';
 
 export default function RestaurantPage() {
+  const m = useAppMessages();
   const { info } = useTenantInfo();
   const outlets = info?.outlets ?? [];
   const [selectedOutletId, setSelectedOutletId] = useState<string>('all');
@@ -361,8 +363,8 @@ export default function RestaurantPage() {
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="section-title">Menu</h1>
-          <p className="section-sub">Manage menu items, categories, and tables</p>
+          <h1 className="section-title">{m.menu.title}</h1>
+          <p className="section-sub">{m.menu.subtitle}</p>
         </div>
 
         <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3">
@@ -376,7 +378,7 @@ export default function RestaurantPage() {
               }}
               className="min-h-[44px] px-3 py-2 rounded-xl border border-stone-300 bg-white text-sm text-ink"
             >
-              <option value="all">All Outlets</option>
+              <option value="all">{m.common.allOutlets}</option>
               {outlets.map((o) => (
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}
@@ -386,7 +388,7 @@ export default function RestaurantPage() {
             <>
               <Button variant="ghost" onClick={() => setShowAddCategory(true)}>
                 <Coffee className="w-4 h-4" />
-                Categories
+                {m.menu.categories}
               </Button>
               <Button
                 onClick={() => {
@@ -399,7 +401,7 @@ export default function RestaurantPage() {
                 }}
               >
                 <Plus className="w-4 h-4" />
-                Add Menu Item
+                {m.menu.addMenuItem}
               </Button>
             </>
           )}
@@ -411,7 +413,7 @@ export default function RestaurantPage() {
               }}
             >
               <Plus className="w-4 h-4" />
-              Add Table
+              {m.menu.addTable}
             </Button>
           )}
         </div>
@@ -426,7 +428,7 @@ export default function RestaurantPage() {
           onClick={() => setActiveTab('menu')}
         >
           <UtensilsCrossed className="w-4 h-4 inline mr-2" />
-          Menu Items ({items.length})
+          {m.menu.menuItemsTab} ({items.length})
         </button>
         <button
           className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -435,7 +437,7 @@ export default function RestaurantPage() {
           onClick={() => setActiveTab('tables')}
         >
           <QrCode className="w-4 h-4 inline mr-2" />
-          Tables ({tablesList.length})
+          {m.menu.tablesTab} ({tablesList.length})
         </button>
       </div>
 
@@ -448,7 +450,7 @@ export default function RestaurantPage() {
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
               <input
                 type="text"
-                placeholder="Search menu items..."
+                placeholder={m.menu.searchPlaceholder}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-10 pr-9 py-2.5 min-h-[44px] text-sm bg-white border border-stone-200 rounded-xl text-ink placeholder:text-ink-muted focus:outline-none focus:border-amber focus:ring-1 focus:ring-amber transition-colors"
@@ -473,7 +475,7 @@ export default function RestaurantPage() {
                 onClick={() => setCategoryFilter('all')}
                 className="shrink-0 min-h-[40px] px-4 rounded-xl"
               >
-                All
+                {m.common.all}
               </Button>
               {categories.map((cat) => (
                 <Button

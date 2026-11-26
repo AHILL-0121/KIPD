@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Plus, Receipt } from 'lucide-react';
+import { X, Plus, Receipt, GitMerge } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,8 @@ interface TableDetailDrawerProps {
   onAddMore: (tableId: string) => void;
   onSettle: (tab: TableTab) => void;
   onUpdateStatus: (orderId: string, status: string) => void;
+  onMergeTable?: (tab: TableTab) => void;
+  canMerge?: boolean;
 }
 
 export function TableDetailDrawer({
@@ -23,6 +25,8 @@ export function TableDetailDrawer({
   onAddMore,
   onSettle,
   onUpdateStatus,
+  onMergeTable,
+  canMerge = false,
 }: TableDetailDrawerProps) {
   if (!tab) return null;
 
@@ -128,7 +132,7 @@ export function TableDetailDrawer({
         </div>
 
         {/* Actions Footer */}
-        <div className="p-4 border-t border-stone-200 bg-white flex gap-3">
+        <div className="p-4 border-t border-stone-200 bg-white flex flex-wrap gap-2">
           <Button
             variant="ghost"
             className="flex-1 bg-stone-100 hover:bg-stone-200"
@@ -140,6 +144,19 @@ export function TableDetailDrawer({
           >
             <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Add more items
           </Button>
+          {canMerge && onMergeTable && (
+            <Button
+              variant="ghost"
+              className="bg-stone-100 hover:bg-stone-200"
+              onClick={() => {
+                const tabToMerge = tab;
+                onClose();
+                onMergeTable(tabToMerge);
+              }}
+            >
+              <GitMerge className="w-4 h-4 mr-1.5" aria-hidden="true" /> Merge
+            </Button>
+          )}
           <Button
             className="flex-1"
             onClick={() => {

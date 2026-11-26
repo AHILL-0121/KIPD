@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLive } from '@/lib/use-live';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import Link from 'next/link';
-import { Receipt, IndianRupee, CheckCircle2, Printer, Link2, Copy, FileText, BedDouble, X, QrCode, Mail } from 'lucide-react';
+import { Receipt, IndianRupee, CheckCircle2, Printer, Link2, Copy, FileText, BedDouble, X, QrCode, Mail, Split, Smartphone } from 'lucide-react';
 import { format } from 'date-fns';
 import QRCode from 'qrcode';
 import { formatCurrency } from '@/lib/currency';
@@ -17,6 +17,7 @@ import { billStatus } from '@/lib/bill-status';
 import { suggestedDeposit } from '@/lib/deposit';
 import { GST_STATES, splitGst } from '@/lib/gst';
 import { buildUpiNote, buildUpiPaymentUrl } from '@/lib/upi-qr';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 
 type BillKind = 'stay' | 'restaurant';
 
@@ -84,19 +85,31 @@ interface PaySettings {
 const DEFAULT_PAY: PaySettings = { manualMethods: METHODS.map(m => m.value), onlinePayments: false, depositPercent: 0, razorpayConfigured: false, directUpiQr: false, upiId: '', upiName: '' };
 const REFERENCE_LABEL: Record<string, string> = { upi: 'UPI transaction ID', card: 'Last 4 digits or slip number', bank_transfer: 'Bank reference' };
 
-const COPY: Record<BillKind, { title: string; sub: string; empty: string; chooseHint: string }> = {
-  stay: { title: 'Hotel billing', sub: 'Stay bills: take deposits and payments, and see what has been paid.', empty: 'No stay is waiting for payment.', chooseHint: 'Choose a bill to see the stay and its payments.' },
-  restaurant: { title: 'Restaurant billing', sub: 'Table bills sent from the floor, and the invoices already paid.', empty: 'Nothing to collect right now.', chooseHint: 'Choose a bill to see what was ordered.' },
-};
-
 /** Two decimals, no thousands separator: what goes in the amount box. */
 const plain = (n: number) => (Math.round(n * 100) / 100).toString();
 
 export function BillingView({ kind }: { kind: BillKind }) {
-  const copy = COPY[kind];
+  const m = useAppMessages();
+  const copy = kind === 'stay'
+    ? { title: m.billing.hotelTitle, sub: m.billing.hotelSub, empty: m.billing.hotelEmpty, chooseHint: m.billing.hotelChooseHint }
+    : { title: m.billing.restaurantTitle, sub: m.billing.restaurantSub, empty: m.billing.restaurantEmpty, chooseHint: m.billing.restaurantChooseHint };
+  const billStatusLabels: Record<string, string> = {
+    open: m.billing.openLabel,
+    partial: m.billing.partPaid,
+    paid: m.billing.paid,
+  };
+  const methodLabels: Record<string, string> = m.finance.methods;
   const [bills, setBills] = useState<Bill[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'open' | 'history'>('open');
+  const detailRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!selectedId || typeof window === 'undefined') return;
+    if (window.innerWidth < 1024) {
+      detailRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedId]);
 
   // Custom Receipt Config Binding
   const [receiptConfig, setReceiptConfig] = useState({
@@ -194,6 +207,12 @@ export function BillingView({ kind }: { kind: BillKind }) {
   const [receiptEmail, setReceiptEmail] = useState('');
   const [sendingReceipt, setSendingReceipt] = useState(false);
   const [emailReceiptError, setEmailReceiptError] = useState('');
+
+  // Split restaurant bill dialog
+  const [showSplit, setShowSplit] = useState(false);
+  const [splitParts, setSplitParts] = useState('2');
+  const [splitting, setSplitting] = useState(false);
+  const [splitError, setSplitError] = useState('');
 
   const sendReceiptEmail = async () => {
     if (!selected || sendingReceipt) return;
@@ -316,6 +335,37 @@ export function BillingView({ kind }: { kind: BillKind }) {
     setBuyer({ name: selected.guestName, gstin: '', stateCode: '', address: '' });
     setInvoiceError('');
     setShowInvoice(true);
+  };
+
+  const handleSplitBill = async () => {
+    if (!selected || splitting) return;
+    const parts = Number(splitParts);
+    if (!Number.isInteger(parts) || parts < 2 || parts > 10) {
+      setSplitError('Choose between 2 and 10 equal parts.');
+      return;
+    }
+    setSplitting(true);
+    setSplitError('');
+    try {
+      const res = await fetch(`/api/billing/${selected.id}/split`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'equal', parts }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSplitError(typeof data.error === 'string' ? data.error : 'Could not split the bill.');
+        return;
+      }
+      setShowSplit(false);
+      setSelectedId(null);
+      setNotice(`Bill split evenly into ${parts} separate bills.`);
+      fetchBills();
+    } catch {
+      setSplitError('Could not reach the server. Please try again.');
+    } finally {
+      setSplitting(false);
+    }
   };
 
   const issueInvoice = async () => {
@@ -488,14 +538,14 @@ export function BillingView({ kind }: { kind: BillKind }) {
             onClick={() => { setViewMode('open'); setSelectedId(null); }}
             className={`px-5 py-1.5 rounded-md text-sm font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${viewMode === 'open' ? 'bg-white shadow-sm text-ink' : 'text-stone-500 hover:text-ink'}`}
           >
-            To collect
+            {m.billing.toCollect}
           </button>
           <button
             aria-pressed={viewMode === 'history'}
             onClick={() => { setViewMode('history'); setSelectedId(null); }}
             className={`px-5 py-1.5 rounded-md text-sm font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${viewMode === 'history' ? 'bg-white shadow-sm text-ink' : 'text-stone-500 hover:text-ink'}`}
           >
-            Paid invoices
+            {m.billing.paidInvoices}
           </button>
         </div>
       </div>
@@ -511,9 +561,9 @@ export function BillingView({ kind }: { kind: BillKind }) {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 print:hidden">
         {[
-          { label: 'Still to collect', value: formatCurrency(outstanding), icon: IndianRupee },
-          { label: 'Unpaid bills', value: String(openBills.length), icon: Receipt },
-          { label: 'Collected today', value: formatCurrency(collectedToday), icon: CheckCircle2 },
+          { label: m.billing.stillToCollect, value: formatCurrency(outstanding), icon: IndianRupee },
+          { label: m.billing.unpaidBills, value: String(openBills.length), icon: Receipt },
+          { label: m.billing.collectedToday, value: formatCurrency(collectedToday), icon: CheckCircle2 },
         ].map(({ label, value, icon: Icon }) => (
           <Card key={label} hover={false}>
             <div className="flex items-center justify-between">
@@ -533,14 +583,14 @@ export function BillingView({ kind }: { kind: BillKind }) {
 
           {viewMode === 'open' && (
             <>
-              <h2 className="font-serif text-xl font-bold mb-4">Unpaid bills</h2>
+              <h2 className="font-serif text-xl font-bold mb-4">{m.billing.unpaidBills}</h2>
               <div className="space-y-3">
                 {openBills.map((bill) => (
                   <button
                     key={bill.id}
                     type="button"
                     aria-pressed={selectedId === bill.id}
-                    className={`block w-full text-left bg-white rounded-2xl p-6 shadow-sm border border-stone-200 transition-all hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber ${selectedId === bill.id ? 'ring-2 ring-amber ring-offset-2' : ''}`}
+                    className={`block w-full text-left bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-stone-200 transition-all hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber ${selectedId === bill.id ? 'ring-2 ring-amber ring-offset-2' : ''}`}
                     onClick={() => setSelectedId(selectedId === bill.id ? null : bill.id)}
                   >
                     <div className="flex items-center justify-between mb-3">
@@ -548,14 +598,14 @@ export function BillingView({ kind }: { kind: BillKind }) {
                         <h3 className="font-semibold text-ink">{bill.guestName}</h3>
                         {bill.stay && <p className="text-sm text-ink-muted">{stayLine(bill)}</p>}
                       </div>
-                      <Badge variant={billStatus(bill.status).tone}>{billStatus(bill.status).label}</Badge>
+                      <Badge variant={billStatus(bill.status).tone}>{billStatusLabels[bill.status] ?? billStatus(bill.status).label}</Badge>
                     </div>
 
                     <div className="flex items-center justify-between pt-3 border-t border-stone-200">
                       <div className="text-sm text-ink-muted">
                         {bill.paidAmount > 0
-                          ? `${formatCurrency(bill.paidAmount)} paid, ${formatCurrency(bill.totalAmount - bill.paidAmount)} owed`
-                          : bill.receipt ? `${bill.receipt.items.length} ${bill.receipt.items.length === 1 ? 'item' : 'items'}` : 'Open the bill to see items'}
+                          ? `${formatCurrency(bill.paidAmount)} ${m.billing.paidLabel}, ${formatCurrency(bill.totalAmount - bill.paidAmount)} ${m.billing.owed}`
+                          : bill.receipt ? `${bill.receipt.items.length} ${bill.receipt.items.length === 1 ? 'item' : 'items'}` : m.billing.openItemsHint}
                       </div>
                       <div className="font-bold text-lg text-ink">
                         {formatCurrency(bill.totalAmount)}
@@ -573,8 +623,8 @@ export function BillingView({ kind }: { kind: BillKind }) {
           {viewMode === 'history' && (
             <>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-serif text-xl font-bold text-ink">Paid invoices</h2>
-                <Badge variant="stone">{allPaidBills.length} in total</Badge>
+                <h2 className="font-serif text-xl font-bold text-ink">{m.billing.paidInvoices}</h2>
+                <Badge variant="stone">{allPaidBills.length} {m.billing.inTotal}</Badge>
               </div>
               <div className="space-y-3">
                 {allPaidBills.map((bill) => (
@@ -582,7 +632,7 @@ export function BillingView({ kind }: { kind: BillKind }) {
                     key={bill.id}
                     type="button"
                     aria-pressed={selectedId === bill.id}
-                    className={`block w-full text-left bg-white rounded-2xl p-6 shadow-sm border border-stone-200 transition-all hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber ${selectedId === bill.id ? 'ring-2 ring-sage ring-offset-2' : ''}`}
+                    className={`block w-full text-left bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-stone-200 transition-all hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber ${selectedId === bill.id ? 'ring-2 ring-sage ring-offset-2' : ''}`}
                     onClick={() => setSelectedId(selectedId === bill.id ? null : bill.id)}
                   >
                     <div className="flex items-center justify-between mb-3">
@@ -596,13 +646,13 @@ export function BillingView({ kind }: { kind: BillKind }) {
                         <div className="font-bold text-lg text-ink">
                           {formatCurrency(bill.totalAmount)}
                         </div>
-                        <Badge variant={billStatus(bill.status).tone} className="mt-1">{billStatus(bill.status).label}</Badge>
+                        <Badge variant={billStatus(bill.status).tone} className="mt-1">{billStatusLabels[bill.status] ?? billStatus(bill.status).label}</Badge>
                       </div>
                     </div>
                   </button>
                 ))}
                 {allPaidBills.length === 0 && (
-                  <div className="text-center p-8 text-ink-muted border border-dashed border-stone-200 rounded-xl">No paid invoices yet.</div>
+                  <div className="text-center p-8 text-ink-muted border border-dashed border-stone-200 rounded-xl">{m.billing.noPaidInvoices}</div>
                 )}
               </div>
             </>
@@ -610,16 +660,16 @@ export function BillingView({ kind }: { kind: BillKind }) {
         </div>
 
         {/* Right Column: the bill, its payments, and the receipt */}
-        <div>
+        <div ref={detailRef}>
           {selected ? (
-            <Card hover={false} className="sticky top-8">
+            <Card hover={false} className="lg:sticky lg:top-8">
               <div className="flex items-center justify-between mb-6 print:hidden">
                 <div>
                   <h2 className="font-serif text-2xl font-bold text-ink">{selected.guestName}</h2>
                   {selected.stay && <p className="text-ink-muted">{stayLine(selected)}</p>}
                 </div>
                 <div className="flex items-center gap-3">
-                  <Badge variant={billStatus(selected.status).tone}>{billStatus(selected.status).label}</Badge>
+                  <Badge variant={billStatus(selected.status).tone}>{billStatusLabels[selected.status] ?? billStatus(selected.status).label}</Badge>
                   <button
                     type="button"
                     onClick={() => setSelectedId(null)}
@@ -693,27 +743,27 @@ export function BillingView({ kind }: { kind: BillKind }) {
 
               <div className="space-y-2 mb-6 pt-4 border-t-2 border-stone-300 print:hidden">
                 <div className="flex justify-between text-ink-muted">
-                  <span>Total</span>
+                  <span>{m.billing.total}</span>
                   <span>{formatCurrency(selected.totalAmount)}</span>
                 </div>
                 <div className="flex justify-between text-ink-muted">
-                  <span>Paid</span>
+                  <span>{m.billing.paid}</span>
                   <span className="text-sage">-{formatCurrency(selected.paidAmount)}</span>
                 </div>
                 <div className="flex justify-between text-2xl font-bold text-ink">
-                  <span>Still owed</span>
+                  <span>{m.billing.stillOwed}</span>
                   <span>{formatCurrency(owed)}</span>
                 </div>
               </div>
 
               {selected.payments.length > 0 && (
                 <div className="mb-6 print:hidden">
-                  <h3 className="text-sm font-semibold text-ink mb-2">Payments</h3>
+                  <h3 className="text-sm font-semibold text-ink mb-2">{m.settings.paymentsTitle}</h3>
                   <ul className="space-y-2">
                     {selected.payments.map(p => (
                       <li key={p.id} className="flex items-start justify-between gap-3 rounded-lg bg-stone-50 px-3 py-2 text-sm">
                         <div className="min-w-0">
-                          <div className="font-medium text-ink">{METHOD_LABEL[p.method] ?? p.method}{p.reference ? ` · ${p.reference}` : ''}</div>
+                          <div className="font-medium text-ink">{methodLabels[p.method] ?? METHOD_LABEL[p.method] ?? p.method}{p.reference ? ` · ${p.reference}` : ''}</div>
                           <div className="text-xs text-ink-muted">
                             {format(new Date(p.createdAt), 'd MMM, h:mm a')}{p.receivedBy ? ` · received by ${p.receivedBy}` : ''}{p.note ? ` · ${p.note}` : ''}
                           </div>
@@ -730,7 +780,7 @@ export function BillingView({ kind }: { kind: BillKind }) {
                   <>
                     <Button className="w-full" onClick={openPay}>
                       <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-                      Record payment
+                      {m.billing.recordPayment}
                     </Button>
                     {paySettings.directUpiQr && paySettings.upiId && (
                       <Button
@@ -740,17 +790,43 @@ export function BillingView({ kind }: { kind: BillKind }) {
                         isLoading={generatingUpiQr}
                       >
                         <QrCode className="w-4 h-4 text-emerald-600" aria-hidden="true" />
-                        Show UPI QR Code
+                        {m.billing.showUpiQr}
                       </Button>
                     )}
                   </>
                 )}
 
                 {kind === 'restaurant' && selected.status === 'open' && selected.payments.length === 0 && (
-                  <Button variant="ghost" className="w-full" onClick={openRoom}>
-                    <BedDouble className="w-4 h-4" aria-hidden="true" />
-                    Charge to room
-                  </Button>
+                  <>
+                    <Button variant="ghost" className="w-full" onClick={openRoom}>
+                      <BedDouble className="w-4 h-4" aria-hidden="true" />
+                      {m.billing.chargeToRoom}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="w-full"
+                      onClick={() => {
+                        setSplitParts('2');
+                        setSplitError('');
+                        setShowSplit(true);
+                      }}
+                    >
+                      <Split className="w-4 h-4" aria-hidden="true" />
+                      {m.billing.splitBill}
+                    </Button>
+                  </>
+                )}
+
+                {kind === 'restaurant' && selected.status !== 'paid' && (
+                  <Link
+                    href={`/pay/${selected.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-stone-200 px-4 py-2 text-base font-medium text-ink-soft hover:bg-stone-100 hover:border-stone-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber"
+                  >
+                    <Smartphone className="w-4 h-4" aria-hidden="true" />
+                    {m.billing.openPayAtTable}
+                  </Link>
                 )}
 
                 {selected.stay && (selected.invoiceNumber ? (
@@ -764,13 +840,13 @@ export function BillingView({ kind }: { kind: BillKind }) {
                 ) : (
                   <Button variant="ghost" className="w-full" onClick={openInvoice}>
                     <FileText className="w-4 h-4" aria-hidden="true" />
-                    Issue A4 invoice
+                    {m.billing.issueInvoice}
                   </Button>
                 ))}
 
                 <Button variant="ghost" className="w-full" onClick={() => window.print()}>
                   <Printer className="w-4 h-4" aria-hidden="true" />
-                  Print bill
+                  {m.billing.printBill}
                 </Button>
 
                 <Button
@@ -783,7 +859,7 @@ export function BillingView({ kind }: { kind: BillKind }) {
                   }}
                 >
                   <Mail className="w-4 h-4" aria-hidden="true" />
-                  Email receipt
+                  {m.billing.emailReceipt}
                 </Button>
               </div>
             </Card>
@@ -1021,6 +1097,44 @@ export function BillingView({ kind }: { kind: BillKind }) {
               </Button>
             </div>
           </div>
+        )}
+      </Dialog>
+
+      {/* Split Bill Dialog */}
+      <Dialog
+        open={showSplit && !!selected}
+        onClose={() => setShowSplit(false)}
+        labelledBy="split-bill-title"
+        dismissible={!splitting}
+        className="p-8 max-w-md w-full"
+      >
+        {selected && (
+          <>
+            <h2 id="split-bill-title" className="text-2xl font-bold text-ink">Split bill</h2>
+            <p className="mt-2 text-ink-muted">
+              Divide {formatCurrency(selected.totalAmount)} evenly across guests. The original bill is closed and replaced by equal parts.
+            </p>
+            <div className="mt-5">
+              <Select
+                label="Split into"
+                value={splitParts}
+                onChange={(e) => setSplitParts(e.target.value)}
+                options={[2, 3, 4, 5, 6, 8, 10].map((n) => ({
+                  value: String(n),
+                  label: `${n} equal bills (~${formatCurrency(selected.totalAmount / n)} each)`,
+                }))}
+              />
+            </div>
+            {splitError && <p role="alert" className="mt-4 rounded-lg bg-terra-pale px-4 py-3 text-sm text-terra">{splitError}</p>}
+            <div className="mt-6 space-y-3">
+              <Button className="w-full" onClick={handleSplitBill} isLoading={splitting} disabled={splitting}>
+                {splitting ? 'Splitting…' : `Split into ${splitParts} bills`}
+              </Button>
+              <Button variant="ghost" className="w-full" onClick={() => setShowSplit(false)} disabled={splitting}>
+                Cancel
+              </Button>
+            </div>
+          </>
         )}
       </Dialog>
 

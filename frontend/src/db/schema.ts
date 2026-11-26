@@ -135,6 +135,7 @@ export const guests = pgTable('guests', {
   name: text('name').notNull(),
   phone: text('phone'),
   preferences: jsonb('preferences'),
+  notes: text('notes'),
   createdAt: tstz('created_at').defaultNow().notNull(),
 }, (t) => [
   unique('guests_tenant_id_uq').on(t.tenantId, t.id),
@@ -444,7 +445,7 @@ export const staff = pgTable('staff', {
   clerkId: text('clerk_id').notNull().unique(), // always a real Clerk user id (invitations live in staff_invites)
   email: text('email').notNull(),
   name: text('name').notNull(),
-  role: text('role').notNull(), // owner, manager, front_desk, waiter, kitchen
+  role: text('role').notNull(), // owner, manager, front_desk, waiter, kitchen, cashier
   areas: text('areas').notNull().default('both'), // hotel, restaurant, both
   isActive: boolean('is_active').default(true),
   createdAt: tstz('created_at').defaultNow().notNull(),
@@ -452,7 +453,7 @@ export const staff = pgTable('staff', {
 }, (t) => [
   unique('staff_tenant_id_uq').on(t.tenantId, t.id),
   foreignKey({ name: 'fk_staff_property', columns: [t.tenantId, t.propertyId], foreignColumns: [properties.tenantId, properties.id] }),
-  check('staff_role_check', sql`${t.role} in ('owner','manager','front_desk','waiter','kitchen')`),
+  check('staff_role_check', sql`${t.role} in ('owner','manager','front_desk','waiter','kitchen','cashier')`),
   check('staff_areas_check', sql`${t.areas} in ('hotel','restaurant','both')`),
 ]);
 
@@ -476,7 +477,7 @@ export const staffInvites = pgTable('staff_invites', {
   unique('staff_invites_tenant_id_uq').on(t.tenantId, t.id),
   // At most one open invitation per email per tenant; re-inviting replaces it.
   uniqueIndex('staff_invites_open_email_uq').on(t.tenantId, sql`lower(${t.email})`).where(sql`${t.acceptedAt} is null`),
-  check('staff_invites_role_check', sql`${t.role} in ('manager','front_desk','waiter','kitchen')`),
+  check('staff_invites_role_check', sql`${t.role} in ('manager','front_desk','waiter','kitchen','cashier')`),
   check('staff_invites_areas_check', sql`${t.areas} in ('hotel','restaurant','both')`),
 ]);
 
@@ -520,6 +521,65 @@ export const paymentEvents = pgTable('payment_events', {
   index('idx_payment_events_bill').on(t.matchedBillId),
   check('payment_events_source_check', sql`${t.source} in ('webhook','notification')`),
   check('payment_events_match_check', sql`${t.matchConfidence} in ('exact','probable','unmatched')`),
+]);
+
+// ============= INVENTORY & RECIPES =============
+export const ingredients = pgTable('ingredients', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  outletId: uuid('outlet_id').notNull(),
+  name: text('name').notNull(),
+  unit: text('unit').notNull().default('unit'),
+  stockQty: decimal('stock_qty', { precision: 12, scale: 3 }).notNull().default('0'),
+  lowStockThreshold: decimal('low_stock_threshold', { precision: 12, scale: 3 }).notNull().default('10'),
+  costPerUnit: decimal('cost_per_unit', { precision: 10, scale: 2 }),
+  createdAt: tstz('created_at').defaultNow().notNull(),
+  updatedAt: tstz('updated_at').defaultNow().notNull(),
+}, (t) => [
+  unique('ingredients_tenant_id_uq').on(t.tenantId, t.id),
+  foreignKey({ name: 'fk_ingredients_outlet', columns: [t.tenantId, t.outletId], foreignColumns: [outlets.tenantId, outlets.id] }),
+  index('idx_ingredients_tenant').on(t.tenantId),
+  index('idx_ingredients_outlet').on(t.outletId),
+  check('ingredients_stock_check', sql`${t.stockQty} >= 0`),
+  check('ingredients_threshold_check', sql`${t.lowStockThreshold} >= 0`),
+  check('ingredients_cost_check', sql`${t.costPerUnit} is null or ${t.costPerUnit} >= 0`),
+]);
+
+export const recipeItems = pgTable('recipe_items', {
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  menuItemId: uuid('menu_item_id').notNull(),
+  ingredientId: uuid('ingredient_id').notNull(),
+  quantityPerUnit: decimal('quantity_per_unit', { precision: 10, scale: 3 }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.menuItemId, t.ingredientId] }),
+  foreignKey({ name: 'fk_recipe_items_menu_item', columns: [t.tenantId, t.menuItemId], foreignColumns: [menuItems.tenantId, menuItems.id] }).onDelete('cascade'),
+  foreignKey({ name: 'fk_recipe_items_ingredient', columns: [t.tenantId, t.ingredientId], foreignColumns: [ingredients.tenantId, ingredients.id] }).onDelete('cascade'),
+  index('idx_recipe_items_ingredient').on(t.ingredientId),
+  check('recipe_items_qty_check', sql`${t.quantityPerUnit} > 0`),
+]);
+
+// ============= PAY AT TABLE =============
+export const upiPaymentIntents = pgTable('upi_payment_intents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  billId: uuid('bill_id').notNull(),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  currency: text('currency').notNull().default('INR'),
+  razorpayOrderId: text('razorpay_order_id'),
+  razorpayPaymentId: text('razorpay_payment_id'),
+  razorpayPaymentLinkId: text('razorpay_payment_link_id'),
+  paymentLinkUrl: text('payment_link_url'),
+  shortUrl: text('short_url'),
+  status: text('status').notNull().default('created'),
+  expiresAt: tstz('expires_at'),
+  createdAt: tstz('created_at').defaultNow().notNull(),
+  updatedAt: tstz('updated_at').defaultNow().notNull(),
+}, (t) => [
+  foreignKey({ name: 'fk_upi_intents_bill', columns: [t.tenantId, t.billId], foreignColumns: [bills.tenantId, bills.id] }),
+  index('idx_upi_intent_bill').on(t.billId),
+  index('idx_upi_intent_tenant').on(t.tenantId),
+  check('upi_intent_status_check', sql`${t.status} in ('created','paid','expired','failed')`),
+  check('upi_intent_amount_check', sql`${t.amount} > 0`),
 ]);
 
 // ============= RELATIONS (for db.query.* helpers) =============
@@ -624,4 +684,18 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
 export const staffRelations = relations(staff, ({ one }) => ({
   tenant: one(tenants, { fields: [staff.tenantId], references: [tenants.id] }),
   property: one(properties, { fields: [staff.propertyId], references: [properties.id] }),
+}));
+
+export const ingredientsRelations = relations(ingredients, ({ one, many }) => ({
+  outlet: one(outlets, { fields: [ingredients.outletId], references: [outlets.id] }),
+  recipeItems: many(recipeItems),
+}));
+
+export const recipeItemsRelations = relations(recipeItems, ({ one }) => ({
+  menuItem: one(menuItems, { fields: [recipeItems.menuItemId], references: [menuItems.id] }),
+  ingredient: one(ingredients, { fields: [recipeItems.ingredientId], references: [ingredients.id] }),
+}));
+
+export const upiPaymentIntentsRelations = relations(upiPaymentIntents, ({ one }) => ({
+  bill: one(bills, { fields: [upiPaymentIntents.billId], references: [bills.id] }),
 }));

@@ -85,7 +85,13 @@ export function Dialog({ open, onClose, labelledBy, variant = 'center', dismissi
             animate={drawer ? { x: 0 } : sheet ? { y: 0 } : { scale: 1, opacity: 1 }}
             exit={drawer ? { x: '100%' } : sheet ? { y: '100%' } : { scale: 0.95, opacity: 0 }}
             transition={drawer ? { duration: 0.25, ease: 'easeOut' } : sheet ? { type: 'spring', damping: 25, stiffness: 200 } : { duration: 0.15 }}
-            className={`bg-white outline-none ${drawer ? 'h-full w-full max-w-[420px] flex flex-col shadow-2xl' : sheet ? 'rounded-t-3xl md:rounded-2xl' : 'rounded-2xl'} ${className}`}
+            className={`bg-white outline-none ${
+              drawer
+                ? 'h-[100dvh] w-full max-w-[420px] flex flex-col shadow-2xl'
+                : sheet
+                  ? 'rounded-t-3xl md:rounded-2xl max-h-[90dvh] overflow-y-auto w-full pb-[max(1.25rem,env(safe-area-inset-bottom))]'
+                  : 'rounded-2xl max-h-[90dvh] overflow-y-auto w-full'
+            } ${className}`}
             onClick={(e) => e.stopPropagation()}
           >
             {children}

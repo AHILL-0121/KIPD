@@ -2,8 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useLive } from '@/lib/use-live';
-import { playChime } from '@/lib/chime';
+import { useSound } from '@/hooks/use-sound';
+import { enqueueMutation } from '@/lib/offline-queue';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
+import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/ui/empty-state';
 import { LoadingState } from '@/components/ui/loading-state';
 import { MapPin, Plus, Package, UtensilsCrossed, Volume2, VolumeX } from 'lucide-react';
@@ -21,6 +25,7 @@ import { SettleTableDialog, SettleTakeawayDialog } from '@/components/orders/set
 import { TableDetailDrawer } from '@/components/orders/table-detail-drawer';
 
 export default function OrdersPage() {
+  const m = useAppMessages();
   const { info } = useTenantInfo();
   const outlets = info?.outlets ?? [];
   const [selectedOutletId, setSelectedOutletId] = useState<string>('all');
@@ -33,25 +38,18 @@ export default function OrdersPage() {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const seenOrderIds = useRef<Set<string> | null>(null);
-  const [soundOn, setSoundOn] = useState(false);
-  const soundRef = useRef(false);
-  soundRef.current = soundOn;
-
-  const toggleSound = async () => {
-    if (soundOn) return setSoundOn(false);
-    if (await playChime()) setSoundOn(true);
-  };
+  const { soundOn, toggleSound, ring } = useSound('orders');
 
   useEffect(() => {
     if (rawOrders) {
       const nextIds = new Set(rawOrders.map((o) => o.id));
-      if (seenOrderIds.current && soundRef.current && rawOrders.some((o) => !seenOrderIds.current!.has(o.id))) {
-        playChime();
+      if (seenOrderIds.current && rawOrders.some((o) => !seenOrderIds.current!.has(o.id))) {
+        ring();
       }
       seenOrderIds.current = nextIds;
       setOrders(rawOrders);
     }
-  }, [rawOrders]);
+  }, [rawOrders, ring]);
 
   const menuItems = Array.isArray(rawMenu) ? rawMenu.filter((i: MenuItem) => i.isAvailable) : [];
   const tableOptions = Array.isArray(rawTables) ? rawTables : [];
@@ -83,6 +81,10 @@ export default function OrdersPage() {
   const [checkoutTable, setCheckoutTable] = useState<TableTab | null>(null);
   const [checkoutTakeaway, setCheckoutTakeaway] = useState<Order | null>(null);
 
+  // Merge Table Modal State
+  const [mergingTab, setMergingTab] = useState<TableTab | null>(null);
+  const [mergeTargetTableId, setMergeTargetTableId] = useState('');
+
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
@@ -107,16 +109,29 @@ export default function OrdersPage() {
   }, [orders]);
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    const payload = { status: newStatus };
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      enqueueMutation({ url: `/api/orders/${orderId}`, method: 'PATCH', body: payload, label: `Order status -> ${newStatus}` });
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus as Order['status'] } : o));
+      showToast('Offline — status update queued to sync', 'success');
+      return;
+    }
     try {
       const res = await fetch(`/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Failed');
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus as Order['status'] } : o));
       showToast(`Marked ${orderStatus(newStatus).label.toLowerCase()}`, 'success');
-    } catch {
+    } catch (err) {
+      if (err instanceof TypeError) {
+        enqueueMutation({ url: `/api/orders/${orderId}`, method: 'PATCH', body: payload, label: `Order status -> ${newStatus}` });
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus as Order['status'] } : o));
+        showToast('Network unreachable — status update queued', 'success');
+        return;
+      }
       showToast('Could not update the order. Please try again.', 'error');
       refetchOrders();
     }
@@ -254,6 +269,15 @@ export default function OrdersPage() {
         if (selectedOutletId !== 'all') payload.outletId = selectedOutletId;
         if (customerName.trim()) payload.customerName = customerName.trim();
       }
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        enqueueMutation({ url: '/api/orders', method: 'POST', body: payload, label: `New ${orderMode.replace('_', ' ')} ticket` });
+        setShowCreate(false);
+        setCart([]);
+        setSelectedTableId('');
+        setCustomerName('');
+        showToast('Offline — order saved in POS queue and will send automatically', 'success');
+        return;
+      }
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -267,7 +291,28 @@ export default function OrdersPage() {
       refetchOrders();
       setActiveSection(orderMode === 'take_away' ? 'takeaway' : 'tables');
       showToast(orderMode === 'take_away' ? 'Take-away order sent to kitchen' : 'Sent to the kitchen', 'success');
-    } catch {
+    } catch (err) {
+      if (err instanceof TypeError) {
+        enqueueMutation({
+          url: '/api/orders',
+          method: 'POST',
+          body: {
+            type: orderMode,
+            items: cart.map(c => ({ menuItemId: c.menuItemId, quantity: c.quantity, notes: c.notes || undefined })),
+            specialInstructions: specialInstructions || undefined,
+            ...(orderMode === 'dine_in' ? { tableId: selectedTableId } : {}),
+            ...(orderMode !== 'dine_in' && selectedOutletId !== 'all' ? { outletId: selectedOutletId } : {}),
+            ...(orderMode !== 'dine_in' && customerName.trim() ? { customerName: customerName.trim() } : {}),
+          },
+          label: `New ${orderMode.replace('_', ' ')} ticket`,
+        });
+        setShowCreate(false);
+        setCart([]);
+        setSelectedTableId('');
+        setCustomerName('');
+        showToast('Connection lost — order queued to sync on reconnect', 'success');
+        return;
+      }
       showToast('Could not send to the kitchen. Please try again.', 'error');
     } finally {
       setSaving(false);
@@ -328,6 +373,34 @@ export default function OrdersPage() {
     }
   };
 
+  const openMergeModal = (tab: TableTab) => {
+    const candidates = tableOptions.filter((t) => t.id !== tab.table.id);
+    setMergeTargetTableId(candidates[0]?.id ?? '');
+    setMergingTab(tab);
+  };
+
+  const handleMergeTable = async () => {
+    if (!mergingTab || !mergeTargetTableId) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/orders/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceTableId: mergingTab.table.id, targetTableId: mergeTargetTableId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not merge tables');
+      const targetNum = tableOptions.find((t) => t.id === mergeTargetTableId)?.tableNumber ?? '';
+      setMergingTab(null);
+      refetchOrders();
+      showToast(`Merged Table ${mergingTab.table.tableNumber} into Table ${targetNum}`, 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to merge tables', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (ordersLoading && !rawOrders && !ordersError) return <LoadingState />;
 
   const stale = Boolean(ordersError);
@@ -336,7 +409,7 @@ export default function OrdersPage() {
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="flex items-center justify-between gap-3 mb-4 pr-1">
         <div>
-          <h1 className="section-title">Active orders</h1>
+          <h1 className="section-title">{m.orders.title}</h1>
           <p className="section-sub hidden sm:block">
             {activeSection === 'takeaway'
               ? 'Quick counter and takeaway orders. No table assignment needed.'
@@ -378,7 +451,7 @@ export default function OrdersPage() {
             aria-label="New take-away"
           >
             <Package className="w-5 h-5 sm:w-4 sm:h-4 text-ink" aria-hidden="true" />
-            <span className="hidden sm:inline ml-1.5">New take-away</span>
+            <span className="hidden sm:inline ml-1.5">{m.orders.newTakeaway}</span>
           </Button>
           <Button
             className="min-h-[44px] min-w-[44px] p-2.5 sm:px-4"
@@ -388,23 +461,23 @@ export default function OrdersPage() {
           >
             <UtensilsCrossed className="w-5 h-5 sm:w-4 sm:h-4 sm:hidden" aria-hidden="true" />
             <Plus className="w-4 h-4 hidden sm:inline mr-1.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Seat new table</span>
+            <span className="hidden sm:inline">{m.orders.seatNewTable}</span>
           </Button>
         </div>
       </div>
 
       {/* Section Switcher Tabs */}
-      <div role="tablist" aria-label="Order sections" className="inline-flex gap-1 p-1 rounded-xl bg-stone-100 mb-4 sm:mb-8 self-start flex-wrap">
+      <div role="tablist" aria-label="Order sections" className="flex overflow-x-auto max-w-full flex-nowrap sm:inline-flex sm:flex-wrap gap-1 p-1 rounded-xl bg-stone-100 mb-4 sm:mb-8 self-start [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           role="tab"
           aria-selected={activeSection === 'tables'}
           onClick={() => setActiveSection('tables')}
-          className={`h-10 px-4 rounded-lg inline-flex items-center gap-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
+          className={`h-10 px-4 rounded-lg inline-flex items-center gap-2 text-sm shrink-0 whitespace-nowrap transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
             activeSection === 'tables' ? 'bg-white text-ink font-bold shadow-sm' : 'text-ink-soft font-medium hover:text-ink'
           }`}
         >
           <MapPin className="w-4 h-4 text-amber-deep" aria-hidden="true" />
-          <span>Table tabs</span>
+          <span>{m.orders.tableTabs}</span>
           <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${activeSection === 'tables' ? 'bg-amber-pale text-amber-deep' : 'bg-stone-200 text-ink-muted'}`}>
             {activeTabs.length}
           </span>
@@ -414,12 +487,12 @@ export default function OrdersPage() {
           role="tab"
           aria-selected={activeSection === 'takeaway'}
           onClick={() => setActiveSection('takeaway')}
-          className={`h-10 px-4 rounded-lg inline-flex items-center gap-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
+          className={`h-10 px-4 rounded-lg inline-flex items-center gap-2 text-sm shrink-0 whitespace-nowrap transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
             activeSection === 'takeaway' ? 'bg-white text-ink font-bold shadow-sm' : 'text-ink-soft font-medium hover:text-ink'
           }`}
         >
           <Package className="w-4 h-4 text-amber-deep" aria-hidden="true" />
-          <span>Takeaways</span>
+          <span>{m.orders.takeaways}</span>
           <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${activeSection === 'takeaway' ? 'bg-amber-pale text-amber-deep' : 'bg-stone-200 text-ink-muted'}`}>
             {activeTakeAways.length}
           </span>
@@ -429,11 +502,11 @@ export default function OrdersPage() {
           role="tab"
           aria-selected={activeSection === 'all'}
           onClick={() => setActiveSection('all')}
-          className={`h-10 px-4 rounded-lg inline-flex items-center gap-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
+          className={`h-10 px-4 rounded-lg inline-flex items-center gap-2 text-sm shrink-0 whitespace-nowrap transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
             activeSection === 'all' ? 'bg-white text-ink font-bold shadow-sm' : 'text-ink-soft font-medium hover:text-ink'
           }`}
         >
-          <span>All orders</span>
+          <span>{m.orders.allOrders}</span>
           <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${activeSection === 'all' ? 'bg-amber-pale text-amber-deep' : 'bg-stone-200 text-ink-muted'}`}>
             {activeTabs.length + activeTakeAways.length}
           </span>
@@ -659,7 +732,50 @@ export default function OrdersPage() {
         onAddMore={openNewOrder}
         onSettle={setCheckoutTable}
         onUpdateStatus={updateOrderStatus}
+        canMerge={tableOptions.length > 1}
+        onMergeTable={openMergeModal}
       />
+
+      {/* Merge Table Dialog */}
+      <Dialog
+        open={Boolean(mergingTab)}
+        onClose={() => setMergingTab(null)}
+        labelledBy="merge-table-title"
+        dismissible={!saving}
+        className="p-6 md:p-8 max-w-md w-full"
+      >
+        {mergingTab && (
+          <>
+            <h2 id="merge-table-title" className="text-xl font-bold text-ink">
+              Merge Table {mergingTab.table.tableNumber}
+            </h2>
+            <p className="text-sm text-ink-muted mt-1">
+              Moves all open kitchen tickets from Table {mergingTab.table.tableNumber} onto another table in the same outlet.
+            </p>
+            <div className="mt-4">
+              <Select
+                label="Move tickets to"
+                value={mergeTargetTableId}
+                onChange={(e) => setMergeTargetTableId(e.target.value)}
+                options={tableOptions
+                  .filter((t) => t.id !== mergingTab.table.id)
+                  .map((t) => ({
+                    value: t.id,
+                    label: `Table ${t.tableNumber}${activeTabs.some((a) => a.table.id === t.id) ? ' (Occupied)' : ' (Free)'}`,
+                  }))}
+              />
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button variant="ghost" className="flex-1" onClick={() => setMergingTab(null)} disabled={saving}>
+                Cancel
+              </Button>
+              <Button className="flex-1" onClick={handleMergeTable} disabled={saving || !mergeTargetTableId} isLoading={saving}>
+                {saving ? 'Merging…' : 'Merge tables'}
+              </Button>
+            </div>
+          </>
+        )}
+      </Dialog>
 
       {/* Toast Overlay */}
       <AnimatePresence>

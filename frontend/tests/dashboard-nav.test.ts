@@ -9,8 +9,8 @@ describe('sidebar groups', () => {
     expect(labels('both', 'owner')).toEqual([
       'Home: Home',
       'Hotel: Rooms, Bookings, Billing',
-      'Restaurant: Menu, Orders, Kitchen Display, Billing',
-      'Manage: Staff, Analytics, Settings',
+      'Restaurant: Menu, Orders, Kitchen Display, Inventory, Billing',
+      'Manage: Staff, Finance, Analytics, Settings',
     ]);
   });
 
@@ -18,11 +18,12 @@ describe('sidebar groups', () => {
     expect(labels('hotel', 'owner').join(' | ')).not.toMatch(/Restaurant/);
     expect(labels('restaurant', 'owner').join(' | ')).not.toMatch(/Hotel/);
     expect(labels('hotel', 'owner')).toContain('Hotel: Rooms, Bookings, Billing');
-    expect(labels('restaurant', 'owner')).toContain('Restaurant: Menu, Orders, Kitchen Display, Billing');
+    expect(labels('restaurant', 'owner')).toContain('Restaurant: Menu, Orders, Kitchen Display, Inventory, Billing');
   });
 
   it('each role sees only its own pages', () => {
     expect(labels('both', 'front_desk')).toEqual(['Home: Home', 'Hotel: Rooms, Bookings, Billing', 'Restaurant: Billing']); // the cashier for both
+    expect(labels('both', 'cashier')).toEqual(['Restaurant: Billing']); // optional restaurant-billing-only cashier
     expect(labels('both', 'waiter')).toEqual(['Restaurant: Orders, Kitchen Display']); // the kitchen board, but no billing
     expect(labels('both', 'kitchen')).toEqual(['Restaurant: Kitchen Display']);
     expect(labels('both', 'manager')).toEqual(labels('both', 'owner'));
@@ -135,5 +136,20 @@ describe('breadcrumbs', () => {
     expect(canOpen('/dashboard/hotel', 'both', 'waiter')).toBe(false);
     expect(canOpen('/dashboard/restaurant/overview', 'both', 'owner')).toBe(true);
     expect(canOpen('/dashboard/restaurant/overview', 'hotel', 'owner')).toBe(false);
+  });
+
+  it('supports cashier role, finance page, and nested /hotel/* and /restaurant/* aliases', () => {
+    expect(landingFor('both', 'cashier')).toBe('/dashboard/billing/restaurant');
+    expect(canOpen('/dashboard/billing/restaurant', 'both', 'cashier')).toBe(true);
+    expect(canOpen('/dashboard/billing/hotel', 'both', 'cashier')).toBe(false);
+    expect(canOpen('/dashboard/finance', 'both', 'owner')).toBe(true);
+    expect(canOpen('/dashboard/finance', 'both', 'front_desk')).toBe(false);
+    expect(canOpen('/dashboard/hotel/rooms', 'both', 'front_desk', 'hotel')).toBe(true);
+    expect(canOpen('/dashboard/restaurant/orders', 'both', 'waiter')).toBe(true);
+    expect(canOpen('/dashboard/restaurant/inventory', 'both', 'owner')).toBe(true);
+    expect(trail('/dashboard/hotel/rooms')).toBe('Home > Hotel > Rooms');
+    expect(trail('/dashboard/restaurant/orders')).toBe('Home > Restaurant > Orders');
+    expect(trail('/dashboard/hotel/guests/3f2b8c1e-0000-4000-8000-000000000000')).toBe('Home > Hotel > Bookings > Guest profile');
+    expect(trail('/dashboard/finance')).toBe('Home > Finance');
   });
 });

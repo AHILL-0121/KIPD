@@ -9,6 +9,7 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { useQuery } from '@/hooks/use-query';
 import { useLive } from '@/lib/use-live';
 import { useTenantInfo } from '@/contexts/tenant-context';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 import { formatCurrency } from '@/lib/currency';
 import { orderStatus } from '@/lib/order-status';
 
@@ -31,6 +32,7 @@ interface TableRow {
 }
 
 export default function RestaurantOverviewPage() {
+  const m = useAppMessages();
   const { info } = useTenantInfo();
   const outlets = useMemo(() => info?.outlets ?? [], [info?.outlets]);
   const [selectedOutletId, setSelectedOutletId] = useState<string>('all');
@@ -53,7 +55,7 @@ export default function RestaurantOverviewPage() {
   useLive(refreshAll, selectedOutletId !== 'all' ? selectedOutletId : info?.id ?? null);
 
   if (isLoading && !orders) {
-    return <LoadingState message="Loading restaurant overview..." />;
+    return <LoadingState message={m.common.loading} />;
   }
 
   const orderList = Array.isArray(orders) ? orders : [];
@@ -74,7 +76,7 @@ export default function RestaurantOverviewPage() {
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="section-title">Restaurant Overview</h1>
+          <h1 className="section-title">{m.dashboard.restaurantOverview}</h1>
           <p className="section-sub">Floor occupancy, live kitchen queue, and open tabs</p>
         </div>
 
@@ -86,7 +88,7 @@ export default function RestaurantOverviewPage() {
               onChange={(e) => setSelectedOutletId(e.target.value)}
               className="min-h-[44px] px-3 py-2 rounded-xl border border-stone-300 bg-white text-sm text-ink"
             >
-              <option value="all">All Outlets ({outlets.length})</option>
+              <option value="all">{m.common.allOutlets} ({outlets.length})</option>
               {outlets.map((o) => (
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}
@@ -97,21 +99,21 @@ export default function RestaurantOverviewPage() {
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-medium text-ink hover:border-amber min-h-[44px]"
           >
             <QrCode className="w-4 h-4 text-amber-deep" aria-hidden="true" />
-            Orders
+            {m.nav.orders}
           </Link>
           <Link
             href={kdsHref}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-stone-200 text-sm font-medium text-ink hover:border-amber min-h-[44px]"
           >
             <ChefHat className="w-4 h-4 text-sage-deep" aria-hidden="true" />
-            Kitchen Display
+            {m.nav.kitchenDisplay}
           </Link>
           <Link
             href="/dashboard/billing/restaurant"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber text-white text-sm font-medium hover:bg-amber-deep min-h-[44px]"
           >
             <Receipt className="w-4 h-4" aria-hidden="true" />
-            Food Billing
+            {m.nav.foodBills}
           </Link>
         </div>
       </div>
@@ -143,7 +145,7 @@ export default function RestaurantOverviewPage() {
             <QrCode className="w-5 h-5" aria-hidden="true" />
           </CardIcon>
           <div className="text-3xl font-bold text-ink mb-1">{openOrders.length}</div>
-          <div className="text-sm font-medium text-ink-soft">Active Orders</div>
+          <div className="text-sm font-medium text-ink-soft">{m.orders.title}</div>
           <div className="text-xs text-ink-muted mt-1">Running tabs and open tickets</div>
         </Card>
 
@@ -178,7 +180,7 @@ export default function RestaurantOverviewPage() {
                 <div key={o.id} className="flex items-center justify-between p-3 rounded-xl bg-cream border border-stone-200">
                   <div>
                     <div className="font-medium text-ink">
-                      {o.table?.tableNumber ? `Table ${o.table.tableNumber}` : o.type.replace('_', ' ')}
+                      {o.table?.tableNumber ? `${m.orders.tablePrefix} ${o.table.tableNumber}` : o.type.replace('_', ' ')}
                     </div>
                     <div className="text-xs text-ink-muted">
                       {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

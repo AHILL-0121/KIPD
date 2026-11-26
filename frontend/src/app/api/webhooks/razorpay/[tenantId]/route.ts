@@ -87,7 +87,14 @@ export async function POST(request: NextRequest, { params }: { params: { tenantI
       select id from saved
     `);
     const recorded = ((result as unknown as { rows: unknown[] }).rows ?? []).length > 0;
-    if (recorded) return NextResponse.json({ received: true });
+    if (recorded) {
+      await db.execute(sql`
+        update upi_payment_intents
+        set status = 'paid', razorpay_payment_id = ${payment.id}, updated_at = now()
+        where bill_id = ${billId} and tenant_id = ${tenantId} and status = 'created'
+      `);
+      return NextResponse.json({ received: true });
+    }
 
     // Not recorded: either we already have this payment (a retry), or the bill cannot take it (already paid, cancelled,
     // or the link was for more than is now owed). Real money may still have moved, so never lose track of it.

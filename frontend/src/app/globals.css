@@ -154,19 +154,31 @@ body:has(button:hover) #cursor-ring {
 
 .section-title {
   font-family: var(--font-sans);
-  font-size: 1.75rem;
+  font-size: 1.45rem;
+  line-height: 1.25;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: #18202E;
-  margin-top: 12px;
+  margin-top: 4px;
 }
 
 .section-sub {
-  font-size: 1rem;
+  font-size: 0.9375rem;
   color: #5B6678;
   margin-top: 6px;
   max-width: 700px;
   line-height: 1.5;
+}
+
+@media (min-width: 640px) {
+  .section-title {
+    font-size: 1.75rem;
+    margin-top: 12px;
+  }
+
+  .section-sub {
+    font-size: 1rem;
+  }
 }
 
 /* ─── SCROLLBAR ──────────────────────────────────────────── */

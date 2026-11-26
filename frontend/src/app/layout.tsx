@@ -7,6 +7,7 @@ import { ConfirmHost } from '@/components/ui/confirm'
 import { NetworkBanner } from '@/components/ui/network-banner'
 import { AndroidUpdateBanner } from '@/components/ui/android-update-banner'
 import { MotionProvider } from '@/components/ui/motion-provider'
+import { I18nProvider } from '@/components/ui/i18n-provider'
 
 // Bundled with the app (npm @fontsource) rather than fetched from Google at build time, so builds work offline and in CI.
 
@@ -50,13 +51,15 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
         <body className="font-sans bg-cream text-ink antialiased">
-          <MotionProvider>
-            <NetworkBanner />
-            <AndroidUpdateBanner />
-            {children}
-            <Toaster />
-            <ConfirmHost />
-          </MotionProvider>
+          <I18nProvider>
+            <MotionProvider>
+              <NetworkBanner />
+              <AndroidUpdateBanner />
+              {children}
+              <Toaster />
+              <ConfirmHost />
+            </MotionProvider>
+          </I18nProvider>
         </body>
       </html>
     </ClerkProvider>
