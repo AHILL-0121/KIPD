@@ -5,7 +5,7 @@ import { db } from '@/db';
 import { tenants, staff } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { HttpError, forbidden, unauthorized } from '@/lib/http';
-import { IMPERSONATE_COOKIE, verifyImpersonateToken } from '@/lib/impersonate';
+import { IMPERSONATE_COOKIE, verifyImpersonateTokenMeta } from '@/lib/impersonate';
 
 export type Role = 'owner' | 'manager' | 'front_desk' | 'waiter' | 'kitchen' | 'cashier';
 
@@ -29,6 +29,8 @@ export interface TenantContext {
   isPlatformAdmin: boolean;
   /** True while a platform admin is acting on a tenant via signed impersonation cookie. */
   isImpersonating?: boolean;
+  /** Epoch ms when the current impersonation cookie expires. */
+  impersonateExpiresAt?: number;
   /** State of the tenant this user belongs to. Anything but 'active' blocks tenant routes. */
   tenantStatus: 'active' | 'suspended' | 'deleted' | 'missing';
   /** IANA time zone of the tenant. Decides what "today" means. */
@@ -106,17 +108,18 @@ export async function getTenantContext(): Promise<TenantContext | null> {
     let contextData: TenantContext | null = null;
 
     if (isPlatformAdmin) {
-      const impersonatedTenantId = await verifyImpersonateToken(impersonateCookie, userId);
-      if (impersonatedTenantId) {
+      const imp = await verifyImpersonateTokenMeta(impersonateCookie, userId);
+      if (imp) {
         return {
-          tenantId: impersonatedTenantId,
+          tenantId: imp.tenantId,
           userId,
           role: 'owner',
           userName,
           isPlatformAdmin: true,
           isImpersonating: true,
+          impersonateExpiresAt: imp.expiresAt,
           areas: 'both',
-          ...(await tenantStateOf(impersonatedTenantId)),
+          ...(await tenantStateOf(imp.tenantId)),
         };
       }
 

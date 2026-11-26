@@ -91,6 +91,55 @@ function DashboardShell({ children }: { children: ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showMoreNav, setShowMoreNav] = useState(false);
   const [exitingImpersonate, setExitingImpersonate] = useState(false);
+  const [remainingMin, setRemainingMin] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState<{
+    enabled: boolean;
+    message: string;
+    tone: 'info' | 'warning';
+    linkUrl: string | null;
+    linkLabel: string | null;
+    updatedAt?: string;
+  } | null>(null);
+  const [dismissedAnnouncement, setDismissedAnnouncement] = useState(false);
+
+  useEffect(() => {
+    if (!info?.impersonating || !info.impersonateExpiresAt) {
+      setRemainingMin(null);
+      return;
+    }
+    const updateCountdown = () => {
+      const diff = (info.impersonateExpiresAt ?? 0) - Date.now();
+      if (diff <= 0) {
+        setRemainingMin('Expired');
+        return;
+      }
+      const mins = Math.floor(diff / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      setRemainingMin(`${mins}:${String(secs).padStart(2, '0')} left`);
+    };
+    updateCountdown();
+    const id = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(id);
+  }, [info?.impersonating, info?.impersonateExpiresAt]);
+
+  useEffect(() => {
+    fetch('/api/platform/announcement')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.enabled && data?.message) {
+          setAnnouncement(data);
+          try {
+            const dismissedKey = localStorage.getItem('kipd-dismissed-announcement');
+            if (dismissedKey && dismissedKey === (data.updatedAt || data.message)) {
+              setDismissedAnnouncement(true);
+            }
+          } catch {
+            /* ignore storage errors */
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const exitImpersonation = async () => {
     setExitingImpersonate(true);
@@ -418,6 +467,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
             >
               <span>
                 Impersonating <strong>{tenantName || 'tenant'}</strong> as Platform Admin (audited)
+                {remainingMin ? ` · ${remainingMin}` : ''}
               </span>
               <button
                 type="button"
@@ -426,6 +476,46 @@ function DashboardShell({ children }: { children: ReactNode }) {
                 className="px-3 py-1 rounded-lg bg-white text-amber-deep font-semibold text-xs hover:bg-amber-pale transition-colors"
               >
                 {exitingImpersonate ? 'Exiting…' : 'Exit impersonation'}
+              </button>
+            </div>
+          )}
+          {announcement && announcement.enabled && announcement.message && !dismissedAnnouncement && (
+            <div
+              role="region"
+              aria-label="Platform announcement"
+              className={`px-4 md:px-8 py-2 text-xs md:text-sm flex items-center justify-between gap-3 border-b ${
+                announcement.tone === 'warning'
+                  ? 'bg-amber-pale border-amber/30 text-amber-deep'
+                  : 'bg-stone-100 border-stone-200 text-ink'
+              }`}
+            >
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <span className="font-medium">{announcement.message}</span>
+                {announcement.linkUrl && (
+                  <a
+                    href={announcement.linkUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline font-semibold hover:opacity-80"
+                  >
+                    {announcement.linkLabel || 'Learn more'}
+                  </a>
+                )}
+              </div>
+              <button
+                type="button"
+                aria-label="Dismiss announcement"
+                onClick={() => {
+                  setDismissedAnnouncement(true);
+                  try {
+                    localStorage.setItem('kipd-dismissed-announcement', announcement.updatedAt || announcement.message);
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+                className="p-1 rounded hover:bg-black/5 shrink-0"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
           )}

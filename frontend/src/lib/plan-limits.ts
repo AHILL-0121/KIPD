@@ -1,6 +1,6 @@
 import { and, count, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { outlets, rooms, staff, staffInvites, tables, tenants } from '@/db/schema';
+import { outlets, platformSettings, rooms, staff, staffInvites, tables, tenants } from '@/db/schema';
 import { HttpError } from '@/lib/http';
 
 export type PlanTier = 'basic' | 'pro' | 'enterprise';
@@ -32,6 +32,34 @@ export function getPlanLimits(plan: string | null | undefined): PlanQuotas {
     return PLAN_LIMITS[plan];
   }
   return PLAN_LIMITS.basic;
+}
+
+/** Reads platform-overridden quotas from `platform_settings` (`plans`) if present, falling back to `PLAN_LIMITS`. */
+export async function getConfiguredPlanLimits(plan: PlanTier): Promise<PlanQuotas> {
+  const def = PLAN_LIMITS[plan];
+  try {
+    const [row] = await db
+      .select({ value: platformSettings.value })
+      .from(platformSettings)
+      .where(eq(platformSettings.key, 'plans'))
+      .limit(1);
+    const plansObj = (row?.value as Record<string, unknown> | undefined)?.plans as Record<string, unknown> | undefined;
+    const rawQuotas = (plansObj?.[plan] as Record<string, unknown> | undefined)?.quotas as Record<string, unknown> | undefined;
+    if (!rawQuotas) return def;
+    const pick = (k: keyof PlanQuotas) => {
+      if (rawQuotas[k] === null) return null;
+      const n = Number(rawQuotas[k]);
+      return Number.isFinite(n) && n >= 0 ? Math.floor(n) : def[k];
+    };
+    return {
+      rooms: pick('rooms'),
+      tables: pick('tables'),
+      outlets: pick('outlets'),
+      staff: pick('staff'),
+    };
+  } catch {
+    return def;
+  }
 }
 
 async function countResource(
@@ -75,7 +103,7 @@ export async function getTenantPlanUsage(tenantId: string) {
     .limit(1);
 
   const plan = (tenant?.plan === 'pro' || tenant?.plan === 'enterprise' ? tenant.plan : 'basic') as PlanTier;
-  const limits = PLAN_LIMITS[plan];
+  const limits = await getConfiguredPlanLimits(plan);
   const [roomsCount, tablesCount, outletsCount, staffCount] = await Promise.all([
     countResource(tenantId, 'rooms'),
     countResource(tenantId, 'tables'),
@@ -108,7 +136,8 @@ export async function enforcePlanLimit(
     .limit(1);
 
   const plan = (tenant?.plan === 'pro' || tenant?.plan === 'enterprise' ? tenant.plan : 'basic') as PlanTier;
-  const limit = PLAN_LIMITS[plan][resource];
+  const limits = await getConfiguredPlanLimits(plan);
+  const limit = limits[resource];
   if (limit === null) return;
 
   const current = await countResource(tenantId, resource, opts);

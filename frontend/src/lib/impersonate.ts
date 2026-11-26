@@ -49,14 +49,20 @@ export async function signImpersonateToken(tenantId: string, adminClerkId: strin
   return `${payload}.${sig}`;
 }
 
+export interface ImpersonationTokenMeta {
+  tenantId: string;
+  adminClerkId: string;
+  expiresAt: number;
+}
+
 /**
  * Verifies signature, expiry, UUID shape, and matching platform admin user ID.
- * Returns the impersonated `tenantId` or null when invalid/expired.
+ * Returns `{ tenantId, adminClerkId, expiresAt }` or null when invalid/expired.
  */
-export async function verifyImpersonateToken(
+export async function verifyImpersonateTokenMeta(
   token: string | undefined | null,
   expectedAdminClerkId?: string,
-): Promise<string | null> {
+): Promise<ImpersonationTokenMeta | null> {
   if (!token) return null;
   const parts = token.split('.');
   if (parts.length !== 4) return null;
@@ -70,5 +76,17 @@ export async function verifyImpersonateToken(
   const secret = getSecret();
   if (!secret) return null;
   const expectedSig = await signPayload(`${tenantId}.${adminClerkId}.${expiresStr}`, secret);
-  return timingSafeEqualStr(sig, expectedSig) ? tenantId : null;
+  return timingSafeEqualStr(sig, expectedSig) ? { tenantId, adminClerkId, expiresAt } : null;
+}
+
+/**
+ * Verifies signature, expiry, UUID shape, and matching platform admin user ID.
+ * Returns the impersonated `tenantId` or null when invalid/expired.
+ */
+export async function verifyImpersonateToken(
+  token: string | undefined | null,
+  expectedAdminClerkId?: string,
+): Promise<string | null> {
+  const meta = await verifyImpersonateTokenMeta(token, expectedAdminClerkId);
+  return meta ? meta.tenantId : null;
 }

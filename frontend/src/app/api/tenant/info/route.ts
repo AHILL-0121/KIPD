@@ -56,7 +56,9 @@ export async function GET(request: NextRequest) {
       role: context.role,
       userName: context.userName,
       areas: context.areas ?? 'both',
+      isPlatformAdmin: Boolean(context.isPlatformAdmin),
       impersonating: Boolean(context.isImpersonating),
+      impersonateExpiresAt: context.impersonateExpiresAt ?? null,
       outlets: tenantOutlets.map(o => ({ id: o.id, name: o.name })),
     });
   } catch (error) {

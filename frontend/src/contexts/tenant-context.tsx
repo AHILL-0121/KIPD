@@ -13,6 +13,7 @@ export interface TenantInfo {
   userName: string;
   isPlatformAdmin?: boolean;
   impersonating?: boolean;
+  impersonateExpiresAt?: number | null;
   outlets: { id: string; name: string }[];
 }
 

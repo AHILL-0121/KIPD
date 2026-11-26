@@ -1,7 +1,15 @@
 import { NextRequest } from 'next/server';
 import { requireTenant } from '@/lib/auth';
 import { HttpError, forbidden, handleError } from '@/lib/http';
-import { heartbeat, registerClient, send, unregisterClient } from '@/lib/realtime';
+import {
+  fetchRedisEventsSince,
+  flushEventsToClient,
+  getRealtimeRedis,
+  heartbeat,
+  registerClient,
+  send,
+  unregisterClient,
+} from '@/lib/realtime';
 import { ownedOutlet } from '@/lib/tenant-scope';
 
 export const dynamic = 'force-dynamic';
@@ -30,8 +38,11 @@ export async function GET(request: NextRequest, { params }: { params: { outletId
 
   let clientId = '';
   let timer: ReturnType<typeof setInterval> | undefined;
+  let redisTimer: ReturnType<typeof setInterval> | undefined;
+  let lastSeenTs = Date.now();
   const cleanup = () => {
     if (timer) clearInterval(timer);
+    if (redisTimer) clearInterval(redisTimer);
     if (clientId) unregisterClient(clientId);
   };
 
@@ -43,6 +54,16 @@ export async function GET(request: NextRequest, { params }: { params: { outletId
       timer = setInterval(() => {
         try { heartbeat(controller); } catch { cleanup(); }
       }, 25_000);
+      if (getRealtimeRedis()) {
+        redisTimer = setInterval(() => {
+          void fetchRedisEventsSince(channel, lastSeenTs).then((events) => {
+            if (events.length > 0) {
+              lastSeenTs = events[events.length - 1].ts;
+              flushEventsToClient(clientId, events);
+            }
+          });
+        }, 1_000);
+      }
       request.signal.addEventListener('abort', cleanup);
     },
     cancel: cleanup,
