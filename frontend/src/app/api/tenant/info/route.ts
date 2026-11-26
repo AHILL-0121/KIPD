@@ -10,6 +10,22 @@ export async function GET(request: NextRequest) {
     const { tenantId } = context;
 
     if (!tenantId) {
+      if (context.isPlatformAdmin) {
+        return NextResponse.json({
+          id: '',
+          name: '',
+          slug: '',
+          type: 'both',
+          plan: '',
+          status: 'active',
+          role: 'platform_admin',
+          userName: context.userName,
+          areas: 'both',
+          isPlatformAdmin: true,
+          impersonating: false,
+          outlets: [],
+        });
+      }
       return NextResponse.json({ error: 'No tenant' }, { status: 401 });
     }
 

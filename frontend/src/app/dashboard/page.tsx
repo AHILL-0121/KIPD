@@ -100,7 +100,12 @@ export default function DashboardPage() {
   useEffect(() => {
     if (isTenantLoading) return;
     if (!info) {
+      setError('NO_TENANT');
       setIsReady(true);
+      return;
+    }
+    if (info.isPlatformAdmin && !info.id) {
+      router.replace('/admin');
       return;
     }
     if (info.role === 'kitchen') { router.replace('/dashboard/kds'); return; }
