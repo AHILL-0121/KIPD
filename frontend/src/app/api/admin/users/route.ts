@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClerkClient } from '@clerk/backend';
+import { db } from '@/db';
+import { tenants } from '@/db/schema';
 import { requirePlatformAdmin } from '@/lib/auth';
 import { handleError } from '@/lib/http';
 
@@ -16,7 +18,7 @@ type ClerkUserShape = {
   banned?: boolean;
 };
 
-function formatUser(user: ClerkUserShape) {
+function formatUser(user: ClerkUserShape, tenantNameMap: Map<string, string>) {
   const isPlatformAdmin = user.publicMetadata?.platform_admin === true;
   const tenantId = user.publicMetadata?.tenant_id as string | undefined;
   const role = isPlatformAdmin ? 'platform_admin' : tenantId ? 'tenant_admin' : 'staff';
@@ -28,10 +30,11 @@ function formatUser(user: ClerkUserShape) {
     role,
     status: user.banned ? 'suspended' : 'active',
     createdAt: user.createdAt,
-    lastSignInAt: user.lastSignInAt,
+    lastSignInAt: user.lastSignInAt ?? null,
     publicMetadata: user.publicMetadata,
     isPlatformAdmin,
     tenantId,
+    tenantName: tenantId ? tenantNameMap.get(tenantId) ?? null : null,
   };
 }
 
@@ -48,9 +51,12 @@ export async function GET(request: NextRequest) {
     const sp = new URL(request.url).searchParams;
     const hasPagination = sp.has('page') || sp.has('limit');
 
+    const tenantRows = await db.select({ id: tenants.id, name: tenants.name }).from(tenants);
+    const tenantNameMap = new Map(tenantRows.map((t) => [t.id, t.name]));
+
     if (!hasPagination) {
       const users = await clerk.users.getUserList({ limit: 100 });
-      return NextResponse.json(users.data.map((u) => formatUser(u as ClerkUserShape)));
+      return NextResponse.json(users.data.map((u) => formatUser(u as ClerkUserShape, tenantNameMap)));
     }
 
     const page = Math.max(1, Number.parseInt(sp.get('page') || '1', 10) || 1);
@@ -64,7 +70,7 @@ export async function GET(request: NextRequest) {
         offset: (page - 1) * pageSize,
         ...(search ? { query: search } : {}),
       });
-      const items = users.data.map((u) => formatUser(u as ClerkUserShape));
+      const items = users.data.map((u) => formatUser(u as ClerkUserShape, tenantNameMap));
       const total = typeof users.totalCount === 'number' ? users.totalCount : items.length;
       return NextResponse.json({
         items,
@@ -75,16 +81,27 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Role lives in Clerk publicMetadata, so filter across the fetched batch before paging.
-    const users = await clerk.users.getUserList({
-      limit: 100,
-      ...(search ? { query: search } : {}),
-    });
-    const filtered = users.data
-      .map((u) => formatUser(u as ClerkUserShape))
-      .filter((u) => u.role === roleFilter);
-    const total = filtered.length;
-    const items = filtered.slice((page - 1) * pageSize, page * pageSize);
+    // Role lives in Clerk publicMetadata; iterate across pages (capped safely at 1000 users) so >100 accounts work cleanly.
+    const matched: ReturnType<typeof formatUser>[] = [];
+    const batchLimit = 100;
+    let offset = 0;
+    while (offset < 1000) {
+      const batch = await clerk.users.getUserList({
+        limit: batchLimit,
+        offset,
+        ...(search ? { query: search } : {}),
+      });
+      if (!batch.data.length) break;
+      for (const u of batch.data) {
+        const formatted = formatUser(u as ClerkUserShape, tenantNameMap);
+        if (formatted.role === roleFilter) matched.push(formatted);
+      }
+      if (batch.data.length < batchLimit) break;
+      offset += batchLimit;
+    }
+
+    const total = matched.length;
+    const items = matched.slice((page - 1) * pageSize, page * pageSize);
 
     return NextResponse.json({
       items,

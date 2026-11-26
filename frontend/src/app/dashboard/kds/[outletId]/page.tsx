@@ -5,10 +5,12 @@ import { useLive } from '@/lib/use-live';
 import { useSound } from '@/hooks/use-sound';
 import { HoldButton } from '@/components/ui/hold-button';
 import { Button } from '@/components/ui/button';
-import { Clock, MapPin, AlertCircle, Volume2, VolumeX, ChefHat, Package } from 'lucide-react';
+import { Clock, MapPin, AlertCircle, Volume2, VolumeX, ChefHat, Package, Printer } from 'lucide-react';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 import { useTenantInfo } from '@/contexts/tenant-context';
 import { useAppMessages } from '@/components/ui/i18n-provider';
+import { formatKotEscPos, formatKotText } from '@/lib/escpos';
+import { printKotSlip } from '@/lib/thermal-print';
 
 interface KDSOrder {
   id: string;
@@ -151,9 +153,39 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
                     <span>{late ? 'Late: ' : ''}{timeAgo}</span>
                   </div>
                 </div>
-                <span className={`rounded-full px-3 py-1 text-sm font-semibold ${isNew ? 'bg-amber-pale text-amber-deep' : 'bg-stone-100 text-ink-soft'}`}>
-                  {isNew ? m.kds.new : order.status === 'preparing' ? m.kds.preparing : order.status}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-label={`Print KOT for ${where}`}
+                    title="Print KOT (80mm / ESC-POS)"
+                    onClick={() => {
+                      const outletName = info?.outlets?.find((o) => o.id === params.outletId)?.name;
+                      const kotPayload = {
+                        propertyName: info?.name,
+                        outletName,
+                        orderId: order.id,
+                        tableNumber: order.tableNumber,
+                        roomNumber: order.roomNumber,
+                        type: order.type,
+                        source: order.source,
+                        createdAt: order.createdAt,
+                        specialInstructions: order.specialInstructions,
+                        items: order.items,
+                      };
+                      printKotSlip(
+                        formatKotText(kotPayload),
+                        formatKotEscPos(kotPayload),
+                        Boolean((navigator as Navigator & { serial?: unknown }).serial),
+                      );
+                    }}
+                    className="p-2 rounded-lg text-ink-muted hover:text-ink hover:bg-stone-100 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+                  >
+                    <Printer className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                  <span className={`rounded-full px-3 py-1 text-sm font-semibold ${isNew ? 'bg-amber-pale text-amber-deep' : 'bg-stone-100 text-ink-soft'}`}>
+                    {isNew ? m.kds.new : order.status === 'preparing' ? m.kds.preparing : order.status}
+                  </span>
+                </div>
               </div>
 
               <ul className="space-y-3 mb-5">

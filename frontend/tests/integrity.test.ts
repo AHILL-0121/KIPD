@@ -167,7 +167,7 @@ describe('the database refuses cross-tenant references', () => {
     const missing = await q<{ table_name: string }>(`
       select t.table_name from information_schema.tables t
       where t.table_schema = 'public' and t.table_type = 'BASE TABLE'
-        and t.table_name not in ('tenants', 'platform_audit_log', 'platform_settings')
+        and t.table_name not in ('tenants', 'platform_audit_log', 'platform_settings', 'access_requests')
         and not exists (select 1 from information_schema.columns c
                         where c.table_schema = 'public' and c.table_name = t.table_name
                           and c.column_name = 'tenant_id' and c.is_nullable = 'NO')`);

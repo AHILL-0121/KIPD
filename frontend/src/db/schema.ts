@@ -77,6 +77,23 @@ export const platformSettings = pgTable('platform_settings', {
   updatedAt: tstz('updated_at').defaultNow().notNull(),
 });
 
+export const accessRequests = pgTable('access_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  email: text('email').notNull(),
+  company: text('company').notNull(),
+  message: text('message').default('').notNull(),
+  status: text('status').notNull().default('pending'), // pending, approved, rejected
+  notes: text('notes'),
+  reviewedBy: text('reviewed_by'),
+  reviewedAt: tstz('reviewed_at'),
+  tenantId: uuid('tenant_id').references(() => tenants.id),
+  createdAt: tstz('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('idx_access_requests_status_created').on(t.status, t.createdAt),
+  check('access_requests_status_check', sql`${t.status} in ('pending','approved','rejected')`),
+]);
+
 // ============= PROPERTIES =============
 export const properties = pgTable('properties', {
   id: uuid('id').primaryKey().defaultRandom(),

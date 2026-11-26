@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, isNull } from 'drizzle-orm';
+import { z } from 'zod';
 import { db } from '@/db';
 import { platformAuditLog, tenants } from '@/db/schema';
 import { requirePlatformAdmin } from '@/lib/auth';
@@ -7,6 +8,10 @@ import { assertUuid, handleError, notFound } from '@/lib/http';
 import { IMPERSONATE_COOKIE, signImpersonateToken, verifyImpersonateToken } from '@/lib/impersonate';
 
 export const dynamic = 'force-dynamic';
+
+const startSchema = z.object({
+  reason: z.string().trim().max(300).optional(),
+});
 
 function clearAuthCacheFor(userId: string) {
   const g = globalThis as { authCache?: Map<string, unknown> };
@@ -20,6 +25,17 @@ export async function POST(request: NextRequest, { params }: { params: { tenantI
   try {
     const admin = await requirePlatformAdmin();
     const tenantId = assertUuid(params.tenantId, 'Tenant');
+
+    let reason: string | undefined;
+    try {
+      const rawText = await request.text();
+      if (rawText.trim()) {
+        const parsed = startSchema.safeParse(JSON.parse(rawText));
+        if (parsed.success && parsed.data.reason) reason = parsed.data.reason;
+      }
+    } catch {
+      /* optional body */
+    }
 
     const [tenant] = await db
       .select({ id: tenants.id, name: tenants.name, status: tenants.status })
@@ -40,6 +56,7 @@ export async function POST(request: NextRequest, { params }: { params: { tenantI
       metadata: {
         tenantName: tenant.name,
         ip: forwardedFor,
+        ...(reason ? { reason } : {}),
       },
     });
 

@@ -134,6 +134,13 @@
       "when": 1795830000000,
       "tag": "0018_pay_at_table",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795900000000,
+      "tag": "0019_admin_platform",
+      "breakpoints": true
     }
   ]
 }

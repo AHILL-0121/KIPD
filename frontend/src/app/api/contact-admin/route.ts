@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { db } from '@/db';
+import { accessRequests } from '@/db/schema';
 import { HttpError, handleError, parseJson } from '@/lib/http';
 import { sendEmail } from '@/lib/email';
 import { enforceRateLimit } from '@/lib/rate-limit';
@@ -15,9 +17,9 @@ const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 /**
- * Public "request access" form. Sends the request to CONTACT_ADMIN_EMAIL.
- * Before this, the message was only printed to the server log and then discarded while the visitor was told it was sent.
- * Open to signed-out visitors, so it is rate limited per caller: 3 requests in 10 minutes, 10 in a day.
+ * Public "request access" form. Persists every submission into `access_requests`
+ * for the Platform Admin inbox and forwards by email when `CONTACT_ADMIN_EMAIL` is set.
+ * Rate limited per caller: 3 requests in 10 minutes, 10 in a day.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -25,19 +27,27 @@ export async function POST(request: NextRequest) {
     await enforceRateLimit(request, 'contact-admin-day', 10, 86400);
     const { name, email, company, message } = await parseJson(request, schema);
 
-    const to = process.env.CONTACT_ADMIN_EMAIL;
-    if (!to) throw new HttpError(503, 'Access requests are not set up yet. Please try again later.');
-
-    const sent = await sendEmail({
-      to,
-      subject: `New Kipd access request from ${company.slice(0, 80)}`,
-      html: `<h2>New Kipd access request</h2>
-        <p><strong>Name:</strong> ${esc(name)}</p>
-        <p><strong>Email:</strong> ${esc(email)}</p>
-        <p><strong>Company:</strong> ${esc(company)}</p>
-        <p><strong>Message:</strong></p><p>${esc(message || 'No message provided').replace(/\n/g, '<br>')}</p>`,
+    await db.insert(accessRequests).values({
+      name,
+      email: email.toLowerCase(),
+      company,
+      message: message || '',
+      status: 'pending',
     });
-    if (!sent.success) throw new HttpError(502, 'We could not send your request. Please try again.');
+
+    const to = process.env.CONTACT_ADMIN_EMAIL;
+    if (to) {
+      const sent = await sendEmail({
+        to,
+        subject: `New Kipd access request from ${company.slice(0, 80)}`,
+        html: `<h2>New Kipd access request</h2>
+          <p><strong>Name:</strong> ${esc(name)}</p>
+          <p><strong>Email:</strong> ${esc(email)}</p>
+          <p><strong>Company:</strong> ${esc(company)}</p>
+          <p><strong>Message:</strong></p><p>${esc(message || 'No message provided').replace(/\n/g, '<br>')}</p>`,
+      });
+      if (!sent.success) throw new HttpError(502, 'We could not send your request. Please try again.');
+    }
 
     return NextResponse.json({ success: true, message: 'Request received. We will be in touch soon.' });
   } catch (error) {

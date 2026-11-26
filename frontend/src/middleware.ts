@@ -32,8 +32,11 @@ export default authMiddleware({
     '/api/maintenance',
     '/api/android/version',
     '/monitoring(.*)',
-    // Razorpay calls this without a Clerk session. The route verifies Razorpay's signature itself.
+    // Webhooks run without a Clerk session; each verifies its own cryptographic signature.
     '/api/webhooks/razorpay/(.*)',
+    '/api/webhooks/clerk(.*)',
+    // Global soft announcement banner (non-sensitive platform notice).
+    '/api/platform/announcement',
     // Guest-facing: the QR menu, ordering and hotel booking. These routes resolve the tenant from the
     // slug in the link, are rate limited, and expose nothing except the public menu / room types.
     '/api/public/(.*)',
