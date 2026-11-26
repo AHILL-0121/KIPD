@@ -86,4 +86,27 @@ describe('dashboard layout', () => {
     expect(within(dialog).getByText('Log out')).toBeTruthy();
     expect(within(dialog).getByRole('combobox', { name: 'Language' })).toBeTruthy();
   });
+
+  it('redirects a non-impersonating platform admin straight to /admin without rendering Kitchen fallback', async () => {
+    pathname = '/dashboard';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ id: '', name: '', type: 'both', role: 'platform_admin', userName: 'Admin', isPlatformAdmin: true }))
+      )
+    );
+    render(<DashboardLayout><p>page</p></DashboardLayout>);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/admin'));
+    expect(screen.queryByText('Kitchen Display')).toBeNull();
+    expect(screen.queryByText('Your property')).toBeNull();
+  });
+
+  it('shows a clean no-workspace screen on 401 instead of falling back to Kitchen role', async () => {
+    pathname = '/dashboard';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'No tenant' }), { status: 401 })));
+    render(<DashboardLayout><p>page</p></DashboardLayout>);
+    expect(await screen.findByText('No workspace assigned')).toBeTruthy();
+    expect(screen.queryByText('Kitchen Display')).toBeNull();
+    expect(replace).not.toHaveBeenCalledWith('/sign-in');
+  });
 });

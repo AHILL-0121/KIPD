@@ -11,6 +11,7 @@ export interface TenantInfo {
   role: string;
   areas: 'hotel' | 'restaurant' | 'both';
   userName: string;
+  isPlatformAdmin?: boolean;
   impersonating?: boolean;
   outlets: { id: string; name: string }[];
 }

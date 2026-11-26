@@ -155,21 +155,19 @@ function DashboardShell({ children }: { children: ReactNode }) {
   const allowed = canOpen(pathname ?? '', tenantType, userRole, userAreas);
   const start = landingFor(tenantType, userRole, userAreas);
 
+  const isUnscopedAdmin = Boolean(info?.isPlatformAdmin && !info.id);
+
   useEffect(() => {
     if (isLoading) return;
-    if (!info) {
-      router.replace('/sign-in');
+    if (isUnscopedAdmin) {
+      router.replace('/admin');
       return;
     }
-    // Handle "No tenant" error — redirect admins/orphaned users to admin
-    if ((info as any).error === 'No tenant') {
-      router.push('/admin/tenants');
-      return;
-    }
+    if (!info) return;
     if (!allowed && pathname !== start) {
       router.replace(start);
     }
-  }, [isLoading, info, allowed, pathname, start, router]);
+  }, [isLoading, isUnscopedAdmin, info, allowed, pathname, start, router]);
 
   const filteredNav = visibleNav(tenantType, userRole, userAreas);
   const groups = navGroups(filteredNav);
@@ -236,8 +234,34 @@ function DashboardShell({ children }: { children: ReactNode }) {
     };
   }, [filteredNav, pathname]);
 
-  if (isLoading) {
-    return <LoadingState message="Verifying your dashboard permissions..." />;
+  if (isLoading || isUnscopedAdmin) {
+    return <LoadingState message={isUnscopedAdmin ? 'Redirecting to Platform Admin...' : 'Verifying your dashboard permissions...'} />;
+  }
+
+  if (!info) {
+    return (
+      <div className="min-h-screen bg-cream flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white border border-stone-200 rounded-2xl p-8 text-center space-y-4">
+          <div className="w-12 h-12 rounded-xl bg-amber-pale text-amber-deep grid place-items-center mx-auto">
+            <ConciergeBell className="w-6 h-6" aria-hidden="true" />
+          </div>
+          <h1 className="text-xl font-bold text-ink">No workspace assigned</h1>
+          <p className="text-sm text-ink-muted">
+            Your account is signed in, but it isn&apos;t linked to a hotel or restaurant workspace yet.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => signOut(() => router.push('/sign-in'))}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-stone-300 text-sm font-medium text-ink hover:bg-stone-100"
+            >
+              <LogOut className="w-4 h-4" aria-hidden="true" />
+              {m.nav.logout}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

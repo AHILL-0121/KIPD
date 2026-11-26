@@ -64,3 +64,4 @@ plan/
 *.md
 !README.md
 !.github/**/*.md
+docs/
