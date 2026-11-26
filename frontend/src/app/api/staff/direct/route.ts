@@ -11,7 +11,7 @@ import { enforcePlanLimit } from '@/lib/plan-limits';
 const schema = z.object({
   name: z.string().trim().min(1).max(100),
   email: z.string().trim().toLowerCase().email().max(200),
-  role: z.enum(['manager', 'front_desk', 'waiter', 'kitchen']),
+  role: z.enum(['manager', 'front_desk', 'waiter', 'kitchen', 'cashier']),
   password: z.string().min(10, 'Password must be at least 10 characters').max(128),
   areas: z.enum(['hotel', 'restaurant', 'both']).optional().default('both'),
 });

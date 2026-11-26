@@ -13,6 +13,16 @@ import { formatCurrency } from '@/lib/currency';
 import { useLive } from '@/lib/use-live';
 import { orderStatus } from '@/lib/order-status';
 import { useTenantInfo } from '@/contexts/tenant-context';
+import { useAppLocale, useAppMessages, type Locale } from '@/components/ui/i18n-provider';
+
+const DATE_LOCALE_MAP: Record<Locale, string> = {
+  en: 'en-US',
+  hi: 'hi-IN',
+  ta: 'ta-IN',
+  te: 'te-IN',
+  ml: 'ml-IN',
+  kn: 'kn-IN',
+};
 
 type TenantType = 'hotel' | 'restaurant' | 'both';
 
@@ -59,6 +69,7 @@ function StatCard({ href, icon, tone, value, label, note }: {
 }
 
 export default function DashboardPage() {
+  const { locale, messages: m } = useAppLocale();
   const router = useRouter();
   const { info, isLoading: isTenantLoading } = useTenantInfo();
   const [stats, setStats] = useState<DashboardStats>(EMPTY);
@@ -145,13 +156,13 @@ export default function DashboardPage() {
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="mb-6 flex flex-row items-start md:items-center justify-between gap-3">
         <div>
-          <h1 className="section-title">Home</h1>
-          <p className="section-sub">Today&apos;s operations at a glance</p>
+          <h1 className="section-title">{m.dashboard.homeTitle}</h1>
+          <p className="section-sub">{m.dashboard.homeSubtitle}</p>
         </div>
         <div className="flex flex-col items-end gap-1 md:flex-row md:items-center md:gap-3 flex-shrink-0">
-          <StatusIndicator label={stale ? 'Reconnecting' : 'Live updates'} status={stale ? 'idle' : 'live'} />
+          <StatusIndicator label={stale ? m.dashboard.reconnecting : m.dashboard.liveUpdates} status={stale ? 'idle' : 'live'} />
           <span className="text-xs md:text-sm text-right text-ink-muted leading-tight">
-            {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+            {new Date().toLocaleDateString(DATE_LOCALE_MAP[locale], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
           </span>
         </div>
       </div>
@@ -164,7 +175,7 @@ export default function DashboardPage() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-stone-200 text-sm font-medium text-ink hover:border-amber transition-colors min-h-[44px]"
             >
               <Hotel className="w-4 h-4 text-amber-deep" aria-hidden="true" />
-              Hotel Overview
+              {m.dashboard.hotelOverview}
             </Link>
           )}
           {showRestaurant && (
@@ -173,7 +184,7 @@ export default function DashboardPage() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-stone-200 text-sm font-medium text-ink hover:border-amber transition-colors min-h-[44px]"
             >
               <UtensilsCrossed className="w-4 h-4 text-sage-deep" aria-hidden="true" />
-              Restaurant Overview
+              {m.dashboard.restaurantOverview}
             </Link>
           )}
         </div>
@@ -187,7 +198,7 @@ export default function DashboardPage() {
 
       {brandNew && (
         <Card hover={false} className="mb-8">
-          <h2 className="text-lg font-semibold text-ink">Set up your property</h2>
+          <h2 className="text-lg font-semibold text-ink">{m.dashboard.setupTitle}</h2>
           <CardDescription>Nothing to show yet. These three steps get you to your first booking or order.</CardDescription>
           <ol className="mt-5 grid gap-3 md:grid-cols-3">
             {steps.map((s, i) => {
@@ -222,8 +233,8 @@ export default function DashboardPage() {
             tone="amber"
             icon={<Hotel className="w-5 h-5" aria-hidden="true" />}
             value={`${stats.occupancyRate}%`}
-            label="Occupancy rate"
-            note={`${stats.occupiedRooms} of ${stats.totalRooms} rooms occupied`}
+            label={m.dashboard.occupancyRate}
+            note={`${stats.occupiedRooms} ${m.dashboard.of} ${stats.totalRooms} ${m.dashboard.roomsOccupiedSuffix}`}
           />
         )}
 
@@ -233,8 +244,8 @@ export default function DashboardPage() {
             tone="sage"
             icon={<Calendar className="w-5 h-5" aria-hidden="true" />}
             value={stats.todayCheckIns}
-            label="Check-ins today"
-            note={`${stats.todayCheckOuts} check-out${stats.todayCheckOuts === 1 ? '' : 's'} today`}
+            label={m.dashboard.checkInsToday}
+            note={`${stats.todayCheckOuts} ${stats.todayCheckOuts === 1 ? m.dashboard.checkOutToday : m.dashboard.checkOutsToday}`}
           />
         )}
 
@@ -244,10 +255,10 @@ export default function DashboardPage() {
             tone="amber"
             icon={<UtensilsCrossed className="w-5 h-5" aria-hidden="true" />}
             value={stats.activeOrders}
-            label="Open orders"
+            label={m.dashboard.openOrders}
             note={stats.activeOrders > 0
-              ? <span className="font-medium text-amber-deep">In progress. View orders</span>
-              : 'All caught up'}
+              ? <span className="font-medium text-amber-deep">{m.dashboard.inProgressOrders}</span>
+              : m.dashboard.allCaughtUp}
           />
         )}
 
@@ -255,8 +266,8 @@ export default function DashboardPage() {
           tone="stone"
           icon={<IndianRupee className="w-5 h-5" aria-hidden="true" />}
           value={formatCurrency(stats.todayRevenue)}
-          label="Collected today"
-          note={`${formatCurrency(stats.weekRevenue)} over the last 7 days`}
+          label={m.dashboard.collectedToday}
+          note={`${formatCurrency(stats.weekRevenue)} ${m.dashboard.last7Days}`}
         />
       </div>
 
@@ -264,8 +275,8 @@ export default function DashboardPage() {
         {/* Today's arrivals */}
         {showHotel && (
           <Card hover={false}>
-            <CardTitle>Today&apos;s arrivals</CardTitle>
-            <CardDescription>Expected check-ins</CardDescription>
+            <CardTitle>{m.dashboard.todaysArrivals}</CardTitle>
+            <CardDescription>{m.dashboard.expectedCheckIns}</CardDescription>
 
             <div className="mt-6 space-y-3">
               {stats.arrivals && stats.arrivals.length > 0 ? (
@@ -274,7 +285,7 @@ export default function DashboardPage() {
                     <div className="min-w-0">
                       <div className="font-medium text-ink truncate">{arrival.guest?.name || 'Guest'}</div>
                       <div className="text-sm text-ink-muted">
-                        Room {arrival.room?.roomNumber} • {arrival.room?.roomType?.name || 'Standard'}
+                        {m.rooms.roomPrefix} {arrival.room?.roomNumber} • {arrival.room?.roomType?.name || 'Standard'}
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
@@ -282,7 +293,7 @@ export default function DashboardPage() {
                         {new Date(arrival.checkInDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                       </div>
                       <Badge variant={arrival.status === 'checked_in' ? 'sage' : 'amber'} className="mt-1">
-                        {arrival.status === 'checked_in' ? 'Checked in' : 'Expected'}
+                        {arrival.status === 'checked_in' ? m.dashboard.checkedIn : m.dashboard.expected}
                       </Badge>
                     </div>
                   </div>
@@ -290,7 +301,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="text-center py-8 text-ink-muted">
                   <Calendar className="w-12 h-12 mx-auto mb-2 opacity-30" aria-hidden="true" />
-                  <p>No arrivals scheduled for today</p>
+                  <p>{m.dashboard.noArrivals}</p>
                 </div>
               )}
             </div>
@@ -300,8 +311,8 @@ export default function DashboardPage() {
         {/* Recent orders */}
         {showRestaurant && (
           <Card hover={false}>
-            <CardTitle>Recent orders</CardTitle>
-            <CardDescription>Restaurant activity in the last 24 hours</CardDescription>
+            <CardTitle>{m.dashboard.recentOrders}</CardTitle>
+            <CardDescription>{m.dashboard.recentOrdersSub}</CardDescription>
 
             <div className="mt-6 space-y-3">
               {stats.recentOrders && stats.recentOrders.length > 0 ? (
@@ -311,10 +322,10 @@ export default function DashboardPage() {
                     <div key={order.id ?? index} className="flex items-center justify-between gap-3 p-3 bg-cream rounded-xl">
                       <div className="min-w-0">
                         <div className="font-medium text-ink">
-                          {order.type === 'take_away' ? 'Takeaway' : order.tableId ? `Table ${order.table?.tableNumber}` : `Room ${order.room?.roomNumber}`}
+                          {order.type === 'take_away' ? m.dashboard.takeaway : order.tableId ? `${m.orders.tablePrefix} ${order.table?.tableNumber}` : `${m.rooms.roomPrefix} ${order.room?.roomNumber}`}
                         </div>
                         <div className="text-sm text-ink-muted">
-                          {order.type === 'take_away' ? 'Takeaway' : order.type === 'room_service' ? 'Room service' : 'Dine-in'} • {formatCurrency(order.totalAmount)}
+                          {order.type === 'take_away' ? m.dashboard.takeaway : order.type === 'room_service' ? m.dashboard.roomService : m.dashboard.dineIn} • {formatCurrency(order.totalAmount)}
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
@@ -329,7 +340,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="text-center py-8 text-ink-muted">
                   <UtensilsCrossed className="w-12 h-12 mx-auto mb-2 opacity-30" aria-hidden="true" />
-                  <p>No orders in the last 24 hours</p>
+                  <p>{m.dashboard.noRecentOrders}</p>
                 </div>
               )}
             </div>

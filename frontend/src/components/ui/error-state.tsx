@@ -4,6 +4,7 @@ import { KipdIllustration } from '@/components/mascot/KipdIllustration';
 import { Button } from './button';
 import { RefreshCw, Home } from 'lucide-react';
 import Link from 'next/link';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 
 interface ErrorStateProps {
   title?: string;
@@ -15,23 +16,26 @@ interface ErrorStateProps {
 }
 
 export function ErrorState({ 
-  title = "Something Went Wrong",
-  message = "We encountered an error while processing your request. Please try again.",
+  title,
+  message,
   error,
   reset,
   showHomeButton = true,
   size = 'md'
 }: ErrorStateProps) {
+  const m = useAppMessages();
+  const displayTitle = title ?? m.common.somethingWrong;
+  const displayMessage = message ?? m.common.error;
   return (
     <div className="flex flex-col items-center justify-center py-16 px-4">
       <KipdIllustration scene="error" size={size} />
       
       <h2 className="text-3xl font-display text-ink mt-6 mb-2">
-        {title}
+        {displayTitle}
       </h2>
       
       <p className="text-ink-muted text-center max-w-md mb-2">
-        {message}
+        {displayMessage}
       </p>
       
       {error?.digest && (
@@ -44,7 +48,7 @@ export function ErrorState({
         {reset && (
           <Button variant="primary" onClick={reset} className="gap-2">
             <RefreshCw className="h-4 w-4" />
-            Try Again
+            {m.common.tryAgain}
           </Button>
         )}
         
@@ -52,7 +56,7 @@ export function ErrorState({
           <Link href="/">
             <Button variant="ghost" className="gap-2">
               <Home className="h-4 w-4" />
-              Go Home
+              {m.common.goHome}
             </Button>
           </Link>
         )}

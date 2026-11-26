@@ -11,6 +11,7 @@ import { toast } from '@/components/ui/toaster';
 import { LoadingState } from '@/components/ui/loading-state';
 import { ErrorState } from '@/components/ui/error-state';
 import { useQuery } from '@/hooks/use-query';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 import { Plus, Mail, MoreVertical } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -18,13 +19,14 @@ interface StaffMember {
   id: string;
   name: string;
   email: string;
-  role: 'owner' | 'manager' | 'front_desk' | 'waiter' | 'kitchen';
+  role: 'owner' | 'manager' | 'front_desk' | 'waiter' | 'kitchen' | 'cashier';
   areas?: 'hotel' | 'restaurant' | 'both';
   isActive: boolean;
   createdAt: string;
 }
 
 export default function StaffPage() {
+  const m = useAppMessages();
   const { data: staffList, isLoading, error: loadError, refetch } = useQuery<StaffMember[]>('/api/staff');
   const staff = staffList ?? [];
 
@@ -44,6 +46,7 @@ export default function StaffPage() {
     owner: { badge: 'amber', label: 'Owner' },
     manager: { badge: 'terra', label: 'Manager' },
     front_desk: { badge: 'sage', label: 'Front Desk' },
+    cashier: { badge: 'sage', label: 'Cashier' },
     waiter: { badge: 'stone', label: 'Waiter' },
     kitchen: { badge: 'stone', label: 'Kitchen' },
   };
@@ -89,13 +92,13 @@ export default function StaffPage() {
     <div className="p-4 md:p-8 overflow-x-hidden min-h-screen" onClick={() => setActiveMenu(null)}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="section-title">Staff Management</h1>
-          <p className="section-sub">Manage team members and access</p>
+          <h1 className="section-title">{m.staff.title}</h1>
+          <p className="section-sub">{m.staff.subtitle}</p>
         </div>
 
         <Button onClick={() => setShowInviteModal(true)}>
           <Plus className="w-4 h-4" />
-          Invite Staff
+          {m.staff.invite}
         </Button>
       </div>
 
@@ -159,7 +162,7 @@ export default function StaffPage() {
                 <div className="flex items-center justify-between pt-4 border-t border-stone-200">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <Badge variant={config.badge as any}>
-                      {config.label}
+                      {(m.staff.roles as Record<string, string>)[member.role] ?? config.label}
                     </Badge>
                     {member.areas && member.areas !== 'both' && (
                       <Badge variant="stone">
@@ -169,7 +172,7 @@ export default function StaffPage() {
                   </div>
 
                   <Badge variant={member.isActive ? 'sage' : 'stone'} dot>
-                    {member.isActive ? 'Active' : 'Inactive'}
+                    {member.isActive ? m.common.active : m.common.inactive}
                   </Badge>
                 </div>
               </Card>
@@ -257,6 +260,7 @@ export default function StaffPage() {
                   options={[
                     { value: 'manager', label: 'Manager' },
                     { value: 'front_desk', label: 'Front Desk' },
+                    { value: 'cashier', label: 'Cashier (Restaurant Billing)' },
                     { value: 'waiter', label: 'Waiter' },
                     { value: 'kitchen', label: 'Kitchen Staff' },
                   ]}

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/toaster';
 import { confirmDialog } from '@/components/ui/confirm';
 import { useTenantInfo } from '@/contexts/tenant-context';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 import { PaymentSettingsCard } from '@/components/settings/payment-settings-card';
 import { RazorpayConnectionCard } from '@/components/settings/razorpay-connection-card';
 import { TaxSettingsCard } from '@/components/settings/tax-settings-card';
@@ -25,6 +26,7 @@ import { motion } from 'framer-motion';
 import { useEffect } from 'react';
 
 export default function SettingsPage() {
+  const m = useAppMessages();
   const { reload: reloadTenantInfo } = useTenantInfo();
   const [propertySettings, setPropertySettings] = useState({
     name: '',
@@ -164,8 +166,8 @@ export default function SettingsPage() {
   return (
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="mb-8">
-        <h1 className="section-title">Settings</h1>
-        <p className="section-sub">Configure your property and integrations</p>
+        <h1 className="section-title">{m.settings.title}</h1>
+        <p className="section-sub">{m.settings.subtitle}</p>
       </div>
 
       <div className="max-w-4xl space-y-8">
@@ -176,20 +178,20 @@ export default function SettingsPage() {
               <Building2 className="w-5 h-5 text-white" />
             </div>
             <div>
-              <CardTitle>Property Settings</CardTitle>
-              <CardDescription>Basic information and policies</CardDescription>
+              <CardTitle>{m.settings.propertyTitle}</CardTitle>
+              <CardDescription>{m.settings.propertySub}</CardDescription>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="Property Name"
+              label={m.settings.propertyName}
               value={propertySettings.name}
               onChange={(e) => setPropertySettings({ ...propertySettings, name: e.target.value })}
             />
 
             <Select
-              label="Currency"
+              label={m.settings.currency}
               value={propertySettings.currency}
               onChange={(e) => setPropertySettings({ ...propertySettings, currency: e.target.value })}
               options={[
@@ -201,21 +203,21 @@ export default function SettingsPage() {
             />
 
             <Input
-              label="Check-in Time"
+              label={m.settings.checkInTime}
               type="time"
               value={propertySettings.checkInTime}
               onChange={(e) => setPropertySettings({ ...propertySettings, checkInTime: e.target.value })}
             />
 
             <Input
-              label="Check-out Time"
+              label={m.settings.checkOutTime}
               type="time"
               value={propertySettings.checkOutTime}
               onChange={(e) => setPropertySettings({ ...propertySettings, checkOutTime: e.target.value })}
             />
 
             <Select
-              label="Timezone"
+              label={m.settings.timezone}
               value={propertySettings.timezone}
               onChange={(e) => setPropertySettings({ ...propertySettings, timezone: e.target.value })}
               options={[
@@ -231,7 +233,7 @@ export default function SettingsPage() {
           <div className="flex justify-end mt-6 pt-6 border-t border-stone-200">
             <Button onClick={saveSettings}>
               <Save className="w-4 h-4" />
-              Save Changes
+              {m.settings.saveChanges}
             </Button>
           </div>
         </Card>
@@ -248,8 +250,8 @@ export default function SettingsPage() {
           <Card hover={false}>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <CardTitle>Plan &amp; Usage</CardTitle>
-                <CardDescription>Resource quotas enforced on your current subscription tier</CardDescription>
+                <CardTitle>{m.settings.planTitle}</CardTitle>
+                <CardDescription>{m.settings.planSub}</CardDescription>
               </div>
               <Badge variant="amber" className="capitalize">
                 {planUsage.plan} plan
@@ -280,14 +282,14 @@ export default function SettingsPage() {
                 <Utensils className="w-5 h-5 text-white" />
               </div>
               <div>
-                <CardTitle>Outlets</CardTitle>
-                <CardDescription>Manage restaurants and service points</CardDescription>
+                <CardTitle>{m.settings.outletsTitle}</CardTitle>
+                <CardDescription>{m.settings.outletsSub}</CardDescription>
               </div>
             </div>
 
             <Button variant="ghost" size="sm" onClick={() => setShowAddOutlet((s) => !s)}>
               <Plus className="w-4 h-4" />
-              Add Outlet
+              {m.settings.addOutlet}
             </Button>
           </div>
 
@@ -337,7 +339,7 @@ export default function SettingsPage() {
 
                 <div className="flex items-center gap-3">
                   <Badge variant={outlet.isActive ? 'sage' : 'stone'} dot>
-                    {outlet.isActive ? 'Active' : 'Inactive'}
+                    {outlet.isActive ? m.common.active : m.common.inactive}
                   </Badge>
                   <button
                     type="button"
@@ -361,8 +363,8 @@ export default function SettingsPage() {
                 <SettingsIcon className="w-5 h-5 text-ink" />
               </div>
               <div>
-                <CardTitle>Thermal Receipt UI Editor</CardTitle>
-                <CardDescription>Customize the 80mm ESC/POS hardware printout typography.</CardDescription>
+                <CardTitle>{m.settings.receiptTitle}</CardTitle>
+                <CardDescription>{m.settings.receiptSub}</CardDescription>
               </div>
             </div>
           </div>
@@ -394,7 +396,7 @@ export default function SettingsPage() {
                 />
               </div>
               <Button onClick={saveReceiptSettings} variant="sage" className="w-full mt-4">
-                <Save className="w-4 h-4" /> Save Layout Changes
+                <Save className="w-4 h-4" /> {m.settings.saveLayout}
               </Button>
             </div>
 

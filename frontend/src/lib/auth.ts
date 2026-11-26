@@ -1,11 +1,13 @@
 import { auth } from '@clerk/nextjs/server';
+import { cookies } from 'next/headers';
 import { createClerkClient } from '@clerk/backend';
 import { db } from '@/db';
 import { tenants, staff } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { HttpError, forbidden, unauthorized } from '@/lib/http';
+import { IMPERSONATE_COOKIE, verifyImpersonateToken } from '@/lib/impersonate';
 
-export type Role = 'owner' | 'manager' | 'front_desk' | 'waiter' | 'kitchen';
+export type Role = 'owner' | 'manager' | 'front_desk' | 'waiter' | 'kitchen' | 'cashier';
 
 /** Who may do what. Mirrors the sidebar in dashboard/layout.tsx, but enforced on the server. */
 export const ROLES = {
@@ -13,10 +15,10 @@ export const ROLES = {
   frontDesk: ['owner', 'manager', 'front_desk'] as Role[],
   orders: ['owner', 'manager', 'waiter'] as Role[],
   kitchen: ['owner', 'manager', 'waiter', 'kitchen'] as Role[],
-  // Taking money and seeing payment settings. Waiters are not included (decided 2026-11-14).
-  billing: ['owner', 'manager', 'front_desk'] as Role[],
-  // Closing a table's tab hands its bill to the front desk. That is part of serving the table, so waiters may.
-  settleTab: ['owner', 'manager', 'front_desk', 'waiter'] as Role[],
+  // Taking money and seeing payment settings. Waiters are not included (decided 2026-11-14). Cashier handles restaurant billing.
+  billing: ['owner', 'manager', 'front_desk', 'cashier'] as Role[],
+  // Closing a table's tab hands its bill to billing. Waiters and cashiers may.
+  settleTab: ['owner', 'manager', 'front_desk', 'waiter', 'cashier'] as Role[],
 };
 
 export interface TenantContext {
@@ -25,6 +27,8 @@ export interface TenantContext {
   role: string;
   userName: string;
   isPlatformAdmin: boolean;
+  /** True while a platform admin is acting on a tenant via signed impersonation cookie. */
+  isImpersonating?: boolean;
   /** State of the tenant this user belongs to. Anything but 'active' blocks tenant routes. */
   tenantStatus: 'active' | 'suspended' | 'deleted' | 'missing';
   /** IANA time zone of the tenant. Decides what "today" means. */
@@ -35,10 +39,10 @@ export interface TenantContext {
 
 /**
  * Throws 403 if the user's areas don't include the requested area.
- * Only applies to front_desk, waiter and kitchen roles — owners and managers always pass.
+ * Applies to front_desk, waiter, kitchen, and cashier roles — owners and managers always pass.
  */
 export function requireArea(ctx: TenantContext, area: 'hotel' | 'restaurant'): void {
-  const restricted: Role[] = ['front_desk', 'waiter', 'kitchen'];
+  const restricted: Role[] = ['front_desk', 'waiter', 'kitchen', 'cashier'];
   if (!restricted.includes(ctx.role as Role)) return; // owner/manager: always allowed
   if (ctx.areas === 'both') return;
   if (ctx.areas === area) return;
@@ -70,8 +74,16 @@ export async function getTenantContext(): Promise<TenantContext | null> {
     return null;
   }
 
-  // 1. Check local TTL Cache
-  const cached = globalAny.authCache.get(userId);
+  // Read optional impersonation cookie cleanly (safe outside Next request scope, e.g., unit tests).
+  let impersonateCookie: string | undefined;
+  try {
+    impersonateCookie = cookies().get(IMPERSONATE_COOKIE)?.value;
+  } catch {
+    impersonateCookie = undefined;
+  }
+
+  // 1. Check local TTL Cache (skip cache when an impersonation cookie is present so start/exit are immediate)
+  const cached = !impersonateCookie ? globalAny.authCache.get(userId) : null;
   if (cached && cached.expiresAt > Date.now()) {
     return cached.data;
   }
@@ -94,6 +106,20 @@ export async function getTenantContext(): Promise<TenantContext | null> {
     let contextData: TenantContext | null = null;
 
     if (isPlatformAdmin) {
+      const impersonatedTenantId = await verifyImpersonateToken(impersonateCookie, userId);
+      if (impersonatedTenantId) {
+        return {
+          tenantId: impersonatedTenantId,
+          userId,
+          role: 'owner',
+          userName,
+          isPlatformAdmin: true,
+          isImpersonating: true,
+          areas: 'both',
+          ...(await tenantStateOf(impersonatedTenantId)),
+        };
+      }
+
       contextData = {
         tenantId: '',
         userId,

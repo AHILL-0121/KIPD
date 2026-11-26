@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { bills, guests } from '@/db/schema';
 import { ROLES, requireTenant, requireArea } from '@/lib/auth';
-import { HttpError, badRequest, handleError, parseJson } from '@/lib/http';
+import { HttpError, badRequest, forbidden, handleError, parseJson } from '@/lib/http';
 import { ownedBill, ownedBooking } from '@/lib/tenant-scope';
 import { nightsBetween } from '@/lib/stay-bill';
 import { MANUAL_METHODS, getPaymentSettings } from '@/lib/payment-settings';
@@ -40,10 +40,11 @@ const rupees = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionD
 
 export async function GET(request: NextRequest) {
   try {
-    const ctx = await requireTenant(ROLES.frontDesk);
+    const ctx = await requireTenant(ROLES.billing);
     const { tenantId, timezone } = ctx;
     const kind = request.nextUrl.searchParams.get('kind');
     if (kind && kind !== 'stay' && kind !== 'restaurant') throw badRequest('kind must be stay or restaurant');
+    if (ctx.role === 'cashier' && kind !== 'restaurant') throw forbidden();
     if (kind === 'stay') requireArea(ctx, 'hotel');
     if (kind === 'restaurant') requireArea(ctx, 'restaurant');
 
@@ -112,11 +113,12 @@ export async function POST(request: NextRequest) {
 // Record a payment against a bill. A part payment leaves the bill open as "partial"; paying the last of it closes it.
 export async function PATCH(request: NextRequest) {
   try {
-    const ctx = await requireTenant(ROLES.frontDesk);
+    const ctx = await requireTenant(ROLES.billing);
     const { tenantId, userId, userName } = ctx;
     const { billId, paymentMethod, amount, reference, note } = await parseJson(request, paySchema);
 
     const bill = await ownedBill(tenantId, billId);
+    if (ctx.role === 'cashier' && bill.kind !== 'restaurant') throw forbidden();
     if (bill.kind === 'stay') requireArea(ctx, 'hotel');
     if (bill.kind === 'restaurant') requireArea(ctx, 'restaurant');
     if (bill.status === 'paid') throw new HttpError(409, 'This bill is already paid');
@@ -204,9 +206,10 @@ export async function PATCH(request: NextRequest) {
 // Staff closed the payment dialog without waiting for the QR to be paid: stop it taking money.
 export async function DELETE(request: NextRequest) {
   try {
-    const { tenantId } = await requireTenant(ROLES.frontDesk);
+    const ctx = await requireTenant(ROLES.billing);
+    if (ctx.role === 'cashier') requireArea(ctx, 'restaurant');
     const qrId = request.nextUrl.searchParams.get('qr') ?? '';
-    const closed = await closePaymentQr(await getRazorpayAccount(tenantId), qrId, tenantId);
+    const closed = await closePaymentQr(await getRazorpayAccount(ctx.tenantId), qrId, ctx.tenantId);
     return NextResponse.json({ success: true, closed });
   } catch (error) {
     return handleError(error, 'Failed to close the QR code');

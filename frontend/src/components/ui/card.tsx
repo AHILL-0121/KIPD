@@ -21,7 +21,7 @@ export function Card({ children, className = '', hover = true, onClick }: CardPr
   return (
     <Component
       className={`
-        bg-white rounded-2xl p-6 shadow-md
+        bg-white rounded-2xl p-4 sm:p-6 shadow-md
         border border-stone-200
         transition-shadow duration-300
         ${hover ? 'hover:shadow-xl cursor-pointer' : ''}

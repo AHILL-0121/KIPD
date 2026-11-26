@@ -9,11 +9,13 @@ import {
   Settings,
   QrCode,
   ChefHat,
+  Package,
+  IndianRupee,
   type LucideIcon,
 } from 'lucide-react';
 
 export type TenantType = 'hotel' | 'restaurant' | 'both';
-export type StaffRole = 'owner' | 'manager' | 'front_desk' | 'waiter' | 'kitchen';
+export type StaffRole = 'owner' | 'manager' | 'front_desk' | 'waiter' | 'kitchen' | 'cashier';
 export type AccessArea = 'hotel' | 'restaurant' | 'both';
 
 /** The areas of the dashboard. Hotel and Restaurant are the two businesses; Manage is shared. */
@@ -40,9 +42,11 @@ export const navigation: NavItem[] = [
   { name: 'Menu', href: '/dashboard/restaurant', icon: UtensilsCrossed, area: 'restaurant', types: ['restaurant', 'both'], roles: ['owner', 'manager'] },
   { name: 'Orders', href: '/dashboard/orders', icon: QrCode, area: 'restaurant', types: ['restaurant', 'both'], roles: ['owner', 'manager', 'waiter'] },
   { name: 'Kitchen Display', href: '/dashboard/kds', icon: ChefHat, area: 'restaurant', types: ['restaurant', 'both'], roles: ['owner', 'manager', 'waiter', 'kitchen'] },
-  // Front desk collects restaurant bills too (the waiter sends them over), so they see this one as the cashier.
-  { name: 'Billing', short: 'Food bills', href: '/dashboard/billing/restaurant', icon: Receipt, area: 'restaurant', types: ['restaurant', 'both'], roles: ['owner', 'manager', 'front_desk'] },
+  { name: 'Inventory', href: '/dashboard/restaurant/inventory', icon: Package, area: 'restaurant', types: ['restaurant', 'both'], roles: ['owner', 'manager'] },
+  // Front desk collects restaurant bills too (the waiter sends them over); optional cashier role is restaurant billing only.
+  { name: 'Billing', short: 'Food bills', href: '/dashboard/billing/restaurant', icon: Receipt, area: 'restaurant', types: ['restaurant', 'both'], roles: ['owner', 'manager', 'front_desk', 'cashier'] },
   { name: 'Staff', href: '/dashboard/staff', icon: Users, area: 'manage', types: ALL, roles: ['owner', 'manager'] },
+  { name: 'Finance', href: '/dashboard/finance', icon: IndianRupee, area: 'manage', types: ALL, roles: ['owner', 'manager'] },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, area: 'manage', types: ALL, roles: ['owner', 'manager'] },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings, area: 'manage', types: ALL, roles: ['owner', 'manager'] },
 ];
@@ -69,9 +73,29 @@ export function navGroups(items: NavItem[]) {
 export const landingFor = (type: TenantType, role: StaffRole, areas: AccessArea = 'both') =>
   visibleNav(type, role, areas)[0]?.href ?? '/dashboard';
 
+const NESTED_ROUTE_ALIASES: [string, string][] = [
+  ['/dashboard/hotel/rooms', '/dashboard/rooms'],
+  ['/dashboard/hotel/bookings', '/dashboard/bookings'],
+  ['/dashboard/hotel/billing', '/dashboard/billing/hotel'],
+  ['/dashboard/hotel/guests', '/dashboard/bookings'],
+  ['/dashboard/restaurant/orders', '/dashboard/orders'],
+  ['/dashboard/restaurant/kds', '/dashboard/kds'],
+  ['/dashboard/restaurant/billing', '/dashboard/billing/restaurant'],
+];
+
+function canonicalPath(pathname: string): string {
+  for (const [alias, canonical] of NESTED_ROUTE_ALIASES) {
+    if (pathname === alias || pathname.startsWith(`${alias}/`)) {
+      return canonical + pathname.slice(alias.length);
+    }
+  }
+  return pathname;
+}
+
 /** A page this person has no menu entry for is not theirs to open. Pages that are not in the menu are left alone. */
 export function canOpen(pathname: string, type: TenantType, role: StaffRole, areas: AccessArea = 'both') {
-  if (pathname === '/dashboard/hotel' || pathname.startsWith('/dashboard/hotel/')) {
+  const path = canonicalPath(pathname);
+  if (path === '/dashboard/hotel' || path.startsWith('/dashboard/hotel/')) {
     return (
       type !== 'restaurant' &&
       ['owner', 'manager', 'front_desk'].includes(role) &&
@@ -79,13 +103,13 @@ export function canOpen(pathname: string, type: TenantType, role: StaffRole, are
     );
   }
   const home = navigation[0];
-  const item = pathname === home.href
+  const item = path === home.href
     ? home
-    : navigation.slice(1).find(i => pathname === i.href || pathname.startsWith(`${i.href}/`));
+    : navigation.slice(1).find(i => path === i.href || path.startsWith(`${i.href}/`));
   return !item || visibleNav(type, role, areas).includes(item);
 }
 
-const CRUMB_LABELS: Record<string, string> = { qr: 'Table QR codes' };
+const CRUMB_LABELS: Record<string, string> = { qr: 'Table QR codes', guests: 'Guests', inventory: 'Inventory' };
 const UUID_START = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
 
 /**
@@ -94,21 +118,30 @@ const UUID_START = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
  */
 export function crumbsFor(pathname: string | null, type: TenantType, role: StaffRole, areas: AccessArea = 'both') {
   const visible = visibleNav(type, role, areas);
-  const crumbs = [{ label: 'Home', href: landingFor(type, role) }];
-  const path = pathname ?? '/dashboard';
-  if (path === '/dashboard' || path === '/dashboard/') return crumbs;
+  const crumbs = [{ label: 'Home', href: landingFor(type, role, areas) }];
+  const rawPath = pathname ?? '/dashboard';
+  if (rawPath === '/dashboard' || rawPath === '/dashboard/') return crumbs;
 
-  if (path === '/dashboard/hotel' || path.startsWith('/dashboard/hotel/')) {
+  if (rawPath === '/dashboard/hotel') {
     crumbs.push({ label: AREA_LABEL.hotel, href: visible.find(i => i.area === 'hotel')?.href ?? '/dashboard/rooms' });
     crumbs.push({ label: 'Overview', href: '/dashboard/hotel' });
     return crumbs;
   }
 
-  if (path === '/dashboard/restaurant/overview' || path.startsWith('/dashboard/restaurant/overview/')) {
+  if (rawPath.startsWith('/dashboard/hotel/guests')) {
+    crumbs.push({ label: AREA_LABEL.hotel, href: visible.find(i => i.area === 'hotel')?.href ?? '/dashboard/rooms' });
+    crumbs.push({ label: 'Bookings', href: '/dashboard/bookings' });
+    crumbs.push({ label: 'Guest profile', href: rawPath });
+    return crumbs;
+  }
+
+  if (rawPath === '/dashboard/restaurant/overview' || rawPath.startsWith('/dashboard/restaurant/overview/')) {
     crumbs.push({ label: AREA_LABEL.restaurant, href: visible.find(i => i.area === 'restaurant')?.href ?? '/dashboard/restaurant' });
     crumbs.push({ label: 'Overview', href: '/dashboard/restaurant/overview' });
     return crumbs;
   }
+
+  const path = canonicalPath(rawPath);
 
   // The menu page this one belongs to: the longest menu address the path starts with.
   const item = navigation.slice(1)

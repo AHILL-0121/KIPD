@@ -3,6 +3,7 @@
 import { Users, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/currency';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 import type { TableOption, TableTab } from './types';
 
 interface TableFloorCardProps {
@@ -18,6 +19,7 @@ export function TableFloorCard({
   onSelect,
   onOpenNewOrder,
 }: TableFloorCardProps) {
+  const m = useAppMessages();
   const isOccupied = Boolean(tab);
 
   return (
@@ -45,7 +47,7 @@ export function TableFloorCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col">
           <span className="text-[1.375rem] font-bold leading-tight text-ink group-hover:text-amber-deep transition-colors">
-            Table {table.tableNumber}
+            {m.orders.tablePrefix} {table.tableNumber}
           </span>
           {table.section && (
             <span className="text-xs font-semibold text-ink-muted mt-0.5">
@@ -54,7 +56,7 @@ export function TableFloorCard({
           )}
         </div>
         <Badge variant={isOccupied ? 'amber' : 'sage'} dot>
-          {isOccupied ? 'Occupied' : 'Available'}
+          {isOccupied ? m.orders.occupied : m.orders.available}
         </Badge>
       </div>
 
@@ -62,7 +64,7 @@ export function TableFloorCard({
       <div className="mt-2.5 space-y-1.5">
         <div className="flex items-center gap-1.5 text-xs text-ink-muted">
           <Users className="w-3.5 h-3.5 text-ink-soft shrink-0" aria-hidden="true" />
-          <span>Seats {table.capacity}</span>
+          <span>{m.orders.seatsPrefix} {table.capacity}</span>
         </div>
 
         {table.tags && table.tags.length > 0 && (
@@ -89,7 +91,7 @@ export function TableFloorCard({
         {isOccupied && tab ? (
           <>
             <span className="font-semibold text-ink">
-              {tab.tickets.length} {tab.tickets.length === 1 ? 'ticket' : 'tickets'}
+              {tab.tickets.length} {tab.tickets.length === 1 ? m.orders.ticketSingle : m.orders.ticketPlural}
             </span>
             <span className="font-bold text-amber-deep">
               {formatCurrency(tab.total)}
@@ -97,7 +99,7 @@ export function TableFloorCard({
           </>
         ) : (
           <span className="text-emerald-700 font-semibold flex items-center gap-1">
-            <Plus className="w-3.5 h-3.5" aria-hidden="true" /> Ready to seat
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" /> {m.orders.readyToSeat}
           </span>
         )}
       </div>

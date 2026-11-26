@@ -5,6 +5,7 @@ import { Wallet, Save, QrCode } from 'lucide-react';
 import { Card, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 
 const MANUAL = [
   { value: 'cash', label: 'Cash' },
@@ -25,6 +26,7 @@ interface Loaded {
 
 /** Settings > Payments: how this property takes money. Saved on the server, so every staff member sees the same choices. */
 export function PaymentSettingsCard() {
+  const msg = useAppMessages();
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [methods, setMethods] = useState<string[]>(MANUAL.map(m => m.value));
@@ -109,8 +111,8 @@ export function PaymentSettingsCard() {
           <Wallet className="w-5 h-5 text-white" aria-hidden="true" />
         </div>
         <div>
-          <CardTitle>Payments</CardTitle>
-          <CardDescription>How guests pay, and the deposit to suggest</CardDescription>
+          <CardTitle>{msg.settings.paymentsTitle}</CardTitle>
+          <CardDescription>{msg.settings.paymentsSub}</CardDescription>
         </div>
       </div>
 

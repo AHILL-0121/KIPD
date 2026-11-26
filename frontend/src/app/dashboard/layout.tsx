@@ -17,6 +17,8 @@ import {
 import { LoadingState } from '@/components/ui/loading-state';
 import { Dialog } from '@/components/ui/dialog';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
+import { LocaleSwitcher } from '@/components/ui/locale-switcher';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 import {
   canOpen,
   crumbsFor,
@@ -34,6 +36,7 @@ const ROLE_LABELS: Record<string, string> = {
   owner: 'Owner',
   manager: 'Manager',
   front_desk: 'Front Desk',
+  cashier: 'Cashier',
   waiter: 'Waiter',
   kitchen: 'Kitchen Staff',
 };
@@ -43,6 +46,39 @@ function DashboardShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { signOut } = useClerk();
   const { info, isLoading } = useTenantInfo();
+  const m = useAppMessages();
+
+  const translateArea = (area: string, fallback: string) =>
+    (m.areas as Record<string, string>)[area] ?? fallback;
+
+  const translateNav = (label: string) => {
+    const map: Record<string, string> = {
+      Home: m.nav.home,
+      Rooms: m.nav.rooms,
+      Bookings: m.nav.bookings,
+      Billing: m.nav.billing,
+      'Hotel bills': m.nav.hotelBills,
+      'Food bills': m.nav.foodBills,
+      Menu: m.nav.menu,
+      Orders: m.nav.orders,
+      'Kitchen Display': m.nav.kitchenDisplay,
+      Inventory: m.nav.inventory,
+      Staff: m.nav.staff,
+      Finance: m.nav.finance,
+      Analytics: m.nav.analytics,
+      Settings: m.nav.settings,
+      Overview: m.nav.overview,
+      'Guest profile': m.nav.guestProfile,
+      'Table QR codes': m.nav.tableQr,
+      Hotel: m.areas.hotel,
+      Restaurant: m.areas.restaurant,
+      Manage: m.areas.manage,
+    };
+    return map[label] ?? label;
+  };
+
+  const roleLabel = (r: string) =>
+    (m.staff.roles as Record<string, string>)[r] ?? ROLE_LABELS[r] ?? r;
 
   const tenantType: TenantType = (info?.type as TenantType) || 'both';
   const tenantName = info?.name || '';
@@ -54,6 +90,16 @@ function DashboardShell({ children }: { children: ReactNode }) {
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showMoreNav, setShowMoreNav] = useState(false);
+  const [exitingImpersonate, setExitingImpersonate] = useState(false);
+
+  const exitImpersonation = async () => {
+    setExitingImpersonate(true);
+    try {
+      await fetch('/api/admin/impersonate/current', { method: 'DELETE' });
+    } finally {
+      window.location.href = '/admin/tenants';
+    }
+  };
 
   useEffect(() => {
     try {
@@ -80,14 +126,16 @@ function DashboardShell({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (showMoreNav || document.body.style.overflow === 'hidden') return;
     if (window.scrollY === 0) setStartY(e.touches[0].clientY);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (showMoreNav || document.body.style.overflow === 'hidden') return;
     if (startY > 0) {
       const currentY = e.touches[0].clientY;
       const pullDistance = Math.max(0, currentY - startY);
-      if (pullDistance > 0 && pullDistance < 150) {
+      if (pullDistance > 12 && pullDistance < 150) {
         setPullY(pullDistance);
       }
     }
@@ -193,7 +241,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-cream pb-20 md:pb-0">
+    <div className="min-h-screen bg-cream pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-lg focus:bg-amber focus:px-4 focus:py-2 focus:text-white"
@@ -236,7 +284,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
                       gi > 0 ? 'pt-4' : ''
                     }`}
                   >
-                    {group.label}
+                    {translateArea(group.area, group.label)}
                   </p>
                 ))}
               {group.items.map((item) => {
@@ -248,11 +296,11 @@ function DashboardShell({ children }: { children: ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    title={isCollapsed ? `${group.label}: ${item.name}` : undefined}
+                    title={isCollapsed ? `${translateArea(group.area, group.label)}: ${translateNav(item.name)}` : undefined}
                     aria-current={isActive ? 'page' : undefined}
                     aria-label={
                       isCollapsed
-                        ? `${group.area === 'home' ? '' : `${group.label}: `}${item.name}`
+                        ? `${group.area === 'home' ? '' : `${translateArea(group.area, group.label)}: `}${translateNav(item.name)}`
                         : undefined
                     }
                     className={`flex items-center gap-3 h-11 rounded-lg px-3 font-medium whitespace-nowrap transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber ${
@@ -262,7 +310,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
                     }`}
                   >
                     <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
-                    {!isCollapsed && <span className="overflow-hidden">{item.name}</span>}
+                    {!isCollapsed && <span className="overflow-hidden">{translateNav(item.name)}</span>}
                   </Link>
                 );
               })}
@@ -271,11 +319,16 @@ function DashboardShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="border-t border-stone-200 pt-3 space-y-1.5">
+          {!isCollapsed && (
+            <div className="px-2 pb-1">
+              <LocaleSwitcher />
+            </div>
+          )}
           <button
             onClick={toggleCollapsed}
             aria-expanded={!isCollapsed}
-            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={isCollapsed ? m.nav.expandSidebar : m.nav.collapseSidebar}
+            title={isCollapsed ? m.nav.expandSidebar : m.nav.collapseSidebar}
             className="flex items-center gap-3 h-10 w-full rounded-lg px-3 font-medium text-ink-soft hover:bg-stone-100 hover:text-ink whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
           >
             {isCollapsed ? (
@@ -283,7 +336,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
             ) : (
               <PanelLeftClose className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
             )}
-            {!isCollapsed && <span>Collapse</span>}
+            {!isCollapsed && <span>{m.nav.collapse}</span>}
           </button>
           <div className={`flex items-center gap-3 px-2 py-1 ${isCollapsed ? 'justify-center' : ''}`}>
             <UserButton afterSignOutUrl="/sign-in" />
@@ -291,12 +344,12 @@ function DashboardShell({ children }: { children: ReactNode }) {
               <>
                 <div className="flex-1 min-w-0 overflow-hidden">
                   <div className="text-sm font-medium text-ink truncate">{userName || 'User'}</div>
-                  <div className="text-xs text-ink-muted">{ROLE_LABELS[userRole] || userRole}</div>
+                  <div className="text-xs text-ink-muted">{roleLabel(userRole)}</div>
                 </div>
                 <button
                   onClick={() => signOut(() => router.push('/sign-in'))}
-                  title="Log out"
-                  aria-label="Log out"
+                  title={m.nav.logout}
+                  aria-label={m.nav.logout}
                   className="p-2 text-ink-muted hover:text-terra hover:bg-terra-pale rounded-lg transition-colors flex-shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
                 >
                   <LogOut className="w-[18px] h-[18px]" aria-hidden="true" />
@@ -334,6 +387,24 @@ function DashboardShell({ children }: { children: ReactNode }) {
 
         {/* Main Route Children wrapped in ErrorBoundary */}
         <div style={pullY > 0 ? { transform: `translateY(${pullY * 0.5}px)` } : undefined}>
+          {info?.impersonating && (
+            <div
+              role="status"
+              className="bg-amber-deep text-white px-4 md:px-8 py-2 text-xs md:text-sm font-medium flex flex-wrap items-center justify-between gap-2"
+            >
+              <span>
+                Impersonating <strong>{tenantName || 'tenant'}</strong> as Platform Admin (audited)
+              </span>
+              <button
+                type="button"
+                disabled={exitingImpersonate}
+                onClick={exitImpersonation}
+                className="px-3 py-1 rounded-lg bg-white text-amber-deep font-semibold text-xs hover:bg-amber-pale transition-colors"
+              >
+                {exitingImpersonate ? 'Exiting…' : 'Exit impersonation'}
+              </button>
+            </div>
+          )}
           <nav
             aria-label="Breadcrumb"
             className="hidden md:block sticky top-0 z-30 bg-cream/95 backdrop-blur border-b border-stone-200 px-8 py-2.5"
@@ -346,14 +417,14 @@ function DashboardShell({ children }: { children: ReactNode }) {
                     {i > 0 && <ChevronRight className="w-4 h-4 mx-1 text-stone-400" aria-hidden="true" />}
                     {last ? (
                       <span aria-current="page" className="px-1.5 font-semibold text-ink">
-                        {c.label}
+                        {translateNav(c.label)}
                       </span>
                     ) : (
                       <Link
                         href={c.href}
                         className="px-1.5 py-1 rounded-md text-ink-soft hover:bg-stone-100 hover:text-ink hover:underline underline-offset-4"
                       >
-                        {c.label}
+                        {translateNav(c.label)}
                       </Link>
                     )}
                   </li>
@@ -362,17 +433,29 @@ function DashboardShell({ children }: { children: ReactNode }) {
             </ol>
           </nav>
 
-          {/* Mobile Profile & Role Identity Banner */}
-          <div className="md:hidden px-4 pt-5 pb-0 flex items-center justify-between text-[11px] font-mono tracking-wide uppercase text-ink-muted/80 z-40">
-            <div className="flex items-center gap-2 truncate">
-              <span className="font-semibold text-ink truncate">{tenantName || 'Property'}</span>
-              <span className="w-1 h-1 rounded-full bg-stone-300" />
-              <span className="text-amber font-semibold">{ROLE_LABELS[userRole] || userRole}</span>
+          {/* Mobile Profile & Role Identity Header */}
+          <header className="md:hidden sticky top-0 z-30 bg-cream/95 backdrop-blur border-b border-stone-200/80 px-4 pt-safe py-2.5 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-7 h-7 rounded-lg bg-amber text-white grid place-items-center shrink-0">
+                <ConciergeBell className="w-4 h-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-ink truncate leading-tight">{tenantName || 'Property'}</div>
+                <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wide text-ink-muted leading-tight truncate">
+                  <span className="text-amber-deep font-semibold shrink-0">{roleLabel(userRole)}</span>
+                  {mobileDisplayName ? (
+                    <>
+                      <span className="w-1 h-1 rounded-full bg-stone-300 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{mobileDisplayName}</span>
+                    </>
+                  ) : null}
+                </div>
+              </div>
             </div>
-            {mobileDisplayName ? (
-              <span className="text-ink-muted text-[10px] truncate max-w-[140px]">{mobileDisplayName}</span>
-            ) : null}
-          </div>
+            <div className="shrink-0">
+              <LocaleSwitcher compact />
+            </div>
+          </header>
 
           <ErrorBoundary>{children}</ErrorBoundary>
         </div>
@@ -381,7 +464,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
       {/* 4-Tab Mobile Navigation */}
       <nav
         aria-label="Main (mobile)"
-        className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex items-center justify-around px-2 pb-safe z-50 h-[64px] shadow-[0_-2px_10px_rgba(0,0,0,0.04)]"
+        className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-stone-200 flex items-center justify-around px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] z-50 min-h-[64px] shadow-[0_-2px_10px_rgba(0,0,0,0.04)]"
       >
         {primaryMobileTabs.map((item) => {
           const Icon = item.icon;
@@ -404,7 +487,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
                 aria-hidden="true"
               />
               <span className="text-[11px] leading-tight text-center truncate max-w-[72px]">
-                {item.short ?? item.name}
+                {translateNav(item.short ?? item.name)}
               </span>
             </Link>
           );
@@ -432,7 +515,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber" />
               )}
             </div>
-            <span className="text-[11px] leading-tight text-center">More</span>
+            <span className="text-[11px] leading-tight text-center">{m.nav.more}</span>
           </button>
         )}
       </nav>
@@ -444,32 +527,32 @@ function DashboardShell({ children }: { children: ReactNode }) {
         variant="drawer"
         labelledBy="more-nav-title"
       >
-        <div className="flex flex-col h-full bg-white max-h-[85vh]">
+        <div className="flex flex-col h-full bg-white">
           {/* Drawer Header */}
-          <div className="flex items-center justify-between p-5 border-b border-stone-200 shrink-0">
-            <div>
-              <h2 id="more-nav-title" className="text-xl font-bold text-ink">
+          <div className="flex items-center justify-between px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] border-b border-stone-200 shrink-0 gap-3">
+            <div className="min-w-0">
+              <h2 id="more-nav-title" className="text-lg font-bold text-ink truncate">
                 {tenantName || 'Property Menu'}
               </h2>
-              <p className="text-xs text-ink-muted mt-0.5">
-                {userName ? `${userName} (${ROLE_LABELS[userRole] || userRole})` : ROLE_LABELS[userRole] || userRole}
+              <p className="text-xs text-ink-muted mt-0.5 truncate">
+                {userName ? `${userName} (${roleLabel(userRole)})` : roleLabel(userRole)}
               </p>
             </div>
             <button
               onClick={() => setShowMoreNav(false)}
               aria-label="Close menu"
-              className="min-h-[44px] min-w-[44px] p-2.5 rounded-full text-ink-muted hover:bg-stone-100 flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
+              className="min-h-[44px] min-w-[44px] p-2.5 rounded-full text-ink-muted hover:bg-stone-100 flex items-center justify-center shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber"
             >
               <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
 
           {/* Drawer Navigation Links */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {navGroups(moreMobileItems).map((group) => (
-              <div key={group.area} className="space-y-1">
-                <p className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-ink-muted">
-                  {group.label}
+              <div key={group.area} className="space-y-0.5">
+                <p className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+                  {translateArea(group.area, group.label)}
                 </p>
                 {group.items.map((item) => {
                   const Icon = item.icon;
@@ -484,7 +567,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
                       href={item.href}
                       onClick={() => setShowMoreNav(false)}
                       className={`
-                        flex items-center gap-3.5 min-h-[48px] px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors
+                        flex items-center gap-3 min-h-[44px] px-3 py-2 rounded-xl text-sm font-semibold transition-colors
                         ${
                           isActive
                             ? 'bg-amber-pale text-amber-deep font-bold'
@@ -493,7 +576,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
                       `}
                     >
                       <Icon className="w-5 h-5 flex-shrink-0 text-amber-deep" aria-hidden="true" />
-                      <span>{item.name}</span>
+                      <span className="truncate">{translateNav(item.name)}</span>
                     </Link>
                   );
                 })}
@@ -501,14 +584,15 @@ function DashboardShell({ children }: { children: ReactNode }) {
             ))}
           </div>
 
-          {/* Drawer Footer / Log out */}
-          <div className="p-4 border-t border-stone-200 bg-stone-50 shrink-0">
+          {/* Drawer Footer: Language & Log out */}
+          <div className="px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-stone-200 bg-stone-50 shrink-0 space-y-2.5">
+            <LocaleSwitcher />
             <button
               onClick={() => signOut(() => router.push('/sign-in'))}
-              className="w-full min-h-[48px] flex items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white font-semibold text-terra hover:bg-terra-pale transition-colors py-3"
+              className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white font-semibold text-terra hover:bg-terra-pale transition-colors py-2.5"
             >
               <LogOut className="w-5 h-5" aria-hidden="true" />
-              <span>Log out</span>
+              <span>{m.nav.logout}</span>
             </button>
           </div>
         </div>

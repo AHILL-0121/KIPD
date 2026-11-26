@@ -11,6 +11,7 @@ import { Plus, Bed, Hotel as HotelIcon } from 'lucide-react';
 import { ROOM_STATUS_ORDER, roomStatus, type RoomStatus } from '@/lib/room-status';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@/hooks/use-query';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 
 import {
   Room,
@@ -29,6 +30,7 @@ import { RoomTypesModal } from '@/components/rooms/room-types-modal';
 import { DeleteRoomModal } from '@/components/rooms/delete-room-modal';
 
 export default function RoomsPage() {
+  const m = useAppMessages();
   const { data: rawRooms, isLoading: loading, error: roomsError, refetch: refetchRooms } = useQuery<Room[]>('/api/rooms');
   const { data: rawRoomTypes, refetch: refetchRoomTypes } = useQuery<RoomType[]>('/api/room-types');
   const { data: rawStays, refetch: refetchStays } = useQuery<Stay[]>('/api/bookings');
@@ -251,11 +253,21 @@ export default function RoomsPage() {
   const filtering = !!search || statusFilter !== 'all';
   const floors = Array.from(new Set(filteredRooms.map(r => r.floor || 0))).sort((a, b) => a - b);
 
+  const roomStatusLabels: Record<RoomStatus, string> = {
+    available: m.rooms.available,
+    occupied: m.rooms.occupied,
+    cleaning: m.rooms.cleaning,
+    maintenance: m.rooms.outOfOrder,
+    dirty: m.rooms.dirty,
+    inspected: m.rooms.inspected,
+    blocked: m.rooms.blocked,
+  };
+
   const tabs = [
-    { value: 'all', label: 'All', count: count('all') },
+    { value: 'all', label: m.common.all, count: count('all') },
     ...ROOM_STATUS_ORDER
       .filter(s => !['blocked', 'dirty', 'inspected'].includes(s) || count(s) > 0)
-      .map(s => ({ value: s, label: roomStatus(s).label, count: count(s) })),
+      .map(s => ({ value: s, label: roomStatusLabels[s] ?? roomStatus(s).label, count: count(s) })),
   ];
 
   const selected = rooms.find(r => r.id === selectedId) ?? null;
@@ -291,31 +303,31 @@ export default function RoomsPage() {
     }
   };
 
-  const summary = `${rooms.length} ${rooms.length === 1 ? 'room' : 'rooms'} · ${count('occupied')} occupied · ${count('available')} available`;
+  const summary = `${rooms.length} ${rooms.length === 1 ? m.rooms.room : m.rooms.roomsLabel} · ${count('occupied')} ${m.rooms.occupied.toLowerCase()} · ${count('available')} ${m.rooms.available.toLowerCase()}`;
 
   return (
     <div className="p-4 md:p-8 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="section-title">Rooms</h1>
-          <p className="section-sub">{rooms.length === 0 ? 'See which rooms are free, and keep their details up to date.' : summary}</p>
+          <h1 className="section-title">{m.rooms.title}</h1>
+          <p className="section-sub">{rooms.length === 0 ? m.rooms.emptySub : summary}</p>
         </div>
 
         <div className="flex flex-wrap gap-3">
           <Button variant="ghost" onClick={openRoomTypes}>
             <Bed className="w-4 h-4" aria-hidden="true" />
-            Room types
+            {m.rooms.roomTypes}
           </Button>
           <Button variant="ghost" onClick={openAddRoom}>
             <Plus className="w-4 h-4" aria-hidden="true" />
-            Add room
+            {m.rooms.addRoom}
           </Button>
           <Link
             href="/dashboard/bookings?new=1"
             className="inline-flex items-center justify-center gap-2 font-medium rounded-lg px-6 py-3 bg-amber text-white hover:bg-amber-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber"
           >
             <Plus className="w-4 h-4" aria-hidden="true" />
-            New booking
+            {m.rooms.newBooking}
           </Link>
         </div>
       </div>
@@ -331,7 +343,7 @@ export default function RoomsPage() {
         <FilterTabs label="Show rooms that are" tabs={tabs} value={statusFilter} onChange={setStatusFilter} />
         <Input
           aria-label="Search rooms"
-          placeholder="Search by room number or type…"
+          placeholder={m.rooms.searchPlaceholder}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="lg:w-72"

@@ -79,6 +79,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
         email: `deleted-${guestId}@anonymized.kipd.local`,
         phone: null,
         preferences: null,
+        notes: null,
       })
       .where(and(eq(guests.id, guestId), eq(guests.tenantId, tenantId)))
       .returning({ id: guests.id });

@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import {
-  bills, bookings, menuCategories, menuItems, orders, outlets, properties, roomTypes, rooms, tables,
+  bills, bookings, ingredients, menuCategories, menuItems, orders, outlets, properties, roomTypes, rooms, tables,
 } from '@/db/schema';
 import { assertUuid, notFound } from '@/lib/http';
 
@@ -69,6 +69,12 @@ export async function ownedOutlet(tenantId: string, id: unknown) {
   assertUuid(id, 'Outlet');
   return first(await db.select().from(outlets)
     .where(and(eq(outlets.id, id as string), eq(outlets.tenantId, tenantId))).limit(1), 'Outlet');
+}
+
+export async function ownedIngredient(tenantId: string, id: unknown) {
+  assertUuid(id, 'Ingredient');
+  return first(await db.select().from(ingredients)
+    .where(and(eq(ingredients.id, id as string), eq(ingredients.tenantId, tenantId))).limit(1), 'Ingredient');
 }
 
 /** The tenant's first outlet / property, for flows that do not name one (QR-less orders, new categories). */

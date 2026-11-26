@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { confirmDialog } from '@/components/ui/confirm';
 import { toast } from '@/components/ui/toaster';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 
 interface Connection {
   connected: boolean;
@@ -26,6 +27,7 @@ const EVENTS = ['payment_link.paid', 'qr_code.credited'];
  * own bank account. The Key Secret is sent to the server once and never comes back; the webhook secret is shown once.
  */
 export function RazorpayConnectionCard() {
+  const m = useAppMessages();
   const [state, setState] = useState<'loading' | 'ready' | 'owner-only' | 'failed'>('loading');
   const [connection, setConnection] = useState<Connection | null>(null);
   const [secretOnce, setSecretOnce] = useState<string | null>(null);
@@ -112,8 +114,8 @@ export function RazorpayConnectionCard() {
           <KeyRound className="w-5 h-5 text-white" aria-hidden="true" />
         </div>
         <div className="flex-1 min-w-0">
-          <CardTitle>Razorpay account</CardTitle>
-          <CardDescription>Online payments go straight to your own bank account</CardDescription>
+          <CardTitle>{m.settings.razorpayTitle}</CardTitle>
+          <CardDescription>{m.settings.razorpaySub}</CardDescription>
         </div>
         {connection?.connected && (
           <Badge variant={connection.webhookReady && !secretOnce ? 'sage' : 'amber'}>

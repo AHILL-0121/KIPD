@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Eye, EyeOff, Edit, Trash2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 import type { MenuItem } from './types';
 
 interface MenuItemCardProps {
@@ -20,6 +21,7 @@ export function MenuItemCard({
   onEdit,
   onDelete,
 }: MenuItemCardProps) {
+  const m = useAppMessages();
   return (
     <Card hover className="overflow-hidden flex flex-col justify-between">
       <div>
@@ -74,7 +76,7 @@ export function MenuItemCard({
             </Badge>
           ))}
           <Badge variant={item.isAvailable ? 'sage' : 'stone'} className="text-xs">
-            {item.isAvailable ? 'Available' : 'Unavailable'}
+            {item.isAvailable ? m.menu.available : m.menu.unavailable}
           </Badge>
         </div>
       </div>
@@ -87,7 +89,7 @@ export function MenuItemCard({
           onClick={() => onToggleAvailability(item)}
         >
           {item.isAvailable ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
-          {item.isAvailable ? 'Hide' : 'Show'}
+          {item.isAvailable ? m.common.hide : m.common.show}
         </Button>
         <Button
           size="sm"
@@ -96,7 +98,7 @@ export function MenuItemCard({
           onClick={() => onEdit(item)}
         >
           <Edit className="w-4 h-4 mr-1" />
-          Edit
+          {m.common.edit}
         </Button>
         <Button
           size="sm"

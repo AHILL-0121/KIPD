@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLive } from '@/lib/use-live';
-import { playChime } from '@/lib/chime';
+import { useSound } from '@/hooks/use-sound';
 import { HoldButton } from '@/components/ui/hold-button';
 import { Button } from '@/components/ui/button';
 import { Clock, MapPin, AlertCircle, Volume2, VolumeX, ChefHat, Package } from 'lucide-react';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 import { useTenantInfo } from '@/contexts/tenant-context';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 
 interface KDSOrder {
   id: string;
@@ -27,6 +28,7 @@ interface KDSOrder {
 }
 
 export default function KDSPage({ params }: { params: { outletId: string } }) {
+  const m = useAppMessages();
   const { info } = useTenantInfo();
   const [orders, setOrders] = useState<KDSOrder[]>([]);
   const userRole = info?.role || '';
@@ -36,27 +38,19 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
 
   // Orders already on screen, so only genuinely new tickets make a sound.
   const seen = useRef<Set<string> | null>(null);
-  // Browsers only allow sound after a tap on the page, so the kitchen turns it on once per visit.
-  const [soundOn, setSoundOn] = useState(false);
-  const soundRef = useRef(false);
-  soundRef.current = soundOn;
-  const chime = () => playChime();
-  const toggleSound = async () => {
-    if (soundOn) return setSoundOn(false);
-    if (await chime()) setSoundOn(true); // the test chime doubles as the proof that sound works
-  };
+  const { soundOn, toggleSound, ring } = useSound('kds');
   const load = useCallback(() => {
     fetch(`/api/kds/${params.outletId}`, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
       .then(res => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
       .then((data: KDSOrder[]) => {
         if (!Array.isArray(data)) return;
         const known = seen.current;
-        if (known && soundRef.current && data.some(o => !known.has(o.id))) chime();
+        if (known && data.some(o => !known.has(o.id))) ring();
         seen.current = new Set(data.map(o => o.id));
         setOrders(data);
       })
       .catch(console.error);
-  }, [params.outletId]);
+  }, [params.outletId, ring]);
 
   useEffect(() => { load(); }, [load]);
   useLive(load, params.outletId);
@@ -108,8 +102,8 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
     <div className="min-h-screen bg-ink p-4 md:p-6 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-stone-500">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Kitchen</h1>
-          <p className="text-stone-300 text-sm" aria-live="polite">{queue.length === 0 ? 'No open orders' : `${queue.length} open order${queue.length === 1 ? '' : 's'}, oldest first`}</p>
+          <h1 className="text-2xl font-semibold text-white">{m.kds.title}</h1>
+          <p className="text-stone-300 text-sm" aria-live="polite">{queue.length === 0 ? m.kds.noOpenOrders : `${queue.length} · ${m.kds.oldestFirst}`}</p>
         </div>
         <button
           onClick={toggleSound}
@@ -117,7 +111,7 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
           className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 min-h-[44px] text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${soundOn ? 'bg-stone-500/40 text-white' : 'bg-white text-ink'}`}
         >
           {soundOn ? <Volume2 className="w-4 h-4" aria-hidden="true" /> : <VolumeX className="w-4 h-4" aria-hidden="true" />}
-          {soundOn ? 'Sound on' : 'Enable sound for new orders'}
+          {soundOn ? m.kds.soundOn : m.kds.enableSound}
         </button>
       </div>
 
@@ -129,10 +123,10 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
           const late = minutesAgo >= 15;
           const timeAgo = formatDistanceToNow(new Date(order.createdAt), { addSuffix: true });
           const where = order.type === 'dine_in'
-            ? `Table ${order.tableNumber ?? ''}`
+            ? `${m.orders.tablePrefix} ${order.tableNumber ?? ''}`
             : order.type === 'take_away'
-              ? 'Takeaway'
-              : `Room ${order.roomNumber ?? ''}`;
+              ? m.dashboard.takeaway
+              : `${m.rooms.roomPrefix} ${order.roomNumber ?? ''}`;
           const isNew = order.status === 'new' || order.status === 'acknowledged';
 
           return (
@@ -151,14 +145,14 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
                     )}
                     <h2 className="font-bold text-2xl text-ink">{where}</h2>
                   </div>
-                  {order.source === 'guest' && <p className="text-xs font-semibold uppercase tracking-wide text-amber-deep mb-1">Ordered by guest (QR)</p>}
+                  {order.source === 'guest' && <p className="text-xs font-semibold uppercase tracking-wide text-amber-deep mb-1">{m.kds.guestQrOrder}</p>}
                   <div className={`flex items-center gap-1.5 text-sm ${late ? 'text-terra font-semibold' : 'text-ink-muted'}`}>
                     {late ? <AlertCircle className="w-4 h-4" aria-hidden="true" /> : <Clock className="w-4 h-4" aria-hidden="true" />}
                     <span>{late ? 'Late: ' : ''}{timeAgo}</span>
                   </div>
                 </div>
                 <span className={`rounded-full px-3 py-1 text-sm font-semibold ${isNew ? 'bg-amber-pale text-amber-deep' : 'bg-stone-100 text-ink-soft'}`}>
-                  {isNew ? 'New' : order.status === 'preparing' ? 'Preparing' : order.status}
+                  {isNew ? m.kds.new : order.status === 'preparing' ? m.kds.preparing : order.status}
                 </span>
               </div>
 
@@ -173,16 +167,16 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
 
               {order.specialInstructions && (
                 <div className="bg-amber-pale border border-amber-200 p-3 rounded-lg mb-4 text-ink">
-                  <div className="font-semibold text-sm mb-0.5">Special instructions</div>
+                  <div className="font-semibold text-sm mb-0.5">{m.kds.specialInstructions}</div>
                   <div className="text-sm">{order.specialInstructions}</div>
                 </div>
               )}
 
               {canAct ? (
                 isNew ? (
-                  <HoldButton className="w-full min-h-[48px]" onConfirm={() => updateStatus(order, 'preparing')}>Accept order</HoldButton>
+                  <HoldButton className="w-full min-h-[48px]" onConfirm={() => updateStatus(order, 'preparing')}>{m.kds.acceptOrder}</HoldButton>
                 ) : order.status === 'preparing' ? (
-                  <Button className="w-full text-lg py-4 min-h-[48px]" variant="sage" onClick={() => updateStatus(order, 'ready')}>Mark ready</Button>
+                  <Button className="w-full text-lg py-4 min-h-[48px]" variant="sage" onClick={() => updateStatus(order, 'ready')}>{m.kds.markReady}</Button>
                 ) : null
               ) : (
                 <p className="text-center p-3 rounded-lg bg-stone-100 text-ink-soft text-sm">Your role can view this screen but not change orders.</p>
@@ -195,15 +189,15 @@ export default function KDSPage({ params }: { params: { outletId: string } }) {
       {queue.length === 0 && (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <ChefHat className="w-12 h-12 text-stone-300 mb-4" aria-hidden="true" />
-          <p className="text-white text-xl font-semibold">All caught up</p>
-          <p className="text-stone-300 mt-1">New orders appear here automatically.</p>
+          <p className="text-white text-xl font-semibold">{m.kds.allCaughtUp}</p>
+          <p className="text-stone-300 mt-1">{m.kds.newOrdersAuto}</p>
         </div>
       )}
 
       {undo && (
         <div role="status" className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-lg bg-white px-5 py-3 shadow-xl">
-          <span className="text-ink font-medium">{undo.label} marked ready</span>
-          <button onClick={undoReady} className="font-semibold text-amber underline underline-offset-4 min-h-[44px] min-w-[44px] flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber">Undo</button>
+          <span className="text-ink font-medium">{undo.label}</span>
+          <button onClick={undoReady} className="font-semibold text-amber underline underline-offset-4 min-h-[44px] min-w-[44px] flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber">{m.common.undo}</button>
         </div>
       )}
     </div>

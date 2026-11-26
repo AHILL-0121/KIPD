@@ -25,6 +25,9 @@ const TENANT_TABLES = [
   'staff_invites',
   'razorpay_accounts',
   'payment_events',
+  'ingredients',
+  'recipe_items',
+  'upi_payment_intents',
 ];
 
 describe('Postgres Row-Level Security (migration 0014)', () => {

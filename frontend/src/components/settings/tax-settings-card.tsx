@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { GST_STATES, ROOM_GST_SLABS, roomTax, splitGst, taxSettingsSchema, type TaxSettings } from '@/lib/gst';
 import { formatCurrency } from '@/lib/currency';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 
 const EMPTY: TaxSettings = taxSettingsSchema.parse({});
 const MODES = [
@@ -19,6 +20,7 @@ const MODES = [
 
 /** Settings > Tax & invoices: the hotel's GST details, how room GST is charged, and what the A4 invoice carries. */
 export function TaxSettingsCard() {
+  const m = useAppMessages();
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [s, setS] = useState<TaxSettings>(EMPTY);
@@ -83,8 +85,8 @@ export function TaxSettingsCard() {
           <FileText className="w-5 h-5 text-white" aria-hidden="true" />
         </div>
         <div>
-          <CardTitle>Tax &amp; invoices</CardTitle>
-          <CardDescription>Your GST details, how room GST is charged, and what the A4 invoice shows</CardDescription>
+          <CardTitle>{m.settings.taxTitle}</CardTitle>
+          <CardDescription>{m.settings.taxSub}</CardDescription>
         </div>
       </div>
 

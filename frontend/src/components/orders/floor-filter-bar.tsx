@@ -1,6 +1,7 @@
 'use client';
 
 import { Search, X } from 'lucide-react';
+import { useAppMessages } from '@/components/ui/i18n-provider';
 
 interface FloorFilterBarProps {
   search: string;
@@ -31,6 +32,7 @@ export function FloorFilterBar({
   availableCount,
   occupiedCount,
 }: FloorFilterBarProps) {
+  const m = useAppMessages();
   return (
     <div className="space-y-3 bg-stone-50/70 p-4 rounded-2xl border border-stone-200">
       {/* Top row: Search input & Status quick filters */}
@@ -39,7 +41,7 @@ export function FloorFilterBar({
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
           <input
             type="text"
-            placeholder="Search table #, section, or tag..."
+            placeholder={m.orders.searchTablesPlaceholder}
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-stone-200 rounded-xl text-ink placeholder:text-ink-muted focus:outline-none focus:border-amber"
@@ -66,7 +68,7 @@ export function FloorFilterBar({
                 : 'text-ink-soft hover:text-ink'
             }`}
           >
-            All ({totalCount})
+            {m.common.all} ({totalCount})
           </button>
           <button
             type="button"
@@ -78,7 +80,7 @@ export function FloorFilterBar({
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            Available ({availableCount})
+            {m.orders.available} ({availableCount})
           </button>
           <button
             type="button"
@@ -90,14 +92,14 @@ export function FloorFilterBar({
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-amber" />
-            Occupied ({occupiedCount})
+            {m.orders.occupied} ({occupiedCount})
           </button>
         </div>
       </div>
 
       {/* Bottom row: Section and Capacity filter chips */}
       <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-200/60 text-xs">
-        <span className="font-semibold text-ink-muted mr-1">Filter by:</span>
+        <span className="font-semibold text-ink-muted mr-1">{m.orders.filterBy}</span>
 
         {/* Section chips */}
         {availableSections.length > 0 && (
@@ -111,7 +113,7 @@ export function FloorFilterBar({
                   : 'bg-white text-ink-soft border border-stone-200 hover:bg-stone-100'
               }`}
             >
-              All sections
+              {m.orders.allSections}
             </button>
             {availableSections.map((sec) => (
               <button
@@ -143,7 +145,7 @@ export function FloorFilterBar({
                   : 'bg-white text-ink-soft border border-stone-200 hover:bg-stone-100'
               }`}
             >
-              {cap === 'all' ? 'Any size' : cap === '6+' ? '6+ seats' : `${cap} seats`}
+              {cap === 'all' ? m.orders.anySize : `${cap} ${m.orders.seats}`}
             </button>
           ))}
         </div>

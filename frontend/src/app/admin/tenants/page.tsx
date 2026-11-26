@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog } from '@/components/ui/dialog';
 import { confirmDialog } from '@/components/ui/confirm';
-import { Plus, Power, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Power, Trash2, ChevronLeft, ChevronRight, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Tenant {
@@ -180,6 +180,17 @@ export default function TenantsPage() {
     }
   };
 
+  const handleImpersonate = async (tenant: Tenant) => {
+    try {
+      const res = await fetch(`/api/admin/impersonate/${tenant.id}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to impersonate');
+      window.location.href = data.redirectUrl || '/dashboard';
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to start impersonation', 'error');
+    }
+  };
+
   const handleDeleteTenant = async (tenantId: string, tenantName: string) => {
     // The server hides the tenant and blocks access; no data is removed (see DELETE /api/admin/tenants/[id]).
     if (!(await confirmDialog({ title: `Delete "${tenantName}"?`, message: 'Everyone in this business loses access straight away. Its records are kept.', confirmLabel: 'Delete tenant', danger: true }))) {
@@ -306,7 +317,18 @@ export default function TenantsPage() {
               </div>
             </div>
             
-            <div className="flex gap-2 pt-4 border-t border-stone-200">
+            <div className="flex flex-wrap gap-2 pt-4 border-t border-stone-200">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="flex-1"
+                disabled={tenant.status !== 'active'}
+                onClick={() => handleImpersonate(tenant)}
+                title={tenant.status !== 'active' ? 'Activate tenant before impersonating' : `Open ${tenant.name} dashboard`}
+              >
+                <UserCheck className="w-4 h-4" />
+                Impersonate
+              </Button>
               <Button
                 size="sm"
                 variant="ghost"
